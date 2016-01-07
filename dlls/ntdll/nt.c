@@ -2799,9 +2799,20 @@ NTSTATUS WINAPI NtQuerySystemInformation(
     case SystemInterruptInformation:
         {
             SYSTEM_INTERRUPT_INFORMATION sii;
+            int dev_random;
 
             memset(&sii, 0, sizeof(sii));
             len = sizeof(sii);
+
+            /* Some applications use the returned buffer for random number
+             * generation. Its unlikely that an app depends on the exact
+             * layout, so just fill with values from /dev/urandom. */
+            dev_random = open( "/dev/urandom", O_RDONLY );
+            if (dev_random != -1)
+            {
+                read( dev_random, &sii, sizeof(sii) );
+                close( dev_random );
+            }
 
             if ( Length >= len)
             {
