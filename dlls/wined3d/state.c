@@ -4329,6 +4329,17 @@ static void frontface(struct wined3d_context *context, const struct wined3d_stat
 
     gl_info->gl_ops.gl.p_glFrontFace(mode);
     checkGLcall("glFrontFace");
+
+    if (state->rasterizer_state && !state->rasterizer_state->desc.depth_clip)
+    {
+        gl_info->gl_ops.gl.p_glEnable(GL_DEPTH_CLAMP);
+        checkGLcall("glEnable(GL_DEPTH_CLAMP)");
+    }
+    else
+    {
+        gl_info->gl_ops.gl.p_glDisable(GL_DEPTH_CLAMP);
+        checkGLcall("glDisable(GL_DEPTH_CLAMP)");
+    }
 }
 
 static void frontface_cc(struct wined3d_context *context, const struct wined3d_state *state, DWORD state_id)
