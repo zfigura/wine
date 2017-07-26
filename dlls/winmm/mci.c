@@ -66,10 +66,10 @@ WINE_DEFAULT_DEBUG_CHANNEL(mci);
 #define MCI_MAGIC 0x0001
 
 /* MCI settings */
-static const WCHAR wszHklmMci  [] = {'S','o','f','t','w','a','r','e','\\','M','i','c','r','o','s','o','f','t','\\','W','i','n','d','o','w','s',' ','N','T','\\','C','u','r','r','e','n','t','V','e','r','s','i','o','n','\\','M','C','I',0};
+static const WCHAR wszHklmMci  [] = {'S','o','f','t','w','a','r','e','\\','M','i','c','r','o','s','o','f','t','\\','W','i','n','d','o','w','s',' ','N','T','\\','C','u','r','r','e','n','t','V','e','r','s','i','o','n','\\','M','C','I','3','2',0};
 static const WCHAR wszNull     [] = {0};
 static const WCHAR wszAll      [] = {'A','L','L',0};
-static const WCHAR wszMci      [] = {'M','C','I',0};
+static const WCHAR wszMci      [] = {'M','C','I','3','2',0};
 static const WCHAR wszOpen     [] = {'o','p','e','n',0};
 static const WCHAR wszSystemIni[] = {'s','y','s','t','e','m','.','i','n','i',0};
 
