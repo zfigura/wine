@@ -210,6 +210,9 @@ DWORD WINAPI WaitForMultipleObjectsEx( DWORD count, const HANDLE *handles,
     LARGE_INTEGER time;
     unsigned int i;
 
+    TRACE("count %d, handles %p, wait_all %d, timeout %d, alertable %d\n",
+          count, handles, wait_all, timeout, alertable);
+
     if (count > MAXIMUM_WAIT_OBJECTS)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
@@ -226,6 +229,7 @@ DWORD WINAPI WaitForMultipleObjectsEx( DWORD count, const HANDLE *handles,
         SetLastError( RtlNtStatusToDosError(status) );
         status = WAIT_FAILED;
     }
+    TRACE("=> %u\n", status);
     return status;
 }
 
@@ -517,6 +521,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH CreateEventExW( SECURITY_ATTRIBUTES *sa, LPCWSTR
         SetLastError( ERROR_ALREADY_EXISTS );
     else
         SetLastError( RtlNtStatusToDosError(status) );
+    TRACE("name %s, flags %08x, access %08x => %p\n", debugstr_w(name), flags, access, ret);
     return ret;
 }
 
@@ -559,6 +564,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH OpenEventW( DWORD access, BOOL inherit, LPCWSTR 
         SetLastError( RtlNtStatusToDosError(status) );
         return 0;
     }
+    TRACE("name %s, access %08x, inherit %d -> %p\n", debugstr_w(name), access, inherit, ret);
     return ret;
 }
 
@@ -657,6 +663,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH CreateMutexExW( SECURITY_ATTRIBUTES *sa, LPCWSTR
         SetLastError( ERROR_ALREADY_EXISTS );
     else
         SetLastError( RtlNtStatusToDosError(status) );
+    TRACE("name %s, flags %08x, access %08x -> %p\n", debugstr_w(name), flags, access, ret);
     return ret;
 }
 
@@ -699,6 +706,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH OpenMutexW( DWORD access, BOOL inherit, LPCWSTR 
         SetLastError( RtlNtStatusToDosError(status) );
         return 0;
     }
+    TRACE("name %s, access %08x, inherit %d -> %p\n", debugstr_w(name), access, inherit, ret);
     return ret;
 }
 
@@ -709,6 +717,8 @@ HANDLE WINAPI DECLSPEC_HOTPATCH OpenMutexW( DWORD access, BOOL inherit, LPCWSTR 
 BOOL WINAPI DECLSPEC_HOTPATCH ReleaseMutex( HANDLE handle )
 {
     NTSTATUS    status;
+
+    TRACE("%p\n", handle);
 
     status = NtReleaseMutant(handle, NULL);
     if (status != STATUS_SUCCESS)
@@ -780,6 +790,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH CreateSemaphoreExW( SECURITY_ATTRIBUTES *sa, LON
         SetLastError( ERROR_ALREADY_EXISTS );
     else
         SetLastError( RtlNtStatusToDosError(status) );
+    TRACE("name %s, flags %08x, access %08x -> %p\n", debugstr_w(name), flags, access, ret);
     return ret;
 }
 
@@ -822,6 +833,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH OpenSemaphoreW( DWORD access, BOOL inherit, LPCW
         SetLastError( RtlNtStatusToDosError(status) );
         return 0;
     }
+    TRACE("name %s, access %08x, inherit %d -> %p\n", debugstr_w(name), access, inherit, ret);
     return ret;
 }
 
