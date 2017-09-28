@@ -598,7 +598,8 @@ static FARPROC find_ordinal_export( HMODULE module, const IMAGE_EXPORT_DIRECTORY
     if (TRACE_ON(relay))
     {
         const WCHAR *user = current_modref ? current_modref->ldr.BaseDllName.Buffer : NULL;
-        proc = RELAY_GetProcAddress( module, exports, exp_size, proc, ordinal, user );
+        DWORD builtin = current_modref ? current_modref->ldr.Flags & LDR_WINE_INTERNAL : TRUE;
+        proc = RELAY_GetProcAddress( module, exports, exp_size, proc, ordinal, user, builtin );
     }
     return proc;
 }
