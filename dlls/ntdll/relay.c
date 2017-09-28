@@ -837,14 +837,14 @@ __ASM_GLOBAL_FUNC( relay_call,
  * Return the proc address to use for a given function.
  */
 FARPROC RELAY_GetProcAddress( HMODULE module, const IMAGE_EXPORT_DIRECTORY *exports,
-                              DWORD exp_size, FARPROC proc, DWORD ordinal, const WCHAR *user )
+                              DWORD exp_size, FARPROC proc, DWORD ordinal, const WCHAR *user, DWORD builtin )
 {
     struct relay_private_data *data;
     const struct relay_descr *descr = (const struct relay_descr *)((const char *)exports + exp_size);
 
     if (descr->magic != RELAY_DESCR_MAGIC || !(data = descr->private)) return proc;  /* no relay data */
     if (!data->entry_points[ordinal].orig_func) return proc;  /* not a relayed function */
-    if (check_from_module( debug_from_relay_includelist, debug_from_relay_excludelist, user ))
+    if (!builtin && check_from_module( debug_from_relay_includelist, debug_from_relay_excludelist, user ))
         return proc;  /* we want to relay it */
     return data->entry_points[ordinal].orig_func;
 }
@@ -915,7 +915,7 @@ void RELAY_SetupDLL( HMODULE module )
 #else  /* __i386__ || __x86_64__ || __arm__ || __aarch64__ */
 
 FARPROC RELAY_GetProcAddress( HMODULE module, const IMAGE_EXPORT_DIRECTORY *exports,
-                              DWORD exp_size, FARPROC proc, DWORD ordinal, const WCHAR *user )
+                              DWORD exp_size, FARPROC proc, DWORD ordinal, const WCHAR *user, DWORD builtin )
 {
     return proc;
 }
