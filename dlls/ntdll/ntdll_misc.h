@@ -117,7 +117,7 @@ extern BOOL invoke_apc( const apc_call_t *call, apc_result_t *result ) DECLSPEC_
 /* module handling */
 extern LIST_ENTRY tls_links DECLSPEC_HIDDEN;
 extern FARPROC RELAY_GetProcAddress( HMODULE module, const IMAGE_EXPORT_DIRECTORY *exports,
-                                     DWORD exp_size, FARPROC proc, DWORD ordinal, const WCHAR *user ) DECLSPEC_HIDDEN;
+                                     DWORD exp_size, FARPROC proc, DWORD ordinal, const WCHAR *user, DWORD builtin ) DECLSPEC_HIDDEN;
 extern FARPROC SNOOP_GetProcAddress( HMODULE hmod, const IMAGE_EXPORT_DIRECTORY *exports, DWORD exp_size,
                                      FARPROC origfun, DWORD ordinal, const WCHAR *user ) DECLSPEC_HIDDEN;
 extern void RELAY_SetupDLL( HMODULE hmod ) DECLSPEC_HIDDEN;
