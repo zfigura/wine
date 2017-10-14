@@ -226,17 +226,20 @@ static const RTL_OSVERSIONINFOEXW *current_version;
  */
 static BOOL get_nt_registry_version( RTL_OSVERSIONINFOEXW *version )
 {
-    static const WCHAR version_keyW[] = {'M','a','c','h','i','n','e','\\',
+    static const WCHAR version_keyW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
+                                         'M','a','c','h','i','n','e','\\',
                                          'S','o','f','t','w','a','r','e','\\',
                                          'M','i','c','r','o','s','o','f','t','\\',
                                          'W','i','n','d','o','w','s',' ','N','T','\\',
                                          'C','u','r','r','e','n','t','V','e','r','s','i','o','n',0};
-    static const WCHAR service_pack_keyW[] = {'M','a','c','h','i','n','e','\\',
+    static const WCHAR service_pack_keyW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
+                                              'M','a','c','h','i','n','e','\\',
                                               'S','y','s','t','e','m','\\',
                                               'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
                                               'C','o','n','t','r','o','l','\\',
                                               'W','i','n','d','o','w','s',0};
-    static const WCHAR product_keyW[] = {'M','a','c','h','i','n','e','\\',
+    static const WCHAR product_keyW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
+                                         'M','a','c','h','i','n','e','\\',
                                          'S','y','s','t','e','m','\\',
                                          'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
                                          'C','o','n','t','r','o','l','\\',
@@ -358,7 +361,8 @@ static BOOL get_nt_registry_version( RTL_OSVERSIONINFOEXW *version )
  */
 static BOOL get_win9x_registry_version( RTL_OSVERSIONINFOEXW *version )
 {
-    static const WCHAR version_keyW[] = {'M','a','c','h','i','n','e','\\',
+    static const WCHAR version_keyW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
+                                         'M','a','c','h','i','n','e','\\',
                                          'S','o','f','t','w','a','r','e','\\',
                                          'M','i','c','r','o','s','o','f','t','\\',
                                          'W','i','n','d','o','w','s','\\',
