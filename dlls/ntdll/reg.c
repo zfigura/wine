@@ -918,7 +918,7 @@ NTSTATUS WINAPI NtUnloadKey(IN POBJECT_ATTRIBUTES attr)
  */
 NTSTATUS WINAPI RtlFormatCurrentUserKeyPath( IN OUT PUNICODE_STRING KeyPath)
 {
-    static const WCHAR pathW[] = {'\\','R','e','g','i','s','t','r','y','\\','U','s','e','r','\\'};
+    static const WCHAR pathW[] = {'\\','R','E','G','I','S','T','R','Y','\\','U','S','E','R','\\'};
     char buffer[sizeof(TOKEN_USER) + sizeof(SID) + sizeof(DWORD)*SID_MAX_SUB_AUTHORITIES];
     DWORD len = sizeof(buffer);
     NTSTATUS status;
@@ -1544,7 +1544,8 @@ NTSTATUS WINAPI RtlWriteRegistryValue( ULONG RelativeTo, PCWSTR path, PCWSTR nam
 NTSTATUS WINAPI NtQueryLicenseValue( const UNICODE_STRING *name, ULONG *result_type,
                                      PVOID data, ULONG length, ULONG *result_len )
 {
-    static const WCHAR LicenseInformationW[] = {'M','a','c','h','i','n','e','\\',
+    static const WCHAR LicenseInformationW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
+                                                'M','a','c','h','i','n','e','\\',
                                                 'S','o','f','t','w','a','r','e','\\',
                                                 'W','i','n','e','\\','L','i','c','e','n','s','e',
                                                 'I','n','f','o','r','m','a','t','i','o','n',0};
