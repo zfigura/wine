@@ -2833,7 +2833,8 @@ static NTSTATUS query_string_option( HANDLE hkey, LPCWSTR name, ULONG type,
 NTSTATUS WINAPI LdrQueryImageFileExecutionOptions( const UNICODE_STRING *key, LPCWSTR value, ULONG type,
                                                    void *data, ULONG in_size, ULONG *out_size )
 {
-    static const WCHAR optionsW[] = {'M','a','c','h','i','n','e','\\',
+    static const WCHAR optionsW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
+                                     'M','a','c','h','i','n','e','\\',
                                      'S','o','f','t','w','a','r','e','\\',
                                      'M','i','c','r','o','s','o','f','t','\\',
                                      'W','i','n','d','o','w','s',' ','N','T','\\',
@@ -3270,7 +3271,8 @@ NTSTATUS attach_dlls( CONTEXT *context, void **entry )
  */
 static void load_global_options(void)
 {
-    static const WCHAR sessionW[] = {'M','a','c','h','i','n','e','\\',
+    static const WCHAR sessionW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
+                                     'M','a','c','h','i','n','e','\\',
                                      'S','y','s','t','e','m','\\',
                                      'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
                                      'C','o','n','t','r','o','l','\\',

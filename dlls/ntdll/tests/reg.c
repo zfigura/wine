@@ -2010,6 +2010,13 @@ static void test_RtlCreateRegistryKey(void)
     ok(status == STATUS_INVALID_PARAMETER, "RtlCreateRegistryKey unexpected return value: %08x, expected %08x\n", status, STATUS_INVALID_PARAMETER);
 }
 
+static void test_RtlFormatCurrentUserKeyPath(void)
+{
+    static const WCHAR expectedW[] = {'\\','R','E','G','I','S','T','R','Y','\\','U','S','E','R','\\'};
+
+    ok(!memcmp(winetestpath.Buffer, expectedW, sizeof(expectedW)), "String did not match\n");
+}
+
 START_TEST(reg)
 {
     static const WCHAR winetest[] = {'\\','W','i','n','e','T','e','s','t',0};
@@ -2039,6 +2046,7 @@ START_TEST(reg)
     test_NtDeleteKey();
     test_symlinks();
     test_redirection();
+    test_RtlFormatCurrentUserKeyPath();
 
     pRtlFreeUnicodeString(&winetestpath);
 
