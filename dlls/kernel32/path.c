@@ -121,7 +121,7 @@ static BOOL add_boot_rename_entry( LPCWSTR source, LPCWSTR dest, DWORD flags )
     static const WCHAR ValueName[] = {'P','e','n','d','i','n','g',
                                       'F','i','l','e','R','e','n','a','m','e',
                                       'O','p','e','r','a','t','i','o','n','s',0};
-    static const WCHAR SessionW[] = {'\\','R','e','g','i','s','t','r','y','\\',
+    static const WCHAR SessionW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
                                      'M','a','c','h','i','n','e','\\',
                                      'S','y','s','t','e','m','\\',
                                      'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
@@ -758,7 +758,7 @@ UINT WINAPI GetTempFileNameW( LPCWSTR path, LPCWSTR prefix, UINT unique, LPWSTR 
  */
 static BOOL get_path_safe_mode(void)
 {
-    static const WCHAR keyW[] = {'\\','R','e','g','i','s','t','r','y','\\',
+    static const WCHAR keyW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
                                  'M','a','c','h','i','n','e','\\',
                                  'S','y','s','t','e','m','\\',
                                  'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
