@@ -51,28 +51,28 @@ WINE_DEFAULT_DEBUG_CHANNEL(reg);
 #define HKEY_SPECIAL_ROOT_LAST    HKEY_DYN_DATA
 
 static const WCHAR name_CLASSES_ROOT[] =
-    {'\\','R','e','g','i','s','t','r','y','\\',
+    {'\\','R','E','G','I','S','T','R','Y','\\',
      'M','a','c','h','i','n','e','\\',
      'S','o','f','t','w','a','r','e','\\',
      'C','l','a','s','s','e','s',0};
 static const WCHAR name_LOCAL_MACHINE[] =
-    {'\\','R','e','g','i','s','t','r','y','\\',
+    {'\\','R','E','G','I','S','T','R','Y','\\',
      'M','a','c','h','i','n','e',0};
 static const WCHAR name_USERS[] =
-    {'\\','R','e','g','i','s','t','r','y','\\',
+    {'\\','R','E','G','I','S','T','R','Y','\\',
      'U','s','e','r',0};
 static const WCHAR name_PERFORMANCE_DATA[] =
-    {'\\','R','e','g','i','s','t','r','y','\\',
+    {'\\','R','E','G','I','S','T','R','Y','\\',
      'P','e','r','f','D','a','t','a',0};
 static const WCHAR name_CURRENT_CONFIG[] =
-    {'\\','R','e','g','i','s','t','r','y','\\',
+    {'\\','R','E','G','I','S','T','R','Y','\\',
      'M','a','c','h','i','n','e','\\',
      'S','y','s','t','e','m','\\',
      'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
      'H','a','r','d','w','a','r','e',' ','P','r','o','f','i','l','e','s','\\',
      'C','u','r','r','e','n','t',0};
 static const WCHAR name_DYN_DATA[] =
-    {'\\','R','e','g','i','s','t','r','y','\\',
+    {'\\','R','E','G','I','S','T','R','Y','\\',
      'D','y','n','D','a','t','a',0};
 
 static const WCHAR * const root_key_names[] =
@@ -142,7 +142,7 @@ static NTSTATUS create_key( HKEY *retkey, ACCESS_MASK access, OBJECT_ATTRIBUTES 
 
     if (status == STATUS_OBJECT_NAME_NOT_FOUND)
     {
-        static const WCHAR registry_root[] = {'\\','R','e','g','i','s','t','r','y','\\'};
+        static const WCHAR registry_root[] = {'\\','R','E','G','I','S','T','R','Y','\\'};
         WCHAR *buffer = attr->ObjectName->Buffer;
         DWORD attrs, pos = 0, i = 0, len = attr->ObjectName->Length / sizeof(WCHAR);
         UNICODE_STRING str;
