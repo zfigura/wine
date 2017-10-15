@@ -551,6 +551,17 @@ static struct object *key_lookup_name( struct object *obj, struct unicode_str *n
 
     if (!name) return NULL;  /* open the key itself */
 
+    /* Skip leading backslash(es) */
+    while (name->len && name->str[0] == '\\')
+    {
+        name->str++;
+        name->len -= sizeof(WCHAR);
+    }
+
+    /* Remove trailing backslash(es) */
+    while (name->len && name->str[name->len/sizeof(WCHAR)-1] == '\\')
+        name->len -= sizeof(WCHAR);
+
     if (!(p = memchrW( name->str, '\\', name->len / sizeof(WCHAR) )))
         /* Last element in the path name */
         tmp.len = name->len;
