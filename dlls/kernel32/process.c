@@ -581,7 +581,7 @@ static void set_registry_variables( HANDLE hkey, ULONG type )
  */
 static BOOL set_registry_environment( BOOL volatile_only )
 {
-    static const WCHAR env_keyW[] = {'\\','R','e','g','i','s','t','r','y','\\',
+    static const WCHAR env_keyW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
                                      'M','a','c','h','i','n','e','\\',
                                      'S','y','s','t','e','m','\\',
                                      'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
@@ -686,7 +686,7 @@ static WCHAR *get_reg_value( HKEY hkey, const WCHAR *name )
  */
 static void set_additional_environment(void)
 {
-    static const WCHAR profile_keyW[] = {'\\','R','e','g','i','s','t','r','y','\\',
+    static const WCHAR profile_keyW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
                                          'M','a','c','h','i','n','e','\\',
                                          'S','o','f','t','w','a','r','e','\\',
                                          'M','i','c','r','o','s','o','f','t','\\',
@@ -754,7 +754,7 @@ static void set_wow64_environment(void)
     static const WCHAR archW[]    = {'P','R','O','C','E','S','S','O','R','_','A','R','C','H','I','T','E','C','T','U','R','E',0};
     static const WCHAR arch6432W[] = {'P','R','O','C','E','S','S','O','R','_','A','R','C','H','I','T','E','W','6','4','3','2',0};
     static const WCHAR x86W[] = {'x','8','6',0};
-    static const WCHAR versionW[] = {'\\','R','e','g','i','s','t','r','y','\\',
+    static const WCHAR versionW[] = {'\\','R','E','G','I','S','T','R','Y','\\',
                                      'M','a','c','h','i','n','e','\\',
                                      'S','o','f','t','w','a','r','e','\\',
                                      'M','i','c','r','o','s','o','f','t','\\',
