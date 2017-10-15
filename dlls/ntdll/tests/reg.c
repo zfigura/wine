@@ -414,6 +414,18 @@ todo_wine
     pNtClose( key );
     pRtlFreeUnicodeString( &str );
 
+    pRtlCreateUnicodeStringFromAsciiz( &str, "\\Registry\\\\" );
+    status = pNtOpenKey(&key, KEY_READ, &attr);
+    ok( status == STATUS_SUCCESS, "NtOpenKey failed: 0x%08x\n", status );
+    pNtClose( key );
+    pRtlFreeUnicodeString( &str );
+
+    pRtlCreateUnicodeStringFromAsciiz( &str, "\\Registry\\\\Machine" );
+    status = pNtOpenKey(&key, KEY_READ, &attr);
+    ok( status == STATUS_SUCCESS, "NtOpenKey failed: 0x%08x\n", status );
+    pNtClose( key );
+    pRtlFreeUnicodeString( &str );
+
     pRtlCreateUnicodeStringFromAsciiz( &str, "\\Foobar" );
     status = pNtOpenKey(&key, KEY_READ, &attr);
     ok( status == STATUS_OBJECT_NAME_NOT_FOUND, "NtOpenKey failed: 0x%08x\n", status );
@@ -517,7 +529,6 @@ static void test_NtCreateKey(void)
 
     pRtlCreateUnicodeStringFromAsciiz( &str, "test_subkey\\" );
     status = pNtCreateKey( &subkey, am, &attr, 0, 0, 0, 0 );
-    todo_wine
     ok( status == STATUS_SUCCESS || broken(status == STATUS_OBJECT_NAME_NOT_FOUND), /* nt4 */
         "NtCreateKey failed: 0x%08x\n", status );
     if (status == STATUS_SUCCESS)
