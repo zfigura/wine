@@ -1039,6 +1039,7 @@ static void test_symlinks(void)
     static UNICODE_STRING null_str;
     char buffer[1024];
     KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
+    KEY_NAME_INFORMATION *name_info = NULL;
     WCHAR *target;
     UNICODE_STRING symlink_str, link_str, target_str, value_str;
     HANDLE root, key, link;
@@ -1077,6 +1078,8 @@ static void test_symlinks(void)
     status = pNtSetValueKey( link, &symlink_str, 0, REG_LINK, target, target_len - sizeof(WCHAR) );
     ok( status == STATUS_SUCCESS, "NtSetValueKey failed: 0x%08x\n", status );
     /* other values are not allowed */
+    status = pNtSetValueKey( link, &link_str, 0, REG_SZ, target, target_len );
+    ok( status == STATUS_ACCESS_DENIED, "NtSetValueKey wrong status 0x%08x\n", status );
     status = pNtSetValueKey( link, &link_str, 0, REG_LINK, target, target_len - sizeof(WCHAR) );
     ok( status == STATUS_ACCESS_DENIED, "NtSetValueKey wrong status 0x%08x\n", status );
 
@@ -1268,6 +1271,25 @@ static void test_symlinks(void)
         ok( status == STATUS_OBJECT_NAME_NOT_FOUND, "NtQueryValueKey failed: 0x%08x\n", status );
         pNtClose( key );
     }
+
+    /* creating a subkey of the link creates a subkey of the target even if OBJ_OPENLINK is used */
+    attr.RootDirectory = link;
+    attr.Attributes = OBJ_OPENLINK;
+    attr.ObjectName = &link_str;
+    status = pNtCreateKey( &key, KEY_ALL_ACCESS, &attr, 0, 0, 0, 0 );
+    ok(status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status);
+    status = pNtQueryKey( key, KeyNameInformation, name_info, 0, &len );
+    todo_wine ok(status == STATUS_BUFFER_TOO_SMALL, "NtQueryKey failed: 0x%08x\n", status);
+    name_info = HeapAlloc(GetProcessHeap(), 0, len);
+    status = pNtQueryKey( key, KeyNameInformation, name_info, len, &len );
+    ok(status == STATUS_SUCCESS, "NtQueryKey failed: 0x%08x\n", status);
+    todo_wine
+    ok(!memcmp(name_info->Name, target, target_len-sizeof(WCHAR)), "key name did not begin with target key: %s\n",
+        wine_dbgstr_wn(name_info->Name, name_info->NameLength/sizeof(WCHAR)));
+    status = pNtDeleteKey( key );
+    ok(status == STATUS_SUCCESS, "NtDeleteKey failed: 0x%08x\n", status);
+    pNtClose( key );
+    HeapFree(GetProcessHeap(), 0, name_info);
 
     /* target with terminating null doesn't work */
     status = pNtSetValueKey( link, &symlink_str, 0, REG_LINK, target, target_len );
