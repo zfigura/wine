@@ -102,6 +102,9 @@ struct key_value
 #define MAX_NAME_LEN  256    /* max. length of a key name */
 #define MAX_VALUE_LEN 16383  /* max. length of a value name */
 
+/* internal attributes flag */
+#define WINE_OBJ_WOW64  0x80000000  /* use WoW64 redirection */
+
 /* the root of the registry tree */
 static struct key *root_key;
 
@@ -114,6 +117,7 @@ static const WCHAR root_name[] = { '\\','R','E','G','I','S','T','R','Y' };
 static const WCHAR wow6432node[] = {'W','o','w','6','4','3','2','N','o','d','e'};
 static const WCHAR symlink_value[] = {'S','y','m','b','o','l','i','c','L','i','n','k','V','a','l','u','e'};
 static const struct unicode_str root_name_str = { root_name, sizeof(root_name) };
+static const struct unicode_str wow6432node_str = { wow6432node, sizeof(wow6432node) };
 static const struct unicode_str symlink_str = { symlink_value, sizeof(symlink_value) };
 
 static void set_periodic_save_timer(void);
@@ -381,6 +385,9 @@ static struct key *follow_symlink( struct key *key, unsigned int attr )
         return open_named_object( &key->parent->obj, &key_ops, &path, attr | OBJ_OPENLINK );
 }
 
+static struct unicode_str *get_path_token(const struct unicode_str *path, struct unicode_str *token );
+static struct key *find_wow64_subkey( struct key *key, const struct unicode_str *name );
+
 static struct object *key_lookup_name( struct object *obj, struct unicode_str *name,
                                        unsigned int attr )
 {
@@ -443,6 +450,14 @@ static struct object *key_lookup_name( struct object *obj, struct unicode_str *n
         }
         name->str = p;
         name->len -= tmp.len;
+
+        /* Resolve WoW64 */
+        if (attr & WINE_OBJ_WOW64)
+        {
+            struct unicode_str token = {0};
+            get_path_token( name, &token );
+            found = find_wow64_subkey( found, &token );
+        }
         return &found->obj;
     }
 
@@ -739,7 +754,9 @@ static struct key *find_wow64_subkey( struct key *key, const struct unicode_str 
     if (!(key->flags & KEY_WOW64)) return key;
     if (!is_wow6432node( name->str, name->len ))
     {
-        key = find_subkey( key, wow6432node, sizeof(wow6432node), NULL );
+        struct key *subkey = find_subkey( key, wow6432node, sizeof(wow6432node), NULL );
+        release_object( key );
+        key = subkey;
         assert( key );  /* if KEY_WOW64 is set we must find it */
     }
     return key;
@@ -1728,17 +1745,20 @@ unsigned int get_prefix_cpu_mask(void)
     }
 }
 
+void create_wow_key(struct key *parent, const struct unicode_str *name, unsigned int flags)
+{
+    struct key *key = create_key_recursive( parent, name, current_time );
+    key->flags |= flags;
+    release_object( key );
+}
+
 /* registry initialisation */
 void init_registry(void)
 {
     static const WCHAR HKLM[] = { 'M','a','c','h','i','n','e' };
     static const WCHAR HKU_default[] = { 'U','s','e','r','\\','.','D','e','f','a','u','l','t' };
-    static const WCHAR classes[] = {'S','o','f','t','w','a','r','e','\\',
-                                    'C','l','a','s','s','e','s','\\',
-                                    'W','o','w','6','4','3','2','N','o','d','e'};
     static const struct unicode_str HKLM_name = { HKLM, sizeof(HKLM) };
     static const struct unicode_str HKU_name = { HKU_default, sizeof(HKU_default) };
-    static const struct unicode_str classes_name = { classes, sizeof(classes) };
 
     WCHAR *current_user_path;
     struct unicode_str current_user_str;
@@ -1787,14 +1807,26 @@ void init_registry(void)
     free( current_user_path );
     load_init_registry_from_file( "user.reg", hkcu );
 
-    /* set the shared flag on Software\Classes\Wow6432Node */
     if (prefix_type == PREFIX_64BIT)
     {
-        if ((key = create_key_recursive( hklm, &classes_name, current_time )))
-        {
-            key->flags |= KEY_WOWSHARE;
-            release_object( key );
-        }
+        static const WCHAR softwareW[] = {'S','o','f','t','w','a','r','e'};
+        static const WCHAR classesW[] = {'C','l','a','s','s','e','s'};
+        static const struct unicode_str software_name = { softwareW, sizeof(softwareW) };
+        static const struct unicode_str classes_name = { classesW, sizeof(classesW) };
+
+        struct key *software = create_key_recursive( hklm, &software_name, current_time );
+        struct key *classes = create_key_recursive( software, &classes_name, current_time );
+
+        /* set the WOW64 flag on HKLM\Software */
+        software->flags |= KEY_WOW64;
+        create_wow_key( software, &wow6432node_str, 0 );
+
+        /* set the shared flag on HKLM\Software\Classes\WOW6432Node */
+        create_wow_key( classes, &wow6432node_str, KEY_WOWSHARE );
+
+        release_object( classes );
+        release_object( software );
+
         /* FIXME: handle HKCU too */
     }
 
@@ -1984,8 +2016,11 @@ DECL_HANDLER(create_key)
     struct unicode_str class;
     const struct security_descriptor *sd;
     const struct object_attributes *objattr = get_req_object_attributes( &sd, &name, NULL );
+    unsigned int attributes;
 
     if (!objattr) return;
+
+    attributes = objattr->attributes;
 
     class.str = get_req_data_after_objattr( objattr, &class.len );
     class.len = (class.len / sizeof(WCHAR)) * sizeof(WCHAR);
@@ -1994,8 +2029,18 @@ DECL_HANDLER(create_key)
     if (objattr->rootdir && !(parent = get_hkey_obj( objattr->rootdir, 0 )))
         return;
 
+    if (is_wow64_thread( current ) && !(req->access & KEY_WOW64_64KEY))
+        attributes |= WINE_OBJ_WOW64;
+
+    if (parent && (req->access & KEY_WOW64_32KEY))
+    {
+        struct unicode_str token = {0};
+        get_path_token( &name, &token );
+        parent = find_wow64_subkey( parent, &token );
+    }
+
     if ((key = create_key( parent ? &parent->obj : NULL, &name, &class, req->options,
-                           req->access, objattr->attributes, sd )))
+                           req->access, attributes, sd )))
     {
         if (get_error() == STATUS_SUCCESS)
             reply->created = 1;
@@ -2017,6 +2062,7 @@ DECL_HANDLER(open_key)
 {
     struct key *key, *parent = NULL;
     struct unicode_str name = get_req_unicode_str();
+    unsigned int attributes = req->attributes;
 
     if (name.len >= 65534)
     {
@@ -2028,8 +2074,18 @@ DECL_HANDLER(open_key)
     if (req->parent && !(parent = get_hkey_obj( req->parent, 0 )))
         return;
 
+    if (is_wow64_thread( current ) && !(req->access & KEY_WOW64_64KEY))
+        attributes |= WINE_OBJ_WOW64;
+
+    if (parent && (req->access & KEY_WOW64_32KEY))
+    {
+        struct unicode_str token = {0};
+        get_path_token( &name, &token );
+        parent = find_wow64_subkey( parent, &token );
+    }
+
     if ((key = (struct key *)open_named_object( parent ? &parent->obj : NULL,
-                                                &key_ops, &name, req->attributes )))
+                                                &key_ops, &name, attributes )))
     {
         reply->hkey = alloc_handle( current->process, key, req->access, req->attributes );
         release_object( key );

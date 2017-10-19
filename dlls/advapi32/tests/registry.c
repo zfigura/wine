@@ -2618,7 +2618,7 @@ static void test_redirection(void)
         check_key_value( key, "Wine\\Winetest", 0, 64 );
         check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, 64 );
         dw = get_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY );
-        todo_wine ok( dw == 32, "wrong value %u\n", dw );
+        ok( dw == 32, "wrong value %u\n", dw );
         check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, 32 );
         RegCloseKey( key );
 
