@@ -314,9 +314,110 @@ static struct object_type *key_get_type( struct object *obj )
     return get_object_type( &str );
 }
 
-static struct key *find_subkey( const struct key *key, const WCHAR *name, int len, int *index );
-static int grow_subkeys( struct key *key );
-static void touch_key( struct key *key, unsigned int change );
+/* find the named child of a given key and return its index */
+static struct key *find_subkey( const struct key *key, const WCHAR *name, int namelen, int *index )
+{
+    int i, min, max, res;
+    data_size_t len;
+
+    min = 0;
+    max = key->last_subkey;
+    while (min <= max)
+    {
+        i = (min + max) / 2;
+        len = min( key->subkeys[i]->obj.name->len, namelen );
+        res = memicmpW( key->subkeys[i]->obj.name->name, name, len / sizeof(WCHAR) );
+        if (!res) res = key->subkeys[i]->obj.name->len - namelen;
+        if (!res)
+        {
+            if (index) *index = i;
+            return (struct key *)grab_object( key->subkeys[i] );
+        }
+        if (res > 0) max = i - 1;
+        else min = i + 1;
+    }
+    if (index) *index = min;  /* this is where we should insert it */
+    return NULL;
+}
+
+/* try to grow the array of subkeys; return 1 if OK, 0 on error */
+static int grow_subkeys( struct key *key )
+{
+    struct key **new_subkeys;
+    int nb_subkeys;
+
+    if (key->nb_subkeys)
+    {
+        nb_subkeys = key->nb_subkeys + (key->nb_subkeys / 2);  /* grow by 50% */
+        if (!(new_subkeys = realloc( key->subkeys, nb_subkeys * sizeof(*new_subkeys) )))
+        {
+            set_error( STATUS_NO_MEMORY );
+            return 0;
+        }
+    }
+    else
+    {
+        nb_subkeys = MIN_SUBKEYS;
+        if (!(new_subkeys = mem_alloc( nb_subkeys * sizeof(*new_subkeys) ))) return 0;
+    }
+    key->subkeys    = new_subkeys;
+    key->nb_subkeys = nb_subkeys;
+    return 1;
+}
+
+/* mark a key and all its parents as dirty (modified) */
+static void make_dirty( struct key *key )
+{
+    while (key)
+    {
+        if (key->flags & (KEY_DIRTY|KEY_VOLATILE)) return;  /* nothing to do */
+        key->flags |= KEY_DIRTY;
+        key = key->parent;
+    }
+}
+
+/* notify waiter and maybe delete the notification */
+static void do_notification( struct key *key, struct notify *notify, int del )
+{
+    if (notify->event)
+    {
+        set_event( notify->event );
+        release_object( notify->event );
+        notify->event = NULL;
+    }
+    if (del)
+    {
+        list_remove( &notify->entry );
+        free( notify );
+    }
+}
+
+/* go through all the notifications and send them if necessary */
+static void check_notify( struct key *key, unsigned int change, int not_subtree )
+{
+    struct list *ptr, *next;
+
+    LIST_FOR_EACH_SAFE( ptr, next, &key->notify_list )
+    {
+        struct notify *n = LIST_ENTRY( ptr, struct notify, entry );
+        if ( ( not_subtree || n->subtree ) && ( change & n->filter ) )
+            do_notification( key, n, 0 );
+    }
+}
+
+/* update key modification time */
+static void touch_key( struct key *key, unsigned int change )
+{
+    struct key *k;
+
+    key->modif = current_time;
+    make_dirty( key );
+
+    /* do notifications */
+    check_notify( key, change, 1 );
+    for ( k = key->parent; k; k = k->parent )
+        check_notify( k, change & ~REG_NOTIFY_CHANGE_LAST_SET, 0 );
+}
 
 static int key_link_name( struct object *obj, struct object_name *name, struct object *parent )
 {
@@ -387,8 +488,56 @@ static struct key *follow_symlink( struct key *key, unsigned int attr )
         return open_named_object( &key->parent->obj, &key_ops, &path, attr );
 }
 
-static struct unicode_str *get_path_token(const struct unicode_str *path, struct unicode_str *token );
-static struct key *find_wow64_subkey( struct key *key, const struct unicode_str *name );
+/* return the next token in a given path */
+/* token->str must point inside the path, or be NULL for the first call */
+static struct unicode_str *get_path_token( const struct unicode_str *path, struct unicode_str *token )
+{
+    data_size_t i = 0, len = path->len / sizeof(WCHAR);
+
+    if (!token->str)  /* first time */
+    {
+        /* path cannot start with a backslash */
+        if (len && path->str[0] == '\\')
+        {
+            set_error( STATUS_OBJECT_PATH_INVALID );
+            return NULL;
+        }
+    }
+    else
+    {
+        i = token->str - path->str;
+        i += token->len / sizeof(WCHAR);
+        while (i < len && path->str[i] == '\\') i++;
+    }
+    token->str = path->str + i;
+    while (i < len && path->str[i] != '\\') i++;
+    token->len = (path->str + i - token->str) * sizeof(WCHAR);
+    return token;
+}
+
+/* return the wow64 variant of the key, or the key itself if none */
+static struct key *find_wow64_subkey( struct key *key, const struct unicode_str *name )
+{
+    if (!(key->flags & KEY_WOW64)) return key;
+    if (key->parent->flags & KEY_WOWSHARE)
+    {
+        /* look under the parent instead */
+        struct key *wow64_key = find_subkey( key->parent, wow6432node, sizeof(wow6432node), NULL );
+        struct key *subkey = find_subkey( wow64_key, key->obj.name->name, key->obj.name->len, NULL );
+        release_object( key );
+        release_object( wow64_key );
+        key = subkey;
+        assert( key );  /* if KEY_WOW64 is set we must find it */
+    }
+    else if (!is_wow6432node( name->str, name->len ))
+    {
+        struct key *subkey = find_subkey( key, wow6432node, sizeof(wow6432node), NULL );
+        release_object( key );
+        key = subkey;
+        assert( key );  /* if KEY_WOW64 is set we must find it */
+    }
+    return key;
+}
 
 static struct object *key_lookup_name( struct object *obj, struct unicode_str *name,
                                        unsigned int attr )
@@ -483,22 +632,6 @@ static struct object *key_lookup_name( struct object *obj, struct unicode_str *n
     return NULL;
 }
 
-/* notify waiter and maybe delete the notification */
-static void do_notification( struct key *key, struct notify *notify, int del )
-{
-    if (notify->event)
-    {
-        set_event( notify->event );
-        release_object( notify->event );
-        notify->event = NULL;
-    }
-    if (del)
-    {
-        list_remove( &notify->entry );
-        free( notify );
-    }
-}
-
 static inline struct notify *find_notify( struct key *key, struct process *process, obj_handle_t hkey )
 {
     struct notify *notify;
@@ -576,137 +709,6 @@ static int key_close_handle( struct object *obj, struct process *process, obj_ha
     return 1;  /* ok to close */
 }
 
-static int delete_key( struct key *key, int recurse );
-
-static void key_destroy( struct object *obj )
-{
-    int i;
-    struct list *ptr;
-    struct key *key = (struct key *)obj;
-    assert( obj->ops == &key_ops );
-
-    free( key->class );
-    for (i = 0; i <= key->last_value; i++)
-    {
-        free( key->values[i].name );
-        free( key->values[i].data );
-    }
-    free( key->values );
-    for (i = 0; i <= key->last_subkey; i++)
-    {
-        key->subkeys[i]->parent = NULL;
-        delete_key( key->subkeys[i], 1 );
-    }
-    free( key->subkeys );
-    /* unconditionally notify everything waiting on this key */
-    while ((ptr = list_head( &key->notify_list )))
-    {
-        struct notify *notify = LIST_ENTRY( ptr, struct notify, entry );
-        do_notification( key, notify, 1 );
-    }
-}
-
-/* return the next token in a given path */
-/* token->str must point inside the path, or be NULL for the first call */
-static struct unicode_str *get_path_token( const struct unicode_str *path, struct unicode_str *token )
-{
-    data_size_t i = 0, len = path->len / sizeof(WCHAR);
-
-    if (!token->str)  /* first time */
-    {
-        /* path cannot start with a backslash */
-        if (len && path->str[0] == '\\')
-        {
-            set_error( STATUS_OBJECT_PATH_INVALID );
-            return NULL;
-        }
-    }
-    else
-    {
-        i = token->str - path->str;
-        i += token->len / sizeof(WCHAR);
-        while (i < len && path->str[i] == '\\') i++;
-    }
-    token->str = path->str + i;
-    while (i < len && path->str[i] != '\\') i++;
-    token->len = (path->str + i - token->str) * sizeof(WCHAR);
-    return token;
-}
-
-/* mark a key and all its parents as dirty (modified) */
-static void make_dirty( struct key *key )
-{
-    while (key)
-    {
-        if (key->flags & (KEY_DIRTY|KEY_VOLATILE)) return;  /* nothing to do */
-        key->flags |= KEY_DIRTY;
-        key = key->parent;
-    }
-}
-
-/* mark a key and all its subkeys as clean (not modified) */
-static void make_clean( struct key *key )
-{
-    int i;
-
-    if (key->flags & KEY_VOLATILE) return;
-    if (!(key->flags & KEY_DIRTY)) return;
-    key->flags &= ~KEY_DIRTY;
-    for (i = 0; i <= key->last_subkey; i++) make_clean( key->subkeys[i] );
-}
-
-/* go through all the notifications and send them if necessary */
-static void check_notify( struct key *key, unsigned int change, int not_subtree )
-{
-    struct list *ptr, *next;
-
-    LIST_FOR_EACH_SAFE( ptr, next, &key->notify_list )
-    {
-        struct notify *n = LIST_ENTRY( ptr, struct notify, entry );
-        if ( ( not_subtree || n->subtree ) && ( change & n->filter ) )
-            do_notification( key, n, 0 );
-    }
-}
-
-/* update key modification time */
-static void touch_key( struct key *key, unsigned int change )
-{
-    struct key *k;
-
-    key->modif = current_time;
-    make_dirty( key );
-
-    /* do notifications */
-    check_notify( key, change, 1 );
-    for ( k = key->parent; k; k = k->parent )
-        check_notify( k, change, 0 );
-}
-
-/* try to grow the array of subkeys; return 1 if OK, 0 on error */
-static int grow_subkeys( struct key *key )
-{
-    struct key **new_subkeys;
-    int nb_subkeys;
-
-    if (key->nb_subkeys)
-    {
-        nb_subkeys = key->nb_subkeys + (key->nb_subkeys / 2);  /* grow by 50% */
-        if (!(new_subkeys = realloc( key->subkeys, nb_subkeys * sizeof(*new_subkeys) )))
-        {
-            set_error( STATUS_NO_MEMORY );
-            return 0;
-        }
-    }
-    else
-    {
-        nb_subkeys = MIN_SUBKEYS;
-        if (!(new_subkeys = mem_alloc( nb_subkeys * sizeof(*new_subkeys) ))) return 0;
-    }
-    key->subkeys    = new_subkeys;
-    key->nb_subkeys = nb_subkeys;
-    return 1;
-}
-
 /* free a given subkey */
 static void free_subkey( struct key *key )
 {
@@ -738,54 +740,72 @@ static void free_subkey( struct key *key )
     }
 }
 
-/* find the named child of a given key and return its index */
-static struct key *find_subkey( const struct key *key, const WCHAR *name, int namelen, int *index )
+/* delete a key and its values */
+static int delete_key( struct key *key, int recurse )
 {
-    int i, min, max, res;
-    data_size_t len;
+    struct key *parent = key->parent;
 
-    min = 0;
-    max = key->last_subkey;
-    while (min <= max)
+    while (recurse && (key->last_subkey>=0))
+        if (0 > delete_key(key->subkeys[key->last_subkey], 1))
+            return -1;
+
+    /* we can only delete a key that has no subkeys */
+    if (key->last_subkey >= 0)
     {
-        i = (min + max) / 2;
-        len = min( key->subkeys[i]->obj.name->len, namelen );
-        res = memicmpW( key->subkeys[i]->obj.name->name, name, len / sizeof(WCHAR) );
-        if (!res) res = key->subkeys[i]->obj.name->len - namelen;
-        if (!res)
-        {
-            if (index) *index = i;
-            return (struct key *)grab_object( key->subkeys[i] );
-        }
-        if (res > 0) max = i - 1;
-        else min = i + 1;
+        set_error( STATUS_ACCESS_DENIED );
+        return -1;
     }
-    if (index) *index = min;  /* this is where we should insert it */
-    return NULL;
+
+    if (debug_level > 1) dump_operation( key, NULL, "Delete" );
+
+    /* remove from parent's subkey list */
+    free_subkey( key );
+
+    /* release the persistent reference */
+    release_object( key );
+
+    if (parent)
+        touch_key( parent, REG_NOTIFY_CHANGE_NAME );
+    return 0;
 }
 
-/* return the wow64 variant of the key, or the key itself if none */
-static struct key *find_wow64_subkey( struct key *key, const struct unicode_str *name )
+static void key_destroy( struct object *obj )
 {
-    if (!(key->flags & KEY_WOW64)) return key;
-    if (key->parent->flags & KEY_WOWSHARE)
+    int i;
+    struct list *ptr;
+    struct key *key = (struct key *)obj;
+    assert( obj->ops == &key_ops );
+
+    free( key->class );
+    for (i = 0; i <= key->last_value; i++)
     {
-        /* look under the parent instead */
-        struct key *wow64_key = find_subkey( key->parent, wow6432node, sizeof(wow6432node), NULL );
-        struct key *subkey = find_subkey( wow64_key, key->obj.name->name, key->obj.name->len, NULL );
-        release_object( key );
-        release_object( wow64_key );
-        key = subkey;
-        assert( key );  /* if KEY_WOW64 is set we must find it */
+        free( key->values[i].name );
+        free( key->values[i].data );
     }
-    else if (!is_wow6432node( name->str, name->len ))
+    free( key->values );
+    for (i = 0; i <= key->last_subkey; i++)
     {
-        struct key *subkey = find_subkey( key, wow6432node, sizeof(wow6432node), NULL );
-        release_object( key );
-        key = subkey;
-        assert( key );  /* if KEY_WOW64 is set we must find it */
+        key->subkeys[i]->parent = NULL;
+        delete_key( key->subkeys[i], 1 );
     }
-    return key;
+    free( key->subkeys );
+    /* unconditionally notify everything waiting on this key */
+    while ((ptr = list_head( &key->notify_list )))
+    {
+        struct notify *notify = LIST_ENTRY( ptr, struct notify, entry );
+        do_notification( key, notify, 1 );
+    }
+}
+
+/* mark a key and all its subkeys as clean (not modified) */
+static void make_clean( struct key *key )
+{
+    int i;
+
+    if (key->flags & KEY_VOLATILE) return;
+    if (!(key->flags & KEY_DIRTY)) return;
+    key->flags &= ~KEY_DIRTY;
+    for (i = 0; i <= key->last_subkey; i++) make_clean( key->subkeys[i] );
 }
 
 /* create a subkey */
@@ -975,35 +995,6 @@ static void enum_key( const struct key *key, int index, int info_class,
         }
     }
     if (debug_level > 1) dump_operation( key, NULL, "Enum" );
-}
-
-/* delete a key and its values */
-static int delete_key( struct key *key, int recurse )
-{
-    struct key *parent = key->parent;
-
-    while (recurse && (key->last_subkey>=0))
-        if (0 > delete_key(key->subkeys[key->last_subkey], 1))
-            return -1;
-
-    /* we can only delete a key that has no subkeys */
-    if (key->last_subkey >= 0)
-    {
-        set_error( STATUS_ACCESS_DENIED );
-        return -1;
-    }
-
-    if (debug_level > 1) dump_operation( key, NULL, "Delete" );
-
-    /* remove from parent's subkey list */
-    free_subkey( key );
-
-    /* release the persistent reference */
-    release_object( key );
-
-    if (parent)
-        touch_key( parent, REG_NOTIFY_CHANGE_NAME );
-    return 0;
 }
 
 /* try to grow the array of values; return 1 if OK, 0 on error */
