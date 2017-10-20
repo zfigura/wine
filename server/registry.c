@@ -379,10 +379,12 @@ static struct key *follow_symlink( struct key *key, unsigned int attr )
     path.str = value->data;
     path.len = (value->len / sizeof(WCHAR)) * sizeof(WCHAR);
 
+    attr = (attr | OBJ_OPENLINK) & ~WINE_OBJ_WOW64;
+
     if (path.len && path.str[0] == '\\')
-        return open_named_object( NULL, &key_ops, &path, attr | OBJ_OPENLINK );
+        return open_named_object( NULL, &key_ops, &path, attr );
     else /* relative symlink */
-        return open_named_object( &key->parent->obj, &key_ops, &path, attr | OBJ_OPENLINK );
+        return open_named_object( &key->parent->obj, &key_ops, &path, attr );
 }
 
 static struct unicode_str *get_path_token(const struct unicode_str *path, struct unicode_str *token );
@@ -414,7 +416,12 @@ static struct object *key_lookup_name( struct object *obj, struct unicode_str *n
         return NULL;
     }
 
-    found = find_subkey( key, tmp.str, tmp.len, NULL );
+    /* if this is the WOW6432Node subkey of a shared key, look in the 64-bit parent instead */
+    if (is_wow6432node( key->obj.name->name, key->obj.name->len ) &&
+        (key->parent->flags & KEY_WOWSHARE) && (attr & WINE_OBJ_WOW64))
+        found = find_subkey( key->parent, tmp.str, tmp.len, NULL );
+    else
+        found = find_subkey( key, tmp.str, tmp.len, NULL );
 
     if (found)
     {
@@ -457,6 +464,15 @@ static struct object *key_lookup_name( struct object *obj, struct unicode_str *n
             struct unicode_str token = {0};
             get_path_token( name, &token );
             found = find_wow64_subkey( found, &token );
+
+            /* don't return the WoW6432Node subkey of a shared key if it's the last element */
+            if (is_wow6432node( found->obj.name->name, found->obj.name->len ) &&
+                (found->parent->flags & KEY_WOWSHARE) && !name->len)
+            {
+                struct key *parent = (struct key *)grab_object( found->parent );
+                release_object( found );
+                found = parent;
+            }
         }
         return &found->obj;
     }
@@ -752,7 +768,17 @@ static struct key *find_subkey( const struct key *key, const WCHAR *name, int na
 static struct key *find_wow64_subkey( struct key *key, const struct unicode_str *name )
 {
     if (!(key->flags & KEY_WOW64)) return key;
-    if (!is_wow6432node( name->str, name->len ))
+    if (key->parent->flags & KEY_WOWSHARE)
+    {
+        /* look under the parent instead */
+        struct key *wow64_key = find_subkey( key->parent, wow6432node, sizeof(wow6432node), NULL );
+        struct key *subkey = find_subkey( wow64_key, key->obj.name->name, key->obj.name->len, NULL );
+        release_object( key );
+        release_object( wow64_key );
+        key = subkey;
+        assert( key );  /* if KEY_WOW64 is set we must find it */
+    }
+    else if (!is_wow6432node( name->str, name->len ))
     {
         struct key *subkey = find_subkey( key, wow6432node, sizeof(wow6432node), NULL );
         release_object( key );
@@ -1811,19 +1837,43 @@ void init_registry(void)
     {
         static const WCHAR softwareW[] = {'S','o','f','t','w','a','r','e'};
         static const WCHAR classesW[] = {'C','l','a','s','s','e','s'};
+        static const WCHAR clsidW[] = {'C','L','S','I','D'};
+        static const WCHAR directshowW[] = {'D','i','r','e','c','t','S','h','o','w'};
+        static const WCHAR interfaceW[] = {'I','n','t','e','r','f','a','c','e'};
+        static const WCHAR media_typeW[] = {'M','e','d','i','a',' ','T','y','p','e'};
+        static const WCHAR mediafoundationW[] = {'M','e','d','i','a','F','o','u','n','d','a','t','i','o','n'};
         static const struct unicode_str software_name = { softwareW, sizeof(softwareW) };
         static const struct unicode_str classes_name = { classesW, sizeof(classesW) };
+        static const struct unicode_str clsid_name = { clsidW, sizeof(clsidW) };
+        static const struct unicode_str directshow_name = { directshowW, sizeof(directshowW) };
+        static const struct unicode_str interface_name = { interfaceW, sizeof(interfaceW) };
+        static const struct unicode_str media_type_name = { media_typeW, sizeof(media_typeW) };
+        static const struct unicode_str mediafoundation_name = { mediafoundationW, sizeof(mediafoundationW) };
 
         struct key *software = create_key_recursive( hklm, &software_name, current_time );
         struct key *classes = create_key_recursive( software, &classes_name, current_time );
+        struct key *classes_wow64 = create_key_recursive( classes, &wow6432node_str, current_time );
 
         /* set the WOW64 flag on HKLM\Software */
         software->flags |= KEY_WOW64;
         create_wow_key( software, &wow6432node_str, 0 );
 
-        /* set the shared flag on HKLM\Software\Classes\WOW6432Node */
-        create_wow_key( classes, &wow6432node_str, KEY_WOWSHARE );
+        /* set the shared flag on HKLM\Software\Classes */
+        classes->flags |= KEY_WOWSHARE;
 
+        /* set the WOW64 flags on Classes subkeys */
+        create_wow_key( classes, &clsid_name, KEY_WOW64 );
+        create_wow_key( classes_wow64, &clsid_name, 0 );
+        create_wow_key( classes, &directshow_name, KEY_WOW64 );
+        create_wow_key( classes_wow64, &directshow_name, 0 );
+        create_wow_key( classes, &interface_name, KEY_WOW64 );
+        create_wow_key( classes_wow64, &interface_name, 0 );
+        create_wow_key( classes, &media_type_name, KEY_WOW64 );
+        create_wow_key( classes_wow64, &media_type_name, 0 );
+        create_wow_key( classes, &mediafoundation_name, KEY_WOW64 );
+        create_wow_key( classes_wow64, &mediafoundation_name, 0 );
+
+        release_object( classes_wow64 );
         release_object( classes );
         release_object( software );
 
