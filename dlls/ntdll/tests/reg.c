@@ -1279,7 +1279,7 @@ static void test_symlinks(void)
     status = pNtCreateKey( &key, KEY_ALL_ACCESS, &attr, 0, 0, 0, 0 );
     ok(status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status);
     status = pNtQueryKey( key, KeyNameInformation, name_info, 0, &len );
-    todo_wine ok(status == STATUS_BUFFER_TOO_SMALL, "NtQueryKey failed: 0x%08x\n", status);
+    ok(status == STATUS_BUFFER_TOO_SMALL, "NtQueryKey failed: 0x%08x\n", status);
     name_info = HeapAlloc(GetProcessHeap(), 0, len);
     status = pNtQueryKey( key, KeyNameInformation, name_info, len, &len );
     ok(status == STATUS_SUCCESS, "NtQueryKey failed: 0x%08x\n", status);
@@ -1412,7 +1412,7 @@ static void _check_key_name( int line, HANDLE key, const char *expect )
     char *str;
 
     status = pNtQueryKey( key, KeyNameInformation, info, 0, &len );
-    todo_wine ok(status == STATUS_BUFFER_TOO_SMALL, "NtQueryKey failed: 0x%08x\n", status);
+    ok(status == STATUS_BUFFER_TOO_SMALL, "NtQueryKey failed: 0x%08x\n", status);
     info = HeapAlloc(GetProcessHeap(), 0, len);
     status = pNtQueryKey( key, KeyNameInformation, info, len, &len );
     ok(status == STATUS_SUCCESS, "NtQueryKey failed: 0x%08x\n", status);
@@ -1829,7 +1829,7 @@ static void test_NtQueryKey(void)
         pNtClose(key);
         return;
     }
-    todo_wine ok(status == STATUS_BUFFER_TOO_SMALL, "NtQueryKey Failed: 0x%08x\n", status);
+    ok(status == STATUS_BUFFER_TOO_SMALL, "NtQueryKey Failed: 0x%08x\n", status);
     info = HeapAlloc(GetProcessHeap(), 0, length);
 
     /* non-zero buffer size, but insufficient */
