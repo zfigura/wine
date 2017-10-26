@@ -352,7 +352,8 @@ static NTSTATUS enumerate_key( HANDLE handle, int index, KEY_INFORMATION_CLASS i
                 break;
             }
             *result_len = fixed_size + reply->total;
-            if (length < *result_len) ret = STATUS_BUFFER_OVERFLOW;
+            if (!length) ret = STATUS_BUFFER_TOO_SMALL;
+            else if (length < *result_len) ret = STATUS_BUFFER_OVERFLOW;
         }
     }
     SERVER_END_REQ;
