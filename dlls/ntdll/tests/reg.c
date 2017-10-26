@@ -231,22 +231,22 @@ static NTSTATUS WINAPI QueryRoutine (IN PCWSTR ValueName, IN ULONG ValueType, IN
 
             case REG_SZ:
                 trace("ValueType: REG_SZ\n");
-                trace("ValueData: %s\n", (char*)ValueData);
+                trace("ValueData: %s\n", wine_dbgstr_wn(ValueData, ValueLength/sizeof(WCHAR)));
                 break;
 
             case REG_MULTI_SZ:
                 trace("ValueType: REG_MULTI_SZ\n");
-                trace("ValueData: %s\n", (char*)ValueData);
+                trace("ValueData: %s\n", wine_dbgstr_wn(ValueData, ValueLength/sizeof(WCHAR)));
                 break;
 
             case REG_EXPAND_SZ:
                 trace("ValueType: REG_EXPAND_SZ\n");
-                trace("ValueData: %s\n", (char*)ValueData);
+                trace("ValueData: %s\n", wine_dbgstr_wn(ValueData, ValueLength/sizeof(WCHAR)));
                 break;
 
             case REG_DWORD:
                 trace("ValueType: REG_DWORD\n");
-                trace("ValueData: %p\n", ValueData);
+                trace("ValueData: %u\n", *((DWORD *)ValueData));
                 break;
     };
     trace("ValueLength: %d\n", (int)ValueLength);
