@@ -64,9 +64,7 @@ struct notify
 struct key
 {
     struct object     obj;         /* object header */
-    WCHAR            *name;        /* key name */
     WCHAR            *class;       /* key class */
-    unsigned short    namelen;     /* length of key name */
     unsigned short    classlen;    /* length of class name */
     struct key       *parent;      /* parent key */
     int               last_subkey; /* last in use subkey */
@@ -147,6 +145,7 @@ struct file_load_info
 
 static void key_dump( struct object *obj, int verbose );
 static struct object_type *key_get_type( struct object *obj );
+static void key_unlink_name( struct object *obj, struct object_name *name );
 static unsigned int key_map_access( struct object *obj, unsigned int access );
 static struct security_descriptor *key_get_sd( struct object *obj );
 static int key_close_handle( struct object *obj, struct process *process, obj_handle_t handle );
@@ -168,7 +167,7 @@ static const struct object_ops key_ops =
     default_set_sd,          /* set_sd */
     no_lookup_name,          /* lookup_name */
     no_link_name,            /* link_name */
-    NULL,                    /* unlink_name */
+    key_unlink_name,         /* unlink_name */
     no_open_file,            /* open_file */
     key_close_handle,        /* close_handle */
     key_destroy              /* destroy */
@@ -198,7 +197,7 @@ static void dump_path( const struct key *key, const struct key *base, FILE *f )
         dump_path( key->parent, base, f );
         fprintf( f, "\\\\" );
     }
-    dump_strW( key->name, key->namelen / sizeof(WCHAR), f, "[]" );
+    dump_strW( key->obj.name->name, key->obj.name->len / sizeof(WCHAR), f, "[]" );
 }
 
 /* dump a value to a text file */
@@ -310,6 +309,11 @@ static struct object_type *key_get_type( struct object *obj )
     return get_object_type( &str );
 }
 
+static void key_unlink_name( struct object *obj, struct object_name *name )
+{
+    /* nothing yet */
+}
+
 /* notify waiter and maybe delete the notification */
 static void do_notification( struct key *key, struct notify *notify, int del )
 {
@@ -410,7 +414,7 @@ static void key_destroy( struct object *obj )
     struct key *key = (struct key *)obj;
     assert( obj->ops == &key_ops );
 
-    free( key->name );
+    free( key->obj.name );
     free( key->class );
     for (i = 0; i <= key->last_value; i++)
     {
@@ -479,9 +483,7 @@ static struct key *alloc_key( const struct unicode_str *name, timeout_t modif )
     struct key *key;
     if ((key = alloc_object( &key_ops )))
     {
-        key->name        = NULL;
         key->class       = NULL;
-        key->namelen     = name->len;
         key->classlen    = 0;
         key->flags       = 0;
         key->last_subkey = -1;
@@ -493,11 +495,14 @@ static struct key *alloc_key( const struct unicode_str *name, timeout_t modif )
         key->modif       = modif;
         key->parent      = NULL;
         list_init( &key->notify_list );
-        if (name->len && !(key->name = memdup( name->str, name->len )))
+        if (!(key->obj.name = mem_alloc( sizeof(*key->obj.name) + name->len - sizeof(key->obj.name->len) )))
         {
             release_object( key );
             key = NULL;
         }
+        key->obj.name->len = name->len;
+        key->obj.name->parent = NULL;
+        memcpy( key->obj.name->name, name->str, name->len );
     }
     return key;
 }
@@ -599,7 +604,8 @@ static struct key *alloc_subkey( struct key *parent, const struct unicode_str *n
         for (i = ++parent->last_subkey; i > index; i--)
             parent->subkeys[i] = parent->subkeys[i-1];
         parent->subkeys[index] = key;
-        if (is_wow6432node( key->name, key->namelen ) && !is_wow6432node( parent->name, parent->namelen ))
+        if (is_wow6432node( key->obj.name->name, key->obj.name->len ) &&
+            !is_wow6432node( parent->obj.name->name, parent->obj.name->len ))
             parent->flags |= KEY_WOW64;
     }
     return key;
@@ -619,7 +625,7 @@ static void free_subkey( struct key *parent, int index )
     parent->last_subkey--;
     key->flags |= KEY_DELETED;
     key->parent = NULL;
-    if (is_wow6432node( key->name, key->namelen )) parent->flags &= ~KEY_WOW64;
+    if (is_wow6432node( key->obj.name->name, key->obj.name->len )) parent->flags &= ~KEY_WOW64;
     release_object( key );
 
     /* try to shrink the array */
@@ -646,9 +652,9 @@ static struct key *find_subkey( const struct key *key, const struct unicode_str 
     while (min <= max)
     {
         i = (min + max) / 2;
-        len = min( key->subkeys[i]->namelen, name->len );
-        res = memicmpW( key->subkeys[i]->name, name->str, len / sizeof(WCHAR) );
-        if (!res) res = key->subkeys[i]->namelen - name->len;
+        len = min( key->subkeys[i]->obj.name->len, name->len );
+        res = memicmpW( key->subkeys[i]->obj.name->name, name->str, len / sizeof(WCHAR) );
+        if (!res) res = key->subkeys[i]->obj.name->len - name->len;
         if (!res)
         {
             *index = i;
@@ -898,7 +904,7 @@ static void enum_key( const struct key *key, int index, int info_class,
         key = key->subkeys[index];
     }
 
-    namelen = key->namelen;
+    namelen = key->obj.name->len;
     classlen = key->classlen;
 
     switch(info_class)
@@ -906,7 +912,7 @@ static void enum_key( const struct key *key, int index, int info_class,
     case KeyNameInformation:
         namelen = 0;
         for (k = key; k != root_key; k = k->parent)
-            namelen += k->namelen + sizeof(backslash);
+            namelen += k->obj.name->len + sizeof(backslash);
         if (!namelen) return;
         namelen += sizeof(root_name) - sizeof(backslash);
         /* fall through */
@@ -923,7 +929,7 @@ static void enum_key( const struct key *key, int index, int info_class,
     case KeyCachedInformation:
         for (i = 0; i <= key->last_subkey; i++)
         {
-            if (key->subkeys[i]->namelen > max_subkey) max_subkey = key->subkeys[i]->namelen;
+            if (key->subkeys[i]->obj.name->len > max_subkey) max_subkey = key->subkeys[i]->obj.name->len;
             if (key->subkeys[i]->classlen > max_class) max_class = key->subkeys[i]->classlen;
         }
         for (i = 0; i <= key->last_value; i++)
@@ -955,7 +961,7 @@ static void enum_key( const struct key *key, int index, int info_class,
         if (len > namelen)
         {
             reply->namelen = namelen;
-            memcpy( data, key->name, namelen );
+            memcpy( data, key->obj.name->name, namelen );
             memcpy( data + namelen, key->class, len - namelen );
         }
         else if (info_class == KeyNameInformation)
@@ -964,9 +970,9 @@ static void enum_key( const struct key *key, int index, int info_class,
             reply->namelen = namelen;
             for (k = key; k != root_key; k = k->parent)
             {
-                pos -= k->namelen;
-                if (pos < len) memcpy( data + pos, k->name,
-                                       min( k->namelen, len - pos ) );
+                pos -= k->obj.name->len;
+                if (pos < len) memcpy( data + pos, k->obj.name->name,
+                                       min( k->obj.name->len, len - pos ) );
                 pos -= sizeof(backslash);
                 if (pos < len) memcpy( data + pos, backslash,
                                        min( sizeof(backslash), len - pos ) );
@@ -976,7 +982,7 @@ static void enum_key( const struct key *key, int index, int info_class,
         else
         {
             reply->namelen = len;
-            memcpy( data, key->name, len );
+            memcpy( data, key->obj.name->name, len );
         }
     }
     if (debug_level > 1) dump_operation( key, NULL, "Enum" );
@@ -1614,7 +1620,7 @@ static int get_prefix_len( struct key *key, const char *name, struct file_load_i
     len = (p - info->tmp) * sizeof(WCHAR);
     for (res = 1; key != root_key; res++)
     {
-        if (len == key->namelen && !memicmpW( info->tmp, key->name, len / sizeof(WCHAR) )) break;
+        if (len == key->obj.name->len && !memicmpW( info->tmp, key->obj.name->name, len / sizeof(WCHAR) )) break;
         key = key->parent;
     }
     if (key == root_key) res = 0;  /* no matching name */
