@@ -110,9 +110,10 @@ static const timeout_t save_period = 30 * -TICKS_PER_SEC;  /* delay between peri
 static struct timeout_user *save_timeout_user;  /* saving timer */
 static enum prefix_type { PREFIX_UNKNOWN, PREFIX_32BIT, PREFIX_64BIT } prefix_type;
 
-static const WCHAR root_name[] = { '\\','R','e','g','i','s','t','r','y','\\' };
+static const WCHAR root_name[] = { '\\','R','E','G','I','S','T','R','Y' };
 static const WCHAR wow6432node[] = {'W','o','w','6','4','3','2','N','o','d','e'};
 static const WCHAR symlink_value[] = {'S','y','m','b','o','l','i','c','L','i','n','k','V','a','l','u','e'};
+static const struct unicode_str root_name_str = { root_name, sizeof(root_name) };
 static const struct unicode_str symlink_str = { symlink_value, sizeof(symlink_value) };
 
 static void set_periodic_save_timer(void);
@@ -145,7 +146,9 @@ struct file_load_info
 
 static void key_dump( struct object *obj, int verbose );
 static struct object_type *key_get_type( struct object *obj );
+static int key_link_name( struct object *obj, struct object_name *name, struct object *parent );
 static void key_unlink_name( struct object *obj, struct object_name *name );
+static struct object *key_lookup_name( struct object *obj, struct unicode_str *name, unsigned int attr );
 static unsigned int key_map_access( struct object *obj, unsigned int access );
 static struct security_descriptor *key_get_sd( struct object *obj );
 static int key_close_handle( struct object *obj, struct process *process, obj_handle_t handle );
@@ -165,8 +168,8 @@ static const struct object_ops key_ops =
     key_map_access,          /* map_access */
     key_get_sd,              /* get_sd */
     default_set_sd,          /* set_sd */
-    no_lookup_name,          /* lookup_name */
-    no_link_name,            /* link_name */
+    key_lookup_name,         /* lookup_name */
+    key_link_name,           /* link_name */
     key_unlink_name,         /* unlink_name */
     no_open_file,            /* open_file */
     key_close_handle,        /* close_handle */
@@ -297,9 +300,7 @@ static void key_dump( struct object *obj, int verbose )
 {
     struct key *key = (struct key *)obj;
     assert( obj->ops == &key_ops );
-    fprintf( stderr, "Key flags=%x ", key->flags );
-    dump_path( key, NULL, stderr );
-    fprintf( stderr, "\n" );
+    fprintf( stderr, "Key flags=%x\n", key->flags );
 }
 
 static struct object_type *key_get_type( struct object *obj )
@@ -309,9 +310,104 @@ static struct object_type *key_get_type( struct object *obj )
     return get_object_type( &str );
 }
 
+static struct key *find_subkey( const struct key *key, const WCHAR *name, int len, int *index );
+static int grow_subkeys( struct key *key );
+static void touch_key( struct key *key, unsigned int change );
+
+static int key_link_name( struct object *obj, struct object_name *name, struct object *parent )
+{
+    static const WCHAR registryW[] = {'R','E','G','I','S','T','R','Y'};
+    struct key *key = (struct key *)obj;
+    struct key *key_parent = (struct key *)parent;
+    struct object *root_directory = get_root_directory();
+    int index, i;
+
+    /* are we creating the root key? */
+    if (parent == root_directory && !strncmpiW( registryW, name->name, name->len/sizeof(WCHAR) ))
+    {
+        key->parent = NULL;
+        directory_link_name( obj, name, parent );
+        release_object( root_directory );
+        return 1;
+    }
+    release_object( root_directory );
+
+    if (parent->ops != &key_ops)
+    {
+        set_error( STATUS_OBJECT_NAME_NOT_FOUND );
+        return 0;
+    }
+
+    if (key_parent->last_subkey + 1 == key_parent->nb_subkeys)
+    {
+        /* need to grow the array */
+        if (!grow_subkeys( key_parent )) return 0;
+    }
+    /* find the sorted index */
+    assert( !find_subkey( key_parent, name->name, name->len, &index ) );
+    for (i = ++key_parent->last_subkey; i > index; i--)
+        key_parent->subkeys[i] = key_parent->subkeys[i-1];
+    key_parent->subkeys[index] = key;
+
+    touch_key( key_parent, REG_NOTIFY_CHANGE_NAME );
+
+    key->parent = key_parent;
+
+    name->parent = grab_object( parent );
+    return 1;
+}
+
 static void key_unlink_name( struct object *obj, struct object_name *name )
 {
-    /* nothing yet */
+    if ((struct key *)obj == root_key)
+        default_unlink_name( obj, name );
+}
+
+static struct object *key_lookup_name( struct object *obj, struct unicode_str *name,
+                                       unsigned int attr )
+{
+    struct key *key = (struct key *)obj;
+    struct key *found = NULL;
+    struct unicode_str tmp;
+    const WCHAR *p;
+
+    assert( obj->ops == &key_ops );
+
+    if (!name) return NULL;  /* open the key itself */
+
+    if (!(p = memchrW( name->str, '\\', name->len / sizeof(WCHAR) )))
+        /* Last element in the path name */
+        tmp.len = name->len;
+    else
+        tmp.len = (p - name->str) * sizeof(WCHAR);
+
+    tmp.str = name->str;
+    if (!tmp.len) return NULL;
+    if (tmp.len > MAX_NAME_LEN * sizeof(WCHAR))
+    {
+        set_error(STATUS_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    found = find_subkey( key, tmp.str, tmp.len, NULL );
+
+    if (found)
+    {
+        /* Move to the next element */
+        while (tmp.len < name->len && *p == '\\')
+        {
+            p++;
+            tmp.len += sizeof(WCHAR);
+        }
+        name->str = p;
+        name->len -= tmp.len;
+        return &found->obj;
+    }
+
+    if (tmp.len < name->len)  /* Path still has elements */
+        set_error( STATUS_OBJECT_NAME_NOT_FOUND );
+
+    return NULL;
 }
 
 /* notify waiter and maybe delete the notification */
@@ -407,6 +503,8 @@ static int key_close_handle( struct object *obj, struct process *process, obj_ha
     return 1;  /* ok to close */
 }
 
+static int delete_key( struct key *key, int recurse );
+
 static void key_destroy( struct object *obj )
 {
     int i;
@@ -414,7 +512,6 @@ static void key_destroy( struct object *obj )
     struct key *key = (struct key *)obj;
     assert( obj->ops == &key_ops );
 
-    free( key->obj.name );
     free( key->class );
     for (i = 0; i <= key->last_value; i++)
     {
@@ -425,7 +522,7 @@ static void key_destroy( struct object *obj )
     for (i = 0; i <= key->last_subkey; i++)
     {
         key->subkeys[i]->parent = NULL;
-        release_object( key->subkeys[i] );
+        delete_key( key->subkeys[i], 1 );
     }
     free( key->subkeys );
     /* unconditionally notify everything waiting on this key */
@@ -433,20 +530,6 @@ static void key_destroy( struct object *obj )
     {
         struct notify *notify = LIST_ENTRY( ptr, struct notify, entry );
         do_notification( key, notify, 1 );
-    }
-}
-
-/* get the request vararg as registry path */
-static inline void get_req_path( struct unicode_str *str, int skip_root )
-{
-    str->str = get_req_data();
-    str->len = (get_req_data_size() / sizeof(WCHAR)) * sizeof(WCHAR);
-
-    if (skip_root && str->len >= sizeof(root_name) &&
-        !memicmpW( str->str, root_name, sizeof(root_name)/sizeof(WCHAR) ))
-    {
-        str->str += sizeof(root_name)/sizeof(WCHAR);
-        str->len -= sizeof(root_name);
     }
 }
 
@@ -475,36 +558,6 @@ static struct unicode_str *get_path_token( const struct unicode_str *path, struc
     while (i < len && path->str[i] != '\\') i++;
     token->len = (path->str + i - token->str) * sizeof(WCHAR);
     return token;
-}
-
-/* allocate a key object */
-static struct key *alloc_key( const struct unicode_str *name, timeout_t modif )
-{
-    struct key *key;
-    if ((key = alloc_object( &key_ops )))
-    {
-        key->class       = NULL;
-        key->classlen    = 0;
-        key->flags       = 0;
-        key->last_subkey = -1;
-        key->nb_subkeys  = 0;
-        key->subkeys     = NULL;
-        key->nb_values   = 0;
-        key->last_value  = -1;
-        key->values      = NULL;
-        key->modif       = modif;
-        key->parent      = NULL;
-        list_init( &key->notify_list );
-        if (!(key->obj.name = mem_alloc( sizeof(*key->obj.name) + name->len - sizeof(key->obj.name->len) )))
-        {
-            release_object( key );
-            key = NULL;
-        }
-        key->obj.name->len = name->len;
-        key->obj.name->parent = NULL;
-        memcpy( key->obj.name->name, name->str, name->len );
-    }
-    return key;
 }
 
 /* mark a key and all its parents as dirty (modified) */
@@ -581,52 +634,23 @@ static int grow_subkeys( struct key *key )
     return 1;
 }
 
-/* allocate a subkey for a given key, and return its index */
-static struct key *alloc_subkey( struct key *parent, const struct unicode_str *name,
-                                 int index, timeout_t modif )
+/* free a given subkey */
+static void free_subkey( struct key *key )
 {
-    struct key *key;
-    int i;
-
-    if (name->len > MAX_NAME_LEN * sizeof(WCHAR))
-    {
-        set_error( STATUS_INVALID_PARAMETER );
-        return NULL;
-    }
-    if (parent->last_subkey + 1 == parent->nb_subkeys)
-    {
-        /* need to grow the array */
-        if (!grow_subkeys( parent )) return NULL;
-    }
-    if ((key = alloc_key( name, modif )) != NULL)
-    {
-        key->parent = parent;
-        for (i = ++parent->last_subkey; i > index; i--)
-            parent->subkeys[i] = parent->subkeys[i-1];
-        parent->subkeys[index] = key;
-        if (is_wow6432node( key->obj.name->name, key->obj.name->len ) &&
-            !is_wow6432node( parent->obj.name->name, parent->obj.name->len ))
-            parent->flags |= KEY_WOW64;
-    }
-    return key;
-}
-
-/* free a subkey of a given key */
-static void free_subkey( struct key *parent, int index )
-{
-    struct key *key;
+    struct key *parent = key->parent;
     int i, nb_subkeys;
 
-    assert( index >= 0 );
-    assert( index <= parent->last_subkey );
+    if (!parent) return;
 
-    key = parent->subkeys[index];
-    for (i = index; i < parent->last_subkey; i++) parent->subkeys[i] = parent->subkeys[i + 1];
+    /* remove from parent subkeys list */
+    for (i = 0; i <= parent->last_subkey; i++)
+        if (parent->subkeys[i] == key) break;
+    assert( i <= parent->last_subkey );
+
+    for (; i < parent->last_subkey; i++) parent->subkeys[i] = parent->subkeys[i + 1];
     parent->last_subkey--;
     key->flags |= KEY_DELETED;
     key->parent = NULL;
-    if (is_wow6432node( key->obj.name->name, key->obj.name->len )) parent->flags &= ~KEY_WOW64;
-    release_object( key );
 
     /* try to shrink the array */
     nb_subkeys = parent->nb_subkeys;
@@ -642,7 +666,7 @@ static void free_subkey( struct key *parent, int index )
 }
 
 /* find the named child of a given key and return its index */
-static struct key *find_subkey( const struct key *key, const struct unicode_str *name, int *index )
+static struct key *find_subkey( const struct key *key, const WCHAR *name, int namelen, int *index )
 {
     int i, min, max, res;
     data_size_t len;
@@ -652,198 +676,99 @@ static struct key *find_subkey( const struct key *key, const struct unicode_str 
     while (min <= max)
     {
         i = (min + max) / 2;
-        len = min( key->subkeys[i]->obj.name->len, name->len );
-        res = memicmpW( key->subkeys[i]->obj.name->name, name->str, len / sizeof(WCHAR) );
-        if (!res) res = key->subkeys[i]->obj.name->len - name->len;
+        len = min( key->subkeys[i]->obj.name->len, namelen );
+        res = memicmpW( key->subkeys[i]->obj.name->name, name, len / sizeof(WCHAR) );
+        if (!res) res = key->subkeys[i]->obj.name->len - namelen;
         if (!res)
         {
-            *index = i;
-            return key->subkeys[i];
+            if (index) *index = i;
+            return (struct key *)grab_object( key->subkeys[i] );
         }
         if (res > 0) max = i - 1;
         else min = i + 1;
     }
-    *index = min;  /* this is where we should insert it */
+    if (index) *index = min;  /* this is where we should insert it */
     return NULL;
 }
 
 /* return the wow64 variant of the key, or the key itself if none */
 static struct key *find_wow64_subkey( struct key *key, const struct unicode_str *name )
 {
-    static const struct unicode_str wow6432node_str = { wow6432node, sizeof(wow6432node) };
-    int index;
-
     if (!(key->flags & KEY_WOW64)) return key;
     if (!is_wow6432node( name->str, name->len ))
     {
-        key = find_subkey( key, &wow6432node_str, &index );
+        key = find_subkey( key, wow6432node, sizeof(wow6432node), NULL );
         assert( key );  /* if KEY_WOW64 is set we must find it */
     }
     return key;
 }
 
-
-/* follow a symlink and return the resolved key */
-static struct key *follow_symlink( struct key *key, int iteration )
-{
-    struct unicode_str path, token;
-    struct key_value *value;
-    int index;
-
-    if (iteration > 16) return NULL;
-    if (!(key->flags & KEY_SYMLINK)) return key;
-    if (!(value = find_value( key, &symlink_str, &index ))) return NULL;
-
-    path.str = value->data;
-    path.len = (value->len / sizeof(WCHAR)) * sizeof(WCHAR);
-    if (path.len <= sizeof(root_name)) return NULL;
-    if (memicmpW( path.str, root_name, sizeof(root_name)/sizeof(WCHAR) )) return NULL;
-    path.str += sizeof(root_name) / sizeof(WCHAR);
-    path.len -= sizeof(root_name);
-
-    key = root_key;
-    token.str = NULL;
-    if (!get_path_token( &path, &token )) return NULL;
-    while (token.len)
-    {
-        if (!(key = find_subkey( key, &token, &index ))) break;
-        if (!(key = follow_symlink( key, iteration + 1 ))) break;
-        get_path_token( &path, &token );
-    }
-    return key;
-}
-
-/* open a key until we find an element that doesn't exist */
-/* helper for open_key and create_key */
-static struct key *open_key_prefix( struct key *key, const struct unicode_str *name,
-                                    unsigned int access, struct unicode_str *token, int *index )
-{
-    token->str = NULL;
-    if (!get_path_token( name, token )) return NULL;
-    if (access & KEY_WOW64_32KEY) key = find_wow64_subkey( key, token );
-    while (token->len)
-    {
-        struct key *subkey;
-        if (!(subkey = find_subkey( key, token, index )))
-        {
-            if ((key->flags & KEY_WOWSHARE) && !(access & KEY_WOW64_64KEY))
-            {
-                /* try in the 64-bit parent */
-                key = key->parent;
-                subkey = find_subkey( key, token, index );
-            }
-        }
-        if (!subkey) break;
-        key = subkey;
-        get_path_token( name, token );
-        if (!token->len) break;
-        if (!(access & KEY_WOW64_64KEY)) key = find_wow64_subkey( key, token );
-        if (!(key = follow_symlink( key, 0 )))
-        {
-            set_error( STATUS_OBJECT_NAME_NOT_FOUND );
-            return NULL;
-        }
-    }
-    return key;
-}
-
-/* open a subkey */
-static struct key *open_key( struct key *key, const struct unicode_str *name, unsigned int access,
-                             unsigned int attributes )
-{
-    int index;
-    struct unicode_str token;
-
-    if (!(key = open_key_prefix( key, name, access, &token, &index ))) return NULL;
-
-    if (token.len)
-    {
-        set_error( STATUS_OBJECT_NAME_NOT_FOUND );
-        return NULL;
-    }
-    if (!(access & KEY_WOW64_64KEY)) key = find_wow64_subkey( key, &token );
-    if (!(attributes & OBJ_OPENLINK) && !(key = follow_symlink( key, 0 )))
-    {
-        set_error( STATUS_OBJECT_NAME_NOT_FOUND );
-        return NULL;
-    }
-    if (debug_level > 1) dump_operation( key, NULL, "Open" );
-    grab_object( key );
-    return key;
-}
-
 /* create a subkey */
-static struct key *create_key( struct key *key, const struct unicode_str *name,
+static struct key *create_key( struct object *parent, const struct unicode_str *name,
                                const struct unicode_str *class, unsigned int options,
                                unsigned int access, unsigned int attributes,
-                               const struct security_descriptor *sd, int *created )
+                               const struct security_descriptor *sd )
 {
-    int index;
-    struct unicode_str token, next;
+    struct key *key;
 
-    *created = 0;
-    if (!(key = open_key_prefix( key, name, access, &token, &index ))) return NULL;
+    attributes |= OBJ_OPENIF;
 
-    if (!token.len)  /* the key already exists */
+    if (!name || !name->len)
     {
-        if (!(access & KEY_WOW64_64KEY)) key = find_wow64_subkey( key, &token );
-        if (options & REG_OPTION_CREATE_LINK)
+        if (!parent)
+            set_error( STATUS_OBJECT_PATH_SYNTAX_BAD );
+        else
+            grab_object( parent );
+        return (struct key *)parent;
+    }
+
+    if ((key = create_named_object( parent, &key_ops, name, attributes, sd )))
+    {
+        if (get_error() != STATUS_OBJECT_NAME_EXISTS)
         {
-            set_error( STATUS_OBJECT_NAME_COLLISION );
-            return NULL;
+            /* initialize it if it didn't already exist */
+            if (class && class->len)
+            {
+                key->classlen = class->len;
+                if (!(key->class = memdup( class->str, key->classlen ))) key->classlen = 0;
+            }
+            else
+            {
+                key->class = NULL;
+                key->classlen = 0;
+            }
+            key->flags       = options & REG_OPTION_VOLATILE ? KEY_VOLATILE : KEY_DIRTY;
+            if (options & REG_OPTION_CREATE_LINK) key->flags |= KEY_SYMLINK;
+            key->last_subkey = -1;
+            key->nb_subkeys  = 0;
+            key->subkeys     = NULL;
+            key->nb_values   = 0;
+            key->last_value  = -1;
+            key->values      = NULL;
+            key->modif       = current_time;
+            list_init( &key->notify_list );
+
+            if ((key->parent && key->parent->flags & KEY_VOLATILE) && !(options & REG_OPTION_VOLATILE))
+            {
+                set_error( STATUS_CHILD_MUST_BE_VOLATILE );
+                free_subkey( key );
+                release_object( key );
+                return NULL;
+            }
+
+            if (debug_level > 1) dump_operation( key, NULL, "Create" );
+            /* keys are persistent */
+            grab_object( key );
         }
-        if (!(attributes & OBJ_OPENLINK) && !(key = follow_symlink( key, 0 )))
-        {
-            set_error( STATUS_OBJECT_NAME_NOT_FOUND );
-            return NULL;
-        }
-        if (debug_level > 1) dump_operation( key, NULL, "Open" );
-        grab_object( key );
-        return key;
     }
 
-    /* token must be the last path component at this point */
-    next = token;
-    get_path_token( name, &next );
-    if (next.len)
-    {
-        set_error( STATUS_OBJECT_NAME_NOT_FOUND );
-        return NULL;
-    }
-
-    if ((key->flags & KEY_VOLATILE) && !(options & REG_OPTION_VOLATILE))
-    {
-        set_error( STATUS_CHILD_MUST_BE_VOLATILE );
-        return NULL;
-    }
-    *created = 1;
-    make_dirty( key );
-    if (!(key = alloc_subkey( key, &token, index, current_time ))) return NULL;
-
-    if (options & REG_OPTION_CREATE_LINK) key->flags |= KEY_SYMLINK;
-    if (options & REG_OPTION_VOLATILE) key->flags |= KEY_VOLATILE;
-    else key->flags |= KEY_DIRTY;
-
-    if (sd) default_set_sd( &key->obj, sd, OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION |
-                            DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION );
-
-    if (debug_level > 1) dump_operation( key, NULL, "Create" );
-    if (class && class->len)
-    {
-        key->classlen = class->len;
-        free(key->class);
-        if (!(key->class = memdup( class->str, key->classlen ))) key->classlen = 0;
-    }
-    touch_key( key->parent, REG_NOTIFY_CHANGE_NAME );
-    grab_object( key );
     return key;
 }
 
 /* recursively create a subkey (for internal use only) */
 static struct key *create_key_recursive( struct key *key, const struct unicode_str *name, timeout_t modif )
 {
-    struct key *base;
-    int index;
+    struct key *root = key;
     struct unicode_str token;
 
     token.str = NULL;
@@ -851,34 +776,12 @@ static struct key *create_key_recursive( struct key *key, const struct unicode_s
     while (token.len)
     {
         struct key *subkey;
-        if (!(subkey = find_subkey( key, &token, &index ))) break;
+        if (!(subkey = create_key( &key->obj, &token, NULL, 0, 0, OBJ_OPENIF, NULL ))) break;
+        if (key != root) release_object( key );
         key = subkey;
-        if (!(key = follow_symlink( key, 0 )))
-        {
-            set_error( STATUS_OBJECT_NAME_NOT_FOUND );
-            return NULL;
-        }
         get_path_token( name, &token );
     }
 
-    if (token.len)
-    {
-        if (!(key = alloc_subkey( key, &token, index, modif ))) return NULL;
-        base = key;
-        for (;;)
-        {
-            get_path_token( name, &token );
-            if (!token.len) break;
-            /* we know the index is always 0 in a new key */
-            if (!(key = alloc_subkey( key, &token, 0, modif )))
-            {
-                free_subkey( base, index );
-                return NULL;
-            }
-        }
-    }
-
-    grab_object( key );
     return key;
 }
 
@@ -914,7 +817,7 @@ static void enum_key( const struct key *key, int index, int info_class,
         for (k = key; k != root_key; k = k->parent)
             namelen += k->obj.name->len + sizeof(backslash);
         if (!namelen) return;
-        namelen += sizeof(root_name) - sizeof(backslash);
+        namelen += sizeof(root_name);
         /* fall through */
     case KeyBasicInformation:
         classlen = 0; /* only return the name */
@@ -977,7 +880,7 @@ static void enum_key( const struct key *key, int index, int info_class,
                 if (pos < len) memcpy( data + pos, backslash,
                                        min( sizeof(backslash), len - pos ) );
             }
-            memcpy( data, root_name, min( sizeof(root_name) - sizeof(backslash), len ) );
+            memcpy( data, root_name, min( sizeof(root_name), len ) );
         }
         else
         {
@@ -991,24 +894,11 @@ static void enum_key( const struct key *key, int index, int info_class,
 /* delete a key and its values */
 static int delete_key( struct key *key, int recurse )
 {
-    int index;
     struct key *parent = key->parent;
-
-    /* must find parent and index */
-    if (key == root_key)
-    {
-        set_error( STATUS_ACCESS_DENIED );
-        return -1;
-    }
-    assert( parent );
 
     while (recurse && (key->last_subkey>=0))
         if (0 > delete_key(key->subkeys[key->last_subkey], 1))
             return -1;
-
-    for (index = 0; index <= parent->last_subkey; index++)
-        if (parent->subkeys[index] == key) break;
-    assert( index <= parent->last_subkey );
 
     /* we can only delete a key that has no subkeys */
     if (key->last_subkey >= 0)
@@ -1018,8 +908,15 @@ static int delete_key( struct key *key, int recurse )
     }
 
     if (debug_level > 1) dump_operation( key, NULL, "Delete" );
-    free_subkey( parent, index );
-    touch_key( parent, REG_NOTIFY_CHANGE_NAME );
+
+    /* remove from parent's subkey list */
+    free_subkey( key );
+
+    /* release the persistent reference */
+    release_object( key );
+
+    if (parent)
+        touch_key( parent, REG_NOTIFY_CHANGE_NAME );
     return 0;
 }
 
@@ -1262,13 +1159,6 @@ static struct key *get_hkey_obj( obj_handle_t hkey, unsigned int access )
         key = NULL;
     }
     return key;
-}
-
-/* get the registry key corresponding to a parent key handle */
-static inline struct key *get_parent_hkey_obj( obj_handle_t hkey )
-{
-    if (!hkey) return (struct key *)grab_object( root_key );
-    return get_hkey_obj( hkey, 0 );
 }
 
 /* read a line from the input file */
@@ -1803,7 +1693,6 @@ void init_registry(void)
     static const WCHAR classes[] = {'S','o','f','t','w','a','r','e','\\',
                                     'C','l','a','s','s','e','s','\\',
                                     'W','o','w','6','4','3','2','N','o','d','e'};
-    static const struct unicode_str root_name = { NULL, 0 };
     static const struct unicode_str HKLM_name = { HKLM, sizeof(HKLM) };
     static const struct unicode_str HKU_name = { HKU_default, sizeof(HKU_default) };
     static const struct unicode_str classes_name = { classes, sizeof(classes) };
@@ -1818,7 +1707,7 @@ void init_registry(void)
     if (fchdir( config_dir_fd ) == -1) fatal_error( "chdir to config dir: %s\n", strerror( errno ));
 
     /* create the root key */
-    root_key = alloc_key( &root_name, current_time );
+    root_key = create_key( NULL, &root_name_str, NULL, 0, 0, 0, NULL );
     assert( root_key );
     make_object_static( &root_key->obj );
 
@@ -1868,6 +1757,7 @@ void init_registry(void)
 
     release_object( hklm );
     release_object( hkcu );
+    release_object( root_key );
 
     /* start the periodic save timer */
     set_periodic_save_timer();
@@ -2032,6 +1922,8 @@ void flush_registry(void)
         }
     }
     if (fchdir( server_dir_fd ) == -1) fatal_error( "chdir to server dir: %s\n", strerror( errno ));
+
+    delete_key( root_key, 1 );
 }
 
 /* determine if the thread is wow64 (32-bit client running on 64-bit prefix) */
@@ -2044,60 +1936,62 @@ static int is_wow64_thread( struct thread *thread )
 /* create a registry key */
 DECL_HANDLER(create_key)
 {
-    struct key *key = NULL, *parent;
-    struct unicode_str name, class;
-    unsigned int access = req->access;
+    struct key *key = NULL, *parent = NULL;
+    struct unicode_str name = get_req_unicode_str();
+    struct unicode_str class;
     const struct security_descriptor *sd;
     const struct object_attributes *objattr = get_req_object_attributes( &sd, &name, NULL );
 
     if (!objattr) return;
 
-    if (!is_wow64_thread( current )) access = (access & ~KEY_WOW64_32KEY) | KEY_WOW64_64KEY;
-
     class.str = get_req_data_after_objattr( objattr, &class.len );
     class.len = (class.len / sizeof(WCHAR)) * sizeof(WCHAR);
 
-    if (!objattr->rootdir && name.len >= sizeof(root_name) &&
-        !memicmpW( name.str, root_name, sizeof(root_name)/sizeof(WCHAR) ))
+    /* NOTE: no access rights are required from the parent handle to create a key */
+    if (objattr->rootdir && !(parent = get_hkey_obj( objattr->rootdir, 0 )))
+        return;
+
+    if ((key = create_key( parent ? &parent->obj : NULL, &name, &class, req->options,
+                           req->access, objattr->attributes, sd )))
     {
-        name.str += sizeof(root_name)/sizeof(WCHAR);
-        name.len -= sizeof(root_name);
+        if (get_error() == STATUS_SUCCESS)
+            reply->created = 1;
+        else if (get_error() == STATUS_OBJECT_NAME_EXISTS)
+        {
+            reply->created = 0;
+            clear_error();
+        }
+
+        reply->hkey = alloc_handle( current->process, key, req->access, objattr->attributes );
+        release_object( key );
     }
 
-    /* NOTE: no access rights are required from the parent handle to create a key */
-    if ((parent = get_parent_hkey_obj( objattr->rootdir )))
-    {
-        if ((key = create_key( parent, &name, &class, req->options, access,
-                               objattr->attributes, sd, &reply->created )))
-        {
-            reply->hkey = alloc_handle( current->process, key, access, objattr->attributes );
-            release_object( key );
-        }
-        release_object( parent );
-    }
+    if (parent) release_object( parent );
 }
 
 /* open a registry key */
 DECL_HANDLER(open_key)
 {
-    struct key *key, *parent;
-    struct unicode_str name;
-    unsigned int access = req->access;
+    struct key *key, *parent = NULL;
+    struct unicode_str name = get_req_unicode_str();
 
-    if (!is_wow64_thread( current )) access = (access & ~KEY_WOW64_32KEY) | KEY_WOW64_64KEY;
-
-    reply->hkey = 0;
-    /* NOTE: no access rights are required to open the parent key, only the child key */
-    if ((parent = get_parent_hkey_obj( req->parent )))
+    if (name.len >= 65534)
     {
-        get_req_path( &name, !req->parent );
-        if ((key = open_key( parent, &name, access, req->attributes )))
-        {
-            reply->hkey = alloc_handle( current->process, key, access, req->attributes );
-            release_object( key );
-        }
-        release_object( parent );
+        set_error( STATUS_OBJECT_NAME_INVALID );
+        return;
     }
+
+    /* NOTE: no access rights are required to open the parent key, only the child key */
+    if (req->parent && !(parent = get_hkey_obj( req->parent, 0 )))
+        return;
+
+    if ((key = (struct key *)open_named_object( parent ? &parent->obj : NULL,
+                                                &key_ops, &name, req->attributes )))
+    {
+        reply->hkey = alloc_handle( current->process, key, req->access, req->attributes );
+        release_object( key );
+    }
+    if (parent) release_object( parent );
 }
 
 /* delete a registry key */
@@ -2202,7 +2096,8 @@ DECL_HANDLER(delete_key_value)
 /* load a registry branch from a file */
 DECL_HANDLER(load_registry)
 {
-    struct key *key, *parent;
+    struct key *key;
+    struct object *parent = NULL;
     struct unicode_str name;
     const struct security_descriptor *sd;
     const struct object_attributes *objattr = get_req_object_attributes( &sd, &name, NULL );
@@ -2215,23 +2110,16 @@ DECL_HANDLER(load_registry)
         return;
     }
 
-    if (!objattr->rootdir && name.len >= sizeof(root_name) &&
-        !memicmpW( name.str, root_name, sizeof(root_name)/sizeof(WCHAR) ))
+    if (objattr->rootdir && !(parent = get_handle_obj( current->process, objattr->rootdir, 0, &key_ops )))
+        return;
+
+    if ((key = create_key( parent, &name, NULL, 0, KEY_WOW64_64KEY, 0, sd )))
     {
-        name.str += sizeof(root_name)/sizeof(WCHAR);
-        name.len -= sizeof(root_name);
+        load_registry( key, req->file );
+        release_object( key );
     }
 
-    if ((parent = get_parent_hkey_obj( objattr->rootdir )))
-    {
-        int dummy;
-        if ((key = create_key( parent, &name, NULL, 0, KEY_WOW64_64KEY, 0, sd, &dummy )))
-        {
-            load_registry( key, req->file );
-            release_object( key );
-        }
-        release_object( parent );
-    }
+    if (parent) release_object( parent );
 }
 
 DECL_HANDLER(unload_registry)
