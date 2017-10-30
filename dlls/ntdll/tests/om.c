@@ -747,7 +747,6 @@ static void test_name_limits(void)
     for (i = 0; i < 65536 / sizeof(WCHAR); i++) str.Buffer[i + ARRAY_SIZE(registryW)] = 'a';
     str.Length = 0;
     status = pNtCreateKey( &ret, GENERIC_ALL, &attr, 0, NULL, 0, NULL );
-    todo_wine
     ok( status == STATUS_OBJECT_PATH_SYNTAX_BAD, "%u: NtCreateKey failed %x\n", str.Length, status );
     status = pNtCreateKey( &ret, GENERIC_ALL, &attr2, 0, NULL, 0, NULL );
     ok( status == STATUS_INVALID_HANDLE, "%u: NtCreateKey failed %x\n", str.Length, status );
@@ -824,13 +823,11 @@ static void test_name_limits(void)
     status = pNtCreateKey( &ret, GENERIC_ALL, &attr, 0, NULL, 0, NULL );
     ok( status == STATUS_INVALID_PARAMETER, "%u: NtCreateKey failed %x\n", str.Length, status );
     status = pNtOpenKey( &ret, GENERIC_ALL, &attr );
-    todo_wine
     ok( status == STATUS_INVALID_PARAMETER, "%u: NtOpenKey failed %x\n", str.Length, status );
     str.Length = 2000;
     status = pNtCreateKey( &ret, GENERIC_ALL, &attr, 0, NULL, 0, NULL );
     ok( status == STATUS_INVALID_PARAMETER, "%u: NtCreateKey failed %x\n", str.Length, status );
     status = pNtOpenKey( &ret, GENERIC_ALL, &attr );
-    todo_wine
     ok( status == STATUS_INVALID_PARAMETER, "%u: NtOpenKey failed %x\n", str.Length, status );
     /* some Windows versions change the error past 2050 chars, others past 4066 chars, some don't */
     str.Length = 5000;
@@ -840,7 +837,6 @@ static void test_name_limits(void)
         status == STATUS_INVALID_PARAMETER,
         "%u: NtCreateKey failed %x\n", str.Length, status );
     status = pNtOpenKey( &ret, GENERIC_ALL, &attr );
-    todo_wine
     ok( status == STATUS_BUFFER_OVERFLOW ||
         status == STATUS_BUFFER_TOO_SMALL ||
         status == STATUS_INVALID_PARAMETER,
@@ -852,7 +848,6 @@ static void test_name_limits(void)
         status == STATUS_BUFFER_TOO_SMALL,
         "%u: NtCreateKey failed %x\n", str.Length, status );
     status = pNtOpenKey( &ret, GENERIC_ALL, &attr );
-    todo_wine
     ok( status == STATUS_OBJECT_NAME_INVALID ||
         status == STATUS_BUFFER_OVERFLOW ||
         status == STATUS_BUFFER_TOO_SMALL,
@@ -1542,7 +1537,6 @@ static void test_query_object(void)
         expected_len = sizeof(UNICODE_STRING) + str->Length + sizeof(WCHAR);
         ok( len == expected_len || broken(len == expected_len - sizeof(WCHAR)), /* NT4 */
             "unexpected len %u\n", len );
-        todo_wine
         ok( len > sizeof(UNICODE_STRING) + sizeof("\\Classes") * sizeof(WCHAR),
             "name too short %s\n", wine_dbgstr_w(str->Buffer) );
         trace( "got %s len %u\n", wine_dbgstr_w(str->Buffer), len );
