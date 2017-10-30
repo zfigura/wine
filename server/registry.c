@@ -363,6 +363,24 @@ static void key_unlink_name( struct object *obj, struct object_name *name )
         default_unlink_name( obj, name );
 }
 
+/* follow a symlink and return the resolved key */
+static struct key *follow_symlink( struct key *key, unsigned int attr )
+{
+    struct unicode_str path;
+    struct key_value *value;
+    int index;
+
+    if (!(value = find_value( key, &symlink_str, &index ))) return NULL;
+
+    path.str = value->data;
+    path.len = (value->len / sizeof(WCHAR)) * sizeof(WCHAR);
+
+    if (path.len && path.str[0] == '\\')
+        return open_named_object( NULL, &key_ops, &path, attr | OBJ_OPENLINK );
+    else /* relative symlink */
+        return open_named_object( &key->parent->obj, &key_ops, &path, attr | OBJ_OPENLINK );
+}
+
 static struct object *key_lookup_name( struct object *obj, struct unicode_str *name,
                                        unsigned int attr )
 {
@@ -393,6 +411,30 @@ static struct object *key_lookup_name( struct object *obj, struct unicode_str *n
 
     if (found)
     {
+        /* Resolve symlinks */
+        if (!(attr & OBJ_OPENLINK))
+        {
+            struct key *target;
+            unsigned int iteration = 0;
+
+            while (found->flags & KEY_SYMLINK)
+            {
+                if (!(target = follow_symlink( found, attr )))
+                    break;
+
+                release_object( found );
+
+                if (iteration > 16)
+                {
+                    release_object( target );
+                    set_error( STATUS_NAME_TOO_LONG );
+                    return NULL;
+                }
+                found = target;
+                iteration++;
+            }
+        }
+
         /* Move to the next element */
         while (tmp.len < name->len && *p == '\\')
         {
@@ -711,7 +753,8 @@ static struct key *create_key( struct object *parent, const struct unicode_str *
 {
     struct key *key;
 
-    attributes |= OBJ_OPENIF;
+    if (!(options & REG_OPTION_CREATE_LINK))
+        attributes |= OBJ_OPENIF;
 
     if (!name || !name->len)
     {
