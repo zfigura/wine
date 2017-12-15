@@ -22,6 +22,7 @@
 
 #include "config.h"
 #include "wine/port.h"
+#include "wine/unicode.h"
 
 #include <assert.h>
 #include <limits.h>
@@ -1141,6 +1142,68 @@ BOOL WINAPI LocalUnlock(
     return GlobalUnlock( handle );
 }
 
+/* Limit the amount of globally available memory according to MaxGlobalMemory registry value */
+static DWORDLONG get_max_global_memory(void)
+{
+    static const WCHAR configW[] = {'S','o','f','t','w','a','r','e','\\','W','i','n','e',0};
+    static const WCHAR appdefaultsW[] = {'A','p','p','D','e','f','a','u','l','t','s','\\',0};
+    static const WCHAR maxglobalmemoryW[] = {'M','a','x','G','l','o','b','a','l','M','e','m','o','r','y',0};
+    OBJECT_ATTRIBUTES attr = {0};
+    UNICODE_STRING nameW;
+    HANDLE root, hkey, config_key;
+    WCHAR buffer[MAX_PATH + 16];
+    char tmp[64];
+    KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)tmp;
+    DWORD count;
+
+    RtlOpenCurrentUser( KEY_READ, &root );
+    attr.Length = sizeof(attr);
+    attr.RootDirectory = root;
+    attr.ObjectName = &nameW;
+    RtlInitUnicodeString( &nameW, configW );
+
+    /* @@ Wine registry key: HKCU\Software\Wine */
+    if (NtOpenKey( &config_key, KEY_READ, &attr )) config_key = NULL;
+    NtClose( root );
+    if (!config_key) return MAXDWORD;
+
+    /* open AppDefaults\\appname key */
+    if (GetModuleFileNameW( NULL, buffer, MAX_PATH ))
+    {
+        WCHAR appkey[MAX_PATH + 20];
+        const WCHAR *appname = buffer, *p;
+
+        if ((p = strrchrW( appname, '/' ))) appname = p + 1;
+        if ((p = strrchrW( appname, '\\' ))) appname = p + 1;
+
+        strcpyW( appkey, appdefaultsW );
+        strcatW( appkey, appname );
+        RtlInitUnicodeString( &nameW, appkey );
+        attr.RootDirectory = config_key;
+
+        /* @@ Wine registry key: HKCU\Software\Wine\AppDefaults\app.exe */
+        if (!NtOpenKey( &hkey, KEY_READ, &attr ))
+        {
+            RtlInitUnicodeString( &nameW, maxglobalmemoryW );
+            if (!NtQueryValueKey( hkey, &nameW, KeyValuePartialInformation, tmp, sizeof(tmp), &count ))
+            {
+                NtClose( hkey );
+                NtClose( config_key );
+                return *(DWORD *)info->Data;
+            }
+            NtClose( hkey );
+        }
+    }
+
+    RtlInitUnicodeString( &nameW, maxglobalmemoryW );
+    if (!NtQueryValueKey( config_key, &nameW, KeyValuePartialInformation, tmp, sizeof(tmp), &count ))
+    {
+        NtClose( config_key );
+        return *(DWORD *)info->Data;
+    }
+    NtClose( config_key );
+    return MAXLONGLONG;
+}
 
 /***********************************************************************
  *           GlobalMemoryStatusEx   (KERNEL32.@)
@@ -1154,6 +1217,7 @@ BOOL WINAPI GlobalMemoryStatusEx( LPMEMORYSTATUSEX lpmemex )
     static MEMORYSTATUSEX	cached_memstatus;
     static int cache_lastchecked = 0;
     SYSTEM_INFO si;
+    DWORDLONG max_global_memory;
 #ifdef linux
     FILE *f;
 #elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__) || defined(__APPLE__)
@@ -1349,6 +1413,14 @@ BOOL WINAPI GlobalMemoryStatusEx( LPMEMORYSTATUSEX lpmemex )
        However, I don't know what this means, so set it to zero :(
     */
     lpmemex->ullAvailExtendedVirtual = 0;
+
+    max_global_memory = get_max_global_memory();
+    if (lpmemex->ullTotalPhys > max_global_memory) lpmemex->ullTotalPhys = max_global_memory;
+    if (lpmemex->ullAvailPhys > max_global_memory) lpmemex->ullAvailPhys = max_global_memory;
+    if (lpmemex->ullTotalPageFile > max_global_memory) lpmemex->ullTotalPageFile = max_global_memory;
+    if (lpmemex->ullAvailPageFile > max_global_memory) lpmemex->ullAvailPageFile = max_global_memory;
+    if (lpmemex->ullTotalVirtual > max_global_memory) lpmemex->ullTotalVirtual = max_global_memory;
+    if (lpmemex->ullAvailVirtual > max_global_memory) lpmemex->ullAvailVirtual = max_global_memory;
 
     cached_memstatus = *lpmemex;
 
