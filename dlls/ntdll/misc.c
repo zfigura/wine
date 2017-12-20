@@ -401,7 +401,7 @@ BOOLEAN WINAPI EtwEventProviderEnabled( REGHANDLE handle, UCHAR level, ULONGLONG
 ULONG WINAPI EtwEventRegister( LPCGUID provider, PENABLECALLBACK callback, PVOID context,
                 PREGHANDLE handle )
 {
-    FIXME("(%s, %p, %p, %p) stub.\n", debugstr_guid(provider), callback, context, handle);
+    WARN("(%s, %p, %p, %p) stub.\n", debugstr_guid(provider), callback, context, handle);
 
     *handle = 0xdeadbeef;
     return ERROR_SUCCESS;
@@ -412,7 +412,7 @@ ULONG WINAPI EtwEventRegister( LPCGUID provider, PENABLECALLBACK callback, PVOID
  */
 ULONG WINAPI EtwEventUnregister( REGHANDLE handle )
 {
-    FIXME("(%s) stub.\n", wine_dbgstr_longlong(handle));
+    WARN("(%s) stub.\n", wine_dbgstr_longlong(handle));
     return ERROR_SUCCESS;
 }
 
