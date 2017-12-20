@@ -659,7 +659,7 @@ typedef _Mtx_t *_Mtx_arg_t;
 void __cdecl _Mtx_init_in_situ(_Mtx_t mtx, int flags)
 {
     if(flags & ~MTX_MULTI_LOCK)
-        FIXME("unknown flags ignored: %x\n", flags);
+        WARN("unknown flags ignored: %x\n", flags);
 
     mtx->flags = flags;
     call_func1(critical_section_ctor, &mtx->cs);

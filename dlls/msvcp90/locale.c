@@ -518,7 +518,7 @@ _Locinfo* __cdecl _Locinfo__Locinfo_ctor_cat_cstr(_Locinfo *locinfo, int categor
     const char *locale = NULL;
 
     /* This function is probably modifying more global objects */
-    FIXME("(%p %d %s) semi-stub\n", locinfo, category, locstr);
+    TRACE("(%p %d %s) semi-stub\n", locinfo, category, locstr);
 
     if(!locstr)
         throw_exception(EXCEPTION_RUNTIME_ERROR, "bad locale name");
