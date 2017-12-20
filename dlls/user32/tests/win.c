@@ -6420,7 +6420,7 @@ static void test_set_window_style(void)
     UnregisterClassA(cls.lpszClassName, cls.hInstance);
 }
 
-static void test_ShowWindow(void)
+static void test_ShowWindow(HWND hwndMain)
 {
     HWND hwnd;
     DWORD style;
@@ -6675,6 +6675,104 @@ static void test_ShowWindow(void)
     GetClientRect(hwnd, &rc);
     ok(EqualRect(&rcEmpty, &rc), "expected %s, got %s\n",
        wine_dbgstr_rect(&rcEmpty), wine_dbgstr_rect(&rc));
+    DestroyWindow(hwnd);
+
+    /* test owned windows */
+
+    SetRect(&rcMain, 20, 20, 210, 110);
+    SetRect(&rcMinimized, 0, mon_info.rcWork.bottom - GetSystemMetrics(SM_CYMINIMIZED),
+            GetSystemMetrics(SM_CXMINIMIZED), mon_info.rcWork.bottom);
+
+    GetClientRect(hwndMain, &rc);
+
+    hwnd = CreateWindowA("MainWindowClass", "owned", WS_CAPTION | WS_SYSMENU |
+                         WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
+                         rcMain.left, rcMain.top, rcMain.right - rcMain.left,
+                         rcMain.bottom - rcMain.top, hwndMain, 0, 0, NULL);
+    assert(hwnd);
+
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    ok(!(style & WS_DISABLED), "window should not be disabled\n");
+    ok(!(style & WS_VISIBLE), "window should not be visible\n");
+    ok(!(style & WS_MINIMIZE), "window should not be minimized\n");
+    ok(!(style & WS_MAXIMIZE), "window should not be maximized\n");
+    GetWindowRect(hwnd, &rc);
+    ok(EqualRect(&rcMain, &rc), "expected %s, got %s\n",
+       wine_dbgstr_rect(&rcMain), wine_dbgstr_rect(&rc));
+
+    ret = ShowWindow(hwnd, SW_SHOW);
+    ok(!ret, "not expected ret: %lu\n", ret);
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    ok(!(style & WS_DISABLED), "window should not be disabled\n");
+    ok(style & WS_VISIBLE, "window should be visible\n");
+    ok(!(style & WS_MINIMIZE), "window should not be minimized\n");
+    ok(!(style & WS_MAXIMIZE), "window should not be maximized\n");
+    GetWindowRect(hwnd, &rc);
+    ok(EqualRect(&rcMain, &rc), "expected %s, got %s\n",
+       wine_dbgstr_rect(&rcMain), wine_dbgstr_rect(&rc));
+
+    ret = ShowWindow(hwnd, SW_MINIMIZE);
+    ok(ret, "not expected ret: %lu\n", ret);
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    ok(!(style & WS_DISABLED), "window should not be disabled\n");
+    ok(style & WS_VISIBLE, "window should be visible\n");
+    ok(style & WS_MINIMIZE, "window should be minimized\n");
+    ok(!(style & WS_MAXIMIZE), "window should not be maximized\n");
+    GetWindowRect(hwnd, &rc);
+    todo_wine
+    ok(EqualRect(&rcMinimized, &rc), "expected %s, got %s\n",
+       wine_dbgstr_rect(&rcMinimized), wine_dbgstr_rect(&rc));
+    /* shouldn't be able to resize minimized windows */
+    ret = SetWindowPos(hwnd, 0, 0, 0,
+                       (rcMinimized.right - rcMinimized.left) * 2,
+                       (rcMinimized.bottom - rcMinimized.top) * 2,
+                       SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
+    ok(ret, "not expected ret: %lu\n", ret);
+    GetWindowRect(hwnd, &rc);
+    todo_wine
+    ok(EqualRect(&rcMinimized, &rc), "expected %s, got %s\n",
+       wine_dbgstr_rect(&rcMinimized), wine_dbgstr_rect(&rc));
+
+    ShowWindow(hwnd, SW_RESTORE);
+    ok(ret, "not expected ret: %lu\n", ret);
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    ok(!(style & WS_DISABLED), "window should not be disabled\n");
+    ok(style & WS_VISIBLE, "window should be visible\n");
+    ok(!(style & WS_MINIMIZE), "window should not be minimized\n");
+    ok(!(style & WS_MAXIMIZE), "window should not be maximized\n");
+    GetWindowRect(hwnd, &rc);
+    ok(EqualRect(&rcMain, &rc), "expected %s, got %s\n",
+       wine_dbgstr_rect(&rcMain), wine_dbgstr_rect(&rc));
+
+    ShowWindow(hwnd, SW_MAXIMIZE);
+    ok(ret, "not expected ret: %lu\n", ret);
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    ok(!(style & WS_DISABLED), "window should not be disabled\n");
+    ok(style & WS_VISIBLE, "window should be visible\n");
+    ok(!(style & WS_MINIMIZE), "window should be minimized\n");
+    ok(style & WS_MAXIMIZE, "window should not be maximized\n");
+    GetWindowRect(hwnd, &rc);
+    ok(EqualRect(&rcMaximized, &rc), "expected %s, got %s\n",
+       wine_dbgstr_rect(&rcMaximized), wine_dbgstr_rect(&rc));
+    /* maximized windows can be resized */
+    ret = SetWindowPos(hwnd, 0, 300, 300, 200, 200, SWP_NOACTIVATE | SWP_NOZORDER);
+    ok(ret, "not expected ret: %lu\n", ret);
+    SetRect(&rcResized, 300, 300, 500, 500);
+    GetWindowRect(hwnd, &rc);
+    ok(EqualRect(&rcResized, &rc), "expected %s, got %s\n",
+       wine_dbgstr_rect(&rcResized), wine_dbgstr_rect(&rc));
+
+    ShowWindow(hwnd, SW_RESTORE);
+    ok(ret, "not expected ret: %lu\n", ret);
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    ok(!(style & WS_DISABLED), "window should not be disabled\n");
+    ok(style & WS_VISIBLE, "window should be visible\n");
+    ok(!(style & WS_MINIMIZE), "window should not be minimized\n");
+    ok(!(style & WS_MAXIMIZE), "window should not be maximized\n");
+    GetWindowRect(hwnd, &rc);
+    ok(EqualRect(&rcMain, &rc), "expected %s, got %s\n", wine_dbgstr_rect(&rcMain),
+       wine_dbgstr_rect(&rc));
+
     DestroyWindow(hwnd);
 
     flush_events(TRUE);
@@ -10862,7 +10960,7 @@ START_TEST(win)
     test_csparentdc();
     test_SetWindowLong();
     test_set_window_style();
-    test_ShowWindow();
+    test_ShowWindow(hwndMain);
     test_EnableWindow();
     test_gettext();
     test_GetUpdateRect();
