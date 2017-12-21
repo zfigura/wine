@@ -21,7 +21,6 @@
 @ cdecl SetParent(long long long) ANDROID_SetParent
 @ cdecl SetWindowRgn(long long long) ANDROID_SetWindowRgn
 @ cdecl SetWindowStyle(ptr long ptr) ANDROID_SetWindowStyle
-@ cdecl ShowWindow(long long ptr long) ANDROID_ShowWindow
 @ cdecl UpdateLayeredWindow(long ptr ptr) ANDROID_UpdateLayeredWindow
 @ cdecl WindowMessage(long long long long) ANDROID_WindowMessage
 @ cdecl WindowPosChanging(long long long ptr ptr ptr ptr) ANDROID_WindowPosChanging

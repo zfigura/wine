@@ -2469,15 +2469,7 @@ UINT CDECL X11DRV_ShowWindow( HWND hwnd, INT cmd, RECT *rect, UINT swp )
 
     if (!data || !data->whole_window) goto done;
     if (IsRectEmpty( rect )) goto done;
-    if (style & WS_MINIMIZE)
-    {
-        if (((rect->left != -32000 || rect->top != -32000)) && hide_icon( data ))
-        {
-            OffsetRect( rect, -32000 - rect->left, -32000 - rect->top );
-            swp &= ~(SWP_NOMOVE | SWP_NOCLIENTMOVE);
-        }
-        goto done;
-    }
+    if (style & WS_MINIMIZE) goto done;
     if (!data->managed || !data->mapped || data->iconic) goto done;
 
     /* only fetch the new rectangle if the ShowWindow was a result of a window manager event */

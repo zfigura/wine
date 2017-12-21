@@ -6670,7 +6670,6 @@ static void test_ShowWindow(HWND hwndMain)
     style = GetWindowLongA(hwnd, GWL_STYLE);
     ok(style & WS_MINIMIZE, "window should be minimized\n");
     GetWindowRect(hwnd, &rc);
-    todo_wine
     ok(EqualRect(&rcMinimized, &rc), "expected %s, got %s\n",
        wine_dbgstr_rect(&rcMinimized), wine_dbgstr_rect(&rc));
     GetClientRect(hwnd, &rc);
@@ -6720,7 +6719,6 @@ static void test_ShowWindow(HWND hwndMain)
     ok(style & WS_MINIMIZE, "window should be minimized\n");
     ok(!(style & WS_MAXIMIZE), "window should not be maximized\n");
     GetWindowRect(hwnd, &rc);
-    todo_wine
     ok(EqualRect(&rcMinimized, &rc), "expected %s, got %s\n",
        wine_dbgstr_rect(&rcMinimized), wine_dbgstr_rect(&rc));
     /* shouldn't be able to resize minimized windows */
@@ -6730,7 +6728,6 @@ static void test_ShowWindow(HWND hwndMain)
                        SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
     ok(ret, "not expected ret: %lu\n", ret);
     GetWindowRect(hwnd, &rc);
-    todo_wine
     ok(EqualRect(&rcMinimized, &rc), "expected %s, got %s\n",
        wine_dbgstr_rect(&rcMinimized), wine_dbgstr_rect(&rc));
 
@@ -6826,7 +6823,6 @@ static void test_ShowWindow(HWND hwndMain)
     ok(style & WS_MINIMIZE, "window should be minimized\n");
     ok(!(style & WS_MAXIMIZE), "window should not be maximized\n");
     GetWindowRect(hwnd, &rc);
-    todo_wine
     ok(EqualRect(&rcMinimized, &rc), "expected %s, got %s\n",
        wine_dbgstr_rect(&rcMinimized), wine_dbgstr_rect(&rc));
     /* shouldn't be able to resize minimized windows */
@@ -6836,7 +6832,6 @@ static void test_ShowWindow(HWND hwndMain)
                        SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
     ok(ret, "not expected ret: %lu\n", ret);
     GetWindowRect(hwnd, &rc);
-    todo_wine
     ok(EqualRect(&rcMinimized, &rc), "expected %s, got %s\n",
        wine_dbgstr_rect(&rcMinimized), wine_dbgstr_rect(&rc));
 

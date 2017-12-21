@@ -854,94 +854,39 @@ MINMAXINFO WINPOS_GetMinMaxInfo( HWND hwnd )
 
 
 /***********************************************************************
- *           WINPOS_FindIconPos
+ *           WINPOS_GetMinimizedPos
  *
- * Find a suitable place for an iconic window.
+ * Calculate the position of a minimized window.
  */
-static POINT WINPOS_FindIconPos( HWND hwnd, POINT pt )
+static POINT WINPOS_GetMinimizedPos( HWND hwnd, POINT pt )
 {
-    RECT rect, rectParent;
-    HWND parent, child;
-    HRGN hrgn, tmp;
-    int x, y, xspacing, yspacing;
-    MINIMIZEDMETRICS metrics;
+    HWND parent;
 
-    metrics.cbSize = sizeof(metrics);
-    SystemParametersInfoW( SPI_GETMINIMIZEDMETRICS, sizeof(metrics), &metrics, 0 );
-
-    parent = GetAncestor( hwnd, GA_PARENT );
-    if (parent == GetDesktopWindow())
+    if ((parent = GetAncestor( hwnd, GA_PARENT )) && parent != GetDesktopWindow())
     {
-        MONITORINFO mon_info;
-        HMONITOR monitor = MonitorFromWindow( hwnd, MONITOR_DEFAULTTOPRIMARY );
+        RECT rect;
+        GetClientRect( parent, &rect );
 
-        mon_info.cbSize = sizeof( mon_info );
-        GetMonitorInfoW( monitor, &mon_info );
-        rectParent = mon_info.rcWork;
+        pt.x = 0;
+        pt.y = rect.bottom - GetSystemMetrics( SM_CYMINIMIZED );
     }
-    else GetClientRect( parent, &rectParent );
-
-    if ((pt.x >= rectParent.left) && (pt.x + GetSystemMetrics(SM_CXICON) < rectParent.right) &&
-        (pt.y >= rectParent.top) && (pt.y + GetSystemMetrics(SM_CYICON) < rectParent.bottom))
-        return pt;  /* The icon already has a suitable position */
-
-    xspacing = GetSystemMetrics(SM_CXICONSPACING);
-    yspacing = GetSystemMetrics(SM_CYICONSPACING);
-
-    /* Check if another icon already occupies this spot */
-    /* FIXME: this is completely inefficient */
-
-    hrgn = CreateRectRgn( 0, 0, 0, 0 );
-    tmp = CreateRectRgn( 0, 0, 0, 0 );
-    for (child = GetWindow( parent, GW_CHILD ); child; child = GetWindow( child, GW_HWNDNEXT ))
+    else if (GetWindow( hwnd, GW_OWNER )) /* owned window */
     {
-        if (child == hwnd) continue;
-        if ((GetWindowLongW( child, GWL_STYLE ) & (WS_VISIBLE|WS_MINIMIZE)) != (WS_VISIBLE|WS_MINIMIZE))
-            continue;
-        if (WIN_GetRectangles( child, COORDS_PARENT, &rect, NULL ))
+        HMONITOR monitor;
+        if ((monitor = MonitorFromWindow( hwnd, MONITOR_DEFAULTTOPRIMARY )))
         {
-            SetRectRgn( tmp, rect.left, rect.top, rect.right, rect.bottom );
-            CombineRgn( hrgn, hrgn, tmp, RGN_OR );
+            MONITORINFO mon_info;
+
+            mon_info.cbSize = sizeof(mon_info);
+            GetMonitorInfoW( monitor, &mon_info );
+
+            pt.x = 0;
+            pt.y = mon_info.rcWork.bottom - GetSystemMetrics( SM_CYMINIMIZED );
         }
     }
-    DeleteObject( tmp );
+    else
+        pt.x = pt.y = -32000;
 
-    for (y = 0; y < (rectParent.bottom - rectParent.top) / yspacing; y++)
-    {
-        if (metrics.iArrange & ARW_STARTTOP)
-        {
-            rect.top = rectParent.top + y * yspacing;
-            rect.bottom = rect.top + yspacing;
-        }
-        else
-        {
-            rect.bottom = rectParent.bottom - y * yspacing;
-            rect.top = rect.bottom - yspacing;
-        }
-        for (x = 0; x < (rectParent.right - rectParent.left) / xspacing; x++)
-        {
-            if (metrics.iArrange & ARW_STARTRIGHT)
-            {
-                rect.right = rectParent.right - x * xspacing;
-                rect.left = rect.right - xspacing;
-            }
-            else
-            {
-                rect.left = rectParent.left + x * xspacing;
-                rect.right = rect.left + xspacing;
-            }
-            if (!RectInRegion( hrgn, &rect ))
-            {
-                /* No window was found, so it's OK for us */
-                pt.x = rect.left + (xspacing - GetSystemMetrics(SM_CXICON)) / 2;
-                pt.y = rect.top + (yspacing - GetSystemMetrics(SM_CYICON)) / 2;
-                DeleteObject( hrgn );
-                return pt;
-            }
-        }
-    }
-    DeleteObject( hrgn );
-    pt.x = pt.y = 0;
     return pt;
 }
 
@@ -972,7 +917,7 @@ UINT WINPOS_MinMaximize( HWND hwnd, UINT cmd, LPRECT rect )
         case SW_SHOWMINIMIZED:
         case SW_FORCEMINIMIZE:
         case SW_MINIMIZE:
-            wpl.ptMinPosition = WINPOS_FindIconPos( hwnd, wpl.ptMinPosition );
+            wpl.ptMinPosition = WINPOS_GetMinimizedPos( hwnd, wpl.ptMinPosition );
 
             SetRect( rect, wpl.ptMinPosition.x, wpl.ptMinPosition.y,
                      wpl.ptMinPosition.x + GetSystemMetrics(SM_CXMINIMIZED),
@@ -1002,7 +947,7 @@ UINT WINPOS_MinMaximize( HWND hwnd, UINT cmd, LPRECT rect )
 
         old_style = WIN_SetStyle( hwnd, WS_MINIMIZE, WS_MAXIMIZE );
 
-        wpl.ptMinPosition = WINPOS_FindIconPos( hwnd, wpl.ptMinPosition );
+        wpl.ptMinPosition = WINPOS_GetMinimizedPos( hwnd, wpl.ptMinPosition );
 
         if (!(old_style & WS_MINIMIZE)) swpFlags |= SWP_STATECHANGED;
         SetRect( rect, wpl.ptMinPosition.x, wpl.ptMinPosition.y,
@@ -1151,7 +1096,8 @@ static BOOL show_window( HWND hwnd, INT cmd )
         if (!IsWindow( hwnd )) goto done;
     }
 
-    swp = USER_Driver->pShowWindow( hwnd, cmd, &newPos, swp );
+    if (!IsIconic( hwnd ))
+        swp = USER_Driver->pShowWindow( hwnd, cmd, &newPos, swp );
 
     parent = GetAncestor( hwnd, GA_PARENT );
     if (parent && !IsWindowVisible( parent ) && !(swp & SWP_STATECHANGED))

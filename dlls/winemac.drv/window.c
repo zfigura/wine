@@ -1794,15 +1794,7 @@ UINT CDECL macdrv_ShowWindow(HWND hwnd, INT cmd, RECT *rect, UINT swp)
 
     if (!data || !data->cocoa_window) goto done;
     if (IsRectEmpty(rect)) goto done;
-    if (GetWindowLongW(hwnd, GWL_STYLE) & WS_MINIMIZE)
-    {
-        if (rect->left != -32000 || rect->top != -32000)
-        {
-            OffsetRect(rect, -32000 - rect->left, -32000 - rect->top);
-            swp &= ~(SWP_NOMOVE | SWP_NOCLIENTMOVE);
-        }
-        goto done;
-    }
+    if (GetWindowLongW(hwnd, GWL_STYLE) & WS_MINIMIZE) goto done;
     if (!data->on_screen) goto done;
 
     /* only fetch the new rectangle if the ShowWindow was a result of an external event */
