@@ -1669,7 +1669,7 @@ static BOOL SWP_DoWinPosChanging( WINDOWPOS* pWinpos, RECT* pNewWindowRect, RECT
 
     WIN_GetRectangles( pWinpos->hwnd, COORDS_PARENT, &window_rect, &client_rect );
     *pNewWindowRect = window_rect;
-    *pNewClientRect = (wndPtr->dwStyle & WS_MINIMIZE) ? window_rect : client_rect;
+    *pNewClientRect = client_rect;
 
     if (!(pWinpos->flags & SWP_NOSIZE))
     {
