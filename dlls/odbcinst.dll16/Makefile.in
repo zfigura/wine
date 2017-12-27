@@ -1,2 +1,6 @@
 MODULE    = odbcinst.dll16
+IMPORTS   = odbccp32
 EXTRADLLFLAGS = -m16 -Wb,--main-module,odbccp32.dll
+
+C_SRCS = \
+	odbcinst.c
