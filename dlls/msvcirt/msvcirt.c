@@ -31,6 +31,7 @@
 #include "msvcirt.h"
 #include "windef.h"
 #include "winbase.h"
+#include "winternl.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msvcirt);
@@ -4462,6 +4463,17 @@ void __cdecl ios_sync_with_stdio(void)
     }
 }
 
+void __cdecl _mtlock(RTL_CRITICAL_SECTION *cs)
+{
+    TRACE("(%p)\n", cs);
+    RtlEnterCriticalSection(cs);
+}
+
+void __cdecl _mtunlock(RTL_CRITICAL_SECTION *cs)
+{
+    TRACE("(%p)\n", cs);
+    RtlLeaveCriticalSection(cs);
+}
 
 #if defined(__i386__) && !defined(__MINGW32__)
 
