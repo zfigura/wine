@@ -381,14 +381,16 @@ void MSACM_RegisterAllDrivers(void)
 	    MSACM_RegisterDriver(buf, name + 1, 0);
 	}
 	i = 0;
-	cnt = ARRAY_SIZE(valname);
-	bufLen = sizeof(buf);
-	while(RegEnumValueW(hKey, i, valname, &cnt, 0,
-		    &type, (BYTE*)buf, &bufLen) == ERROR_SUCCESS){
-	    if (!wcsnicmp(valname, msacmW, ARRAY_SIZE(msacmW)))
-		MSACM_RegisterDriver(valname, buf, 0);
-	    ++i;
-	}
+        while (1)
+        {
+            cnt = ARRAY_SIZE(valname);
+            bufLen = sizeof(buf);
+            if (RegEnumValueW(hKey, i, valname, &cnt, 0, &type, (BYTE *)buf, &bufLen))
+                break;
+            if (!wcsnicmp(valname, msacmW, ARRAY_SIZE(msacmW)))
+                MSACM_RegisterDriver(valname, buf, 0);
+            ++i;
+        }
     	RegCloseKey( hKey );
     }
 
