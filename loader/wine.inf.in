@@ -38,6 +38,7 @@ AddReg=\
     CurrentVersion,\
     Debugger,\
     DirectX,\
+    Drivers,\
     Fonts,\
     MCI,\
     Misc,\
@@ -62,6 +63,7 @@ AddReg=\
     CurrentVersion,\
     Debugger,\
     DirectX,\
+    Drivers,\
     Fonts,\
     MCI,\
     Misc,\
@@ -89,6 +91,7 @@ AddReg=\
     CurrentVersionWow64,\
     Debugger,\
     DirectX,\
+    Drivers,\
     Fonts,\
     MCI,\
     Misc,\
@@ -111,6 +114,7 @@ AddReg=\
     CurrentVersionWow64,\
     Debugger,\
     DirectX,\
+    Drivers,\
     MCI,\
     Misc,\
     Tapi,\
@@ -507,7 +511,6 @@ HKLM,%CurrentVersionNT%,"RegisteredOrganization",2,""
 HKLM,%CurrentVersionNT%,"RegisteredOwner",2,""
 HKLM,%CurrentVersionNT%,"SystemRoot",,"%10%"
 HKLM,%CurrentVersionNT%\Console,,16
-HKLM,%CurrentVersionNT%\Drivers32,,16
 HKLM,%CurrentVersionNT%\FontDpi,,16
 HKLM,%CurrentVersionNT%\FontLink,,16
 HKLM,%CurrentVersionNT%\FontMapper,,16
@@ -2640,27 +2643,15 @@ HKLM,%CurrentVersion%\Telephony\Country List\998,"SameAreaRule",,"G"
 16427,System\OLE DB,msdaps.dll
 11,,*
 
-[SystemIni]
-system.ini, mci,,"MPEGVideo=mciqtz32.dll"
-system.ini, mci,,"MPEGVideo2=mciqtz32.dll"
-system.ini, mci,,"avivideo=mciavi32.dll"
-system.ini, mci,,"cdaudio=mcicda.dll"
-system.ini, mci,,"sequencer=mciseq.dll"
-system.ini, mci,,"vcr=mcivisca.drv"
-system.ini, mci,,"; videodisc=mcipionr.drv"
-system.ini, mci,,"waveaudio=mciwave.dll"
-
-system.ini, drivers32,,"msacm.imaadpcm=imaadp32.acm"
-system.ini, drivers32,,"msacm.msadpcm=msadp32.acm"
-system.ini, drivers32,,"msacm.msg711=msg711.acm"
-system.ini, drivers32,,"msacm.l3acm=l3codeca.acm"
-system.ini, drivers32,,"msacm.msgsm610=msgsm32.acm"
-system.ini, drivers32,,"vidc.mrle=msrle32.dll"
-system.ini, drivers32,,"vidc.msvc=msvidc32.dll"
-system.ini, drivers32,,"vidc.cvid=iccvid.dll"
-system.ini, drivers32,,"; vidc.IV50=ir50_32.dll"
-system.ini, drivers32,,"; vidc.IV31=ir32_32.dll"
-system.ini, drivers32,,"; vidc.IV32=ir32_32.dll"
+[Drivers]
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.imaadpcm",,"imaadp32.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.msadpcm",,"msadp32.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.msg711",,"msg711.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.l3acm",,"l3codeca.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.msgsm610",,"msgsm32.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"vidc.mrle",,"msrle32.dll"
+HKLM,%CurrentVersionNT%\Drivers32,"vidc.msvc",,"msvidc32.dll"
+HKLM,%CurrentVersionNT%\Drivers32,"vidc.cvid",,"iccvid.dll"
 
 [Timezones]
 ; The timezone information (TZI field) comes from the Olson timezone database
