@@ -8662,6 +8662,20 @@ INT WINAPI WSAAddressToStringW( LPSOCKADDR sockaddr, DWORD len,
     return 0;
 }
 
+static const WCHAR namespace_catalogW[] = {'S','y','s','t','e','m','\\',
+    'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
+    'S','e','r','v','i','c','e','s','\\','W','i','n','s','o','c','k','2','\\',
+    'P','a','r','a','m','e','t','e','r','s','\\',
+    'N','a','m','e','S','p','a','c','e','_','C','a','t','a','l','o','g','5',0};
+static const WCHAR Num_Catalog_EntriesW[] =
+    {'N','u','m','_','C','a','t','a','l','o','g','_','E','n','t','r','i','e','s',0};
+static const WCHAR DisplayStringW[] = {'D','i','s','p','l','a','y','S','t','r','i','n','g',0};
+static const WCHAR EnabledW[] = {'E','n','a','b','l','e','d',0};
+static const WCHAR LibraryPathW[] = {'L','i','b','r','a','r','y','P','a','t','h',0};
+static const WCHAR ProviderIdW[] = {'P','r','o','v','i','d','e','r','I','d',0};
+static const WCHAR SupportedNameSpaceW[] = {'S','u','p','p','o','r','t','e','d','N','a','m','e','S','p','a','c','e',0};
+static const WCHAR VersionW[] = {'V','e','r','s','i','o','n',0};
+
 /***********************************************************************
  *              WSAEnumNameSpaceProvidersA                  (WS2_32.34)
  */
@@ -8880,9 +8894,79 @@ INT WINAPI WSCGetProviderPath( LPGUID provider, LPWSTR path, LPINT len, LPINT er
 INT WINAPI WSCInstallNameSpace( LPWSTR identifier, LPWSTR path, DWORD namespace,
                                 DWORD version, LPGUID provider )
 {
-    FIXME( "(%s %s 0x%08x 0x%08x %s) Stub!\n", debugstr_w(identifier), debugstr_w(path),
+    static const WCHAR formatW[] = {'C','a','t','a','l','o','g','_','E','n','t','r','i','e','s','\\','%','0','1','2','i',0};
+    WCHAR key_name[30];
+
+    HKEY catalog_key, provider_key;
+    DWORD count, i, size, enabled;
+    GUID guid;
+
+    TRACE("(%s %s 0x%08x 0x%08x %s)\n", debugstr_w(identifier), debugstr_w(path),
            namespace, version, debugstr_guid(provider) );
-    return 0;
+
+    if (RegOpenKeyW(HKEY_LOCAL_MACHINE, namespace_catalogW, &catalog_key) != ERROR_SUCCESS)
+    {
+        count = 0;
+
+        if (RegCreateKeyW(HKEY_LOCAL_MACHINE, namespace_catalogW, &catalog_key) != ERROR_SUCCESS)
+        {
+            RegCloseKey(catalog_key);
+            return SOCKET_ERROR;
+        }
+        RegSetValueExW(catalog_key, Num_Catalog_EntriesW, 0, REG_DWORD, (BYTE *)&count, sizeof(DWORD));
+    }
+    else
+    {
+        size = sizeof(DWORD);
+        if (RegQueryValueExW(catalog_key, Num_Catalog_EntriesW, NULL, NULL, (BYTE *)&count, &size) != ERROR_SUCCESS)
+        {
+            RegCloseKey(catalog_key);
+            return SOCKET_ERROR;
+        }
+    }
+
+    /* check if it's already installed */
+    for (i = 0; i < count; i++)
+    {
+        sprintfW(key_name, formatW, i);
+        if (RegOpenKeyW(catalog_key, key_name, &provider_key) == ERROR_SUCCESS)
+        {
+            size = sizeof(GUID);
+            RegQueryValueExW(provider_key, ProviderIdW, NULL, NULL, (BYTE *)&guid, &size);
+            RegCloseKey(provider_key);
+
+            if (IsEqualGUID(&guid, provider))
+            {
+                SetLastError(WSAEINVAL);
+                RegCloseKey(catalog_key);
+                return SOCKET_ERROR;
+            }
+        }
+    }
+
+    sprintfW(key_name, formatW, count);
+    if (RegCreateKeyW(catalog_key, key_name, &provider_key) != ERROR_SUCCESS)
+    {
+        RegCloseKey(catalog_key);
+        return SOCKET_ERROR;
+    }
+
+    RegSetValueExW(provider_key, DisplayStringW, 0, REG_SZ, (BYTE *)identifier,
+                   (strlenW(identifier) + 1) * sizeof(WCHAR));
+    enabled = 1;
+    RegSetValueExW(provider_key, EnabledW, 0, REG_DWORD, (BYTE *)&enabled, sizeof(DWORD));
+    RegSetValueExW(provider_key, LibraryPathW, 0, REG_SZ, (BYTE *)path,
+                   (strlenW(path) + 1) * sizeof(WCHAR));
+    RegSetValueExW(provider_key, ProviderIdW, 0, REG_BINARY, (BYTE *)provider, sizeof(GUID));
+    RegSetValueExW(provider_key, SupportedNameSpaceW, 0, REG_DWORD, (BYTE *)&namespace, sizeof(DWORD));
+    RegSetValueExW(provider_key, VersionW, 0, REG_DWORD, (BYTE *)&version, sizeof(DWORD));
+    RegCloseKey(provider_key);
+
+    ++count;
+    RegSetValueExW(catalog_key, Num_Catalog_EntriesW, 0, REG_DWORD, (BYTE *)&count, sizeof(DWORD));
+    RegCloseKey(catalog_key);
+
+    return NO_ERROR;
 }
 
 /***********************************************************************
