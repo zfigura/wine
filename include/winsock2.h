@@ -49,6 +49,8 @@
 
 #include <ws2def.h>
 
+#define WSAAPI                      WINAPI
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* defined(__cplusplus) */
