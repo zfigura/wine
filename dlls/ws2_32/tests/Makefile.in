@@ -1,6 +1,8 @@
 TESTDLL   = ws2_32.dll
 IMPORTS   = ws2_32 user32
 
-C_SRCS = \
+SOURCES = \
 	protocol.c \
-	sock.c
+	sock.c \
+	testnsp.c \
+	testnsp.spec

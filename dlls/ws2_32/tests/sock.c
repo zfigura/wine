@@ -7618,21 +7618,19 @@ static void test_GetAddrInfoExW(void)
     HANDLE event;
     int ret;
 
-    if (!pGetAddrInfoExW || !pGetAddrInfoExOverlappedResult)
+    if (!pGetAddrInfoExW)
     {
-        win_skip("GetAddrInfoExW and/or GetAddrInfoExOverlappedResult not present\n");
+        win_skip("GetAddrInfoExW not present\n");
         return;
     }
-
-    event = WSACreateEvent();
-
+if (0){
     result = (ADDRINFOEXW *)0xdeadbeef;
     WSASetLastError(0xdeadbeef);
     ret = pGetAddrInfoExW(NULL, NULL, NS_DNS, NULL, NULL, &result, NULL, NULL, NULL, NULL);
     ok(ret == WSAHOST_NOT_FOUND, "got %d expected WSAHOST_NOT_FOUND\n", ret);
     ok(WSAGetLastError() == WSAHOST_NOT_FOUND, "expected 11001, got %d\n", WSAGetLastError());
     ok(result == NULL, "got %p\n", result);
-
+}
     result = NULL;
     WSASetLastError(0xdeadbeef);
     ret = pGetAddrInfoExW(empty, NULL, NS_DNS, NULL, NULL, &result, NULL, NULL, NULL, NULL);
@@ -7645,6 +7643,18 @@ static void test_GetAddrInfoExW(void)
     ret = pGetAddrInfoExW(localhost, NULL, NS_DNS, NULL, NULL, &result, NULL, NULL, NULL, NULL);
     ok(!ret, "GetAddrInfoExW failed with %d\n", WSAGetLastError());
     pFreeAddrInfoExW(result);
+
+    /* test namespace */
+    ret = pGetAddrInfoExW(empty, NULL, 1234, NULL, NULL, &result, NULL, NULL, NULL, NULL);
+    trace("%u\n", ret);
+
+    if (!pGetAddrInfoExOverlappedResult)
+    {
+        win_skip("GetAddrInfoExOverlappedResult not present\n");
+        return;
+    }
+
+    event = WSACreateEvent();
 
     result = (void*)0xdeadbeef;
     memset(&overlapped, 0xcc, sizeof(overlapped));
@@ -10696,17 +10706,58 @@ todo_wine
     ok(!ret, "WSALookupServiceEnd failed unexpectedly\n");
 }
 
+static WCHAR *load_resource(const WCHAR *name)
+{
+    static WCHAR path[MAX_PATH], current[MAX_PATH];
+    DWORD written;
+    HANDLE file;
+    HRSRC res;
+    void *ptr;
+
+    GetCurrentDirectoryW(MAX_PATH, current);
+    GetTempFileNameW(current, name, 0, path);
+
+    file = CreateFileW(path, GENERIC_READ|GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, 0);
+    ok(file != INVALID_HANDLE_VALUE, "file creation failed, at %s, error %d\n",
+       wine_dbgstr_w(path), GetLastError());
+
+    res = FindResourceW(NULL, name, (LPCWSTR)RT_RCDATA);
+    ok( res != 0, "couldn't find resource\n" );
+    ptr = LockResource( LoadResource( GetModuleHandleA(NULL), res ));
+    WriteFile( file, ptr, SizeofResource( GetModuleHandleA(NULL), res ), &written, NULL );
+    ok( written == SizeofResource( GetModuleHandleA(NULL), res ), "couldn't write resource\n" );
+    CloseHandle( file );
+
+    return path;
+}
+
+static void ok_callback(int todo, const char *file, int line, int condition, const char *message)
+{
+    todo_wine_if(todo) ok_(file, line)(condition, "%s",message);
+}
+
+typedef void (*OK_CALLBACK)(int todo, const char *file, int line, int condition, const char *message);
+
 static GUID GUID_TEST_NAMESPACE = {0x1de3efaa,0xce19,0x4ec4,{0xad,0xae,0xd0,0xc8,0xd7,0x0f,0x3b,0xfe}};
 static char test_namespaceA[] = "winetest";
 static WCHAR test_namespaceW[] = {'w','i','n','e','t','e','s','t',0};
 
 static int is_limited;
+static WCHAR *testdll;
 
 static void test_WSCInstallNameSpace(void)
 {
+    static const WCHAR dllname[] = {'t','e','s','t','n','s','p','.','d','l','l',0};
+    HMODULE module;
+    void (*set_ok_callback)(OK_CALLBACK func);
     int ret;
 
-    ret = WSCInstallNameSpace(test_namespaceW, test_namespaceW, 1234, 5678, &GUID_TEST_NAMESPACE);
+    testdll = load_resource(dllname);
+    module = LoadLibraryW(testdll);
+    set_ok_callback = (void *)GetProcAddress(module, "set_ok_callback");
+    set_ok_callback(ok_callback);
+
+    ret = WSCInstallNameSpace(test_namespaceW, testdll, 1234, 5678, &GUID_TEST_NAMESPACE);
     if (ret == SOCKET_ERROR && WSAGetLastError() == WSAEACCES)
     {
         is_limited = 1;
@@ -10715,7 +10766,7 @@ static void test_WSCInstallNameSpace(void)
     ok(ret == NOERROR, "Failed to install namespace: %u\n", WSAGetLastError());
 
     /* install twice */
-    ret = WSCInstallNameSpace(test_namespaceW, test_namespaceW, 1234, 5678, &GUID_TEST_NAMESPACE);
+    ret = WSCInstallNameSpace(test_namespaceW, testdll, 1234, 5678, &GUID_TEST_NAMESPACE);
     ok(ret == SOCKET_ERROR, "Expected SOCKET_ERROR, got %d\n", ret);
     ok(WSAGetLastError() == WSAEINVAL, "Expected WSAEINVAL, got %u\n", WSAGetLastError());
 }
@@ -10725,6 +10776,8 @@ static void test_WSCUnInstallNameSpace(void)
     int ret;
 
     if (is_limited) return;
+
+    DeleteFileW(testdll);
 
     ret = WSCUnInstallNameSpace(&GUID_TEST_NAMESPACE);
     ok(ret == NOERROR, "Failed to uninstall namespace: %u\n", WSAGetLastError());
@@ -11560,6 +11613,7 @@ START_TEST( sock )
 
     Init();
 
+if (0){
     test_inet_ntoa();
     test_inet_pton();
     test_set_getsockopt();
@@ -11614,6 +11668,7 @@ START_TEST( sock )
     test_ipv6only();
     test_TransmitFile();
     test_GetAddrInfoW();
+}
     test_GetAddrInfoExW();
     test_getaddrinfo();
     test_AcceptEx();
@@ -11623,6 +11678,7 @@ START_TEST( sock )
     test_sioRoutingInterfaceQuery();
     test_sioAddressListChange();
 
+
     test_WSALookupService();
     test_WSAEnumNameSpaceProvidersA();
     test_WSAEnumNameSpaceProvidersW();
@@ -11630,12 +11686,14 @@ START_TEST( sock )
     test_WSAAsyncGetServByPort();
     test_WSAAsyncGetServByName();
 
+if(0){
     test_completion_port();
     test_address_list_query();
 
     /* this is an io heavy test, do it at the end so the kernel doesn't start dropping packets */
     test_send();
     test_synchronous_WSAIoctl();
+}
 
     Exit();
 
