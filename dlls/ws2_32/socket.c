@@ -8692,8 +8692,80 @@ INT WINAPI WSAEnumNameSpaceProvidersA( LPDWORD len, LPWSANAMESPACE_INFOA buffer 
  */
 INT WINAPI WSAEnumNameSpaceProvidersW( LPDWORD len, LPWSANAMESPACE_INFOW buffer )
 {
-    FIXME( "(%p %p) Stub!\n", len, buffer );
-    return 0;
+    static const WCHAR formatW[] = {'C','a','t','a','l','o','g','_','E','n','t','r','i','e','s','\\','%','0','1','2','i',0};
+    WCHAR key_name[30];
+
+    HKEY catalog_key, provider_key;
+    DWORD count, size, total_size, i;
+    BYTE *p;
+
+    if (len == NULL)
+    {
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+
+    TRACE("(%d %p)\n", *len, buffer);
+
+    size = sizeof(DWORD);
+    if (RegOpenKeyW(HKEY_LOCAL_MACHINE, namespace_catalogW, &catalog_key) != ERROR_SUCCESS)
+        return SOCKET_ERROR;
+
+    if (RegQueryValueExW(catalog_key, Num_Catalog_EntriesW, NULL, NULL, (BYTE *)&count, &size) != ERROR_SUCCESS)
+    {
+        RegCloseKey(catalog_key);
+        return SOCKET_ERROR;
+    }
+
+    total_size = count * sizeof(WSANAMESPACE_INFOW);
+
+    for (i = 0; i < count; i++)
+    {
+        sprintfW(key_name, formatW, i);
+        if (RegOpenKeyW(catalog_key, key_name, &provider_key) == ERROR_SUCCESS)
+        {
+            RegQueryValueExW(provider_key, DisplayStringW, NULL, NULL, NULL, &size);
+            total_size += size;
+            RegCloseKey(provider_key);
+        }
+    }
+
+    if (*len < total_size || buffer == NULL)
+    {
+        RegCloseKey(catalog_key);
+        *len = total_size;
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+
+    p = (BYTE *)buffer + (count * sizeof(WSANAMESPACE_INFOW));
+
+    for (i = 0; i < count; i++)
+    {
+        sprintfW(key_name, formatW, i);
+        if (RegOpenKeyW(catalog_key, key_name, &provider_key) == ERROR_SUCCESS)
+        {
+            size = sizeof(GUID);
+            RegQueryValueExW(provider_key, ProviderIdW, NULL, NULL, (BYTE *)&buffer[i].NSProviderId, &size);
+            size = sizeof(DWORD);
+            RegQueryValueExW(provider_key, SupportedNameSpaceW, NULL, NULL, (BYTE *)&buffer[i].dwNameSpace, &size);
+            size = sizeof(DWORD);
+            RegQueryValueExW(provider_key, EnabledW, NULL, NULL, (BYTE *)&buffer[i].fActive, &size);
+            size = sizeof(DWORD);
+            RegQueryValueExW(provider_key, VersionW, NULL, NULL, (BYTE *)&buffer[i].dwVersion, &size);
+
+            RegQueryValueExW(provider_key, DisplayStringW, NULL, NULL, NULL, &size);
+            RegQueryValueExW(provider_key, DisplayStringW, NULL, NULL, p, &size);
+            buffer[i].lpszIdentifier = (WCHAR *)p;
+            p += size;
+
+            RegCloseKey(provider_key);
+        }
+    }
+
+    RegCloseKey(catalog_key);
+
+    return count;
 }
 
 /***********************************************************************
