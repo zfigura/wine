@@ -32,6 +32,7 @@
 #include <mswsock.h>
 #include <mstcpip.h>
 #include <iphlpapi.h>
+#include <ws2spi.h>
 #include <stdio.h>
 #include "wine/test.h"
 
@@ -10642,10 +10643,51 @@ todo_wine
     ok(!ret, "WSALookupServiceEnd failed unexpectedly\n");
 }
 
+static GUID GUID_TEST_NAMESPACE = {0x1de3efaa,0xce19,0x4ec4,{0xad,0xae,0xd0,0xc8,0xd7,0x0f,0x3b,0xfe}};
+static char test_namespaceA[] = "winetest";
+static WCHAR test_namespaceW[] = {'w','i','n','e','t','e','s','t',0};
+
+static int is_limited;
+
+static void test_WSCInstallNameSpace(void)
+{
+    int ret;
+
+    ret = WSCInstallNameSpace(test_namespaceW, test_namespaceW, 1234, 5678, &GUID_TEST_NAMESPACE);
+    if (ret == SOCKET_ERROR && WSAGetLastError() == WSAEACCES)
+    {
+        is_limited = 1;
+        return;
+    }
+    ok(ret == NOERROR, "Failed to install namespace: %u\n", WSAGetLastError());
+
+    /* install twice */
+    ret = WSCInstallNameSpace(test_namespaceW, test_namespaceW, 1234, 5678, &GUID_TEST_NAMESPACE);
+    ok(ret == SOCKET_ERROR, "Expected SOCKET_ERROR, got %d\n", ret);
+    ok(WSAGetLastError() == WSAEINVAL, "Expected WSAEINVAL, got %u\n", WSAGetLastError());
+}
+
+static void test_WSCUnInstallNameSpace(void)
+{
+    int ret;
+
+    if (is_limited) return;
+
+    ret = WSCUnInstallNameSpace(&GUID_TEST_NAMESPACE);
+    ok(ret == NOERROR, "Failed to uninstall namespace: %u\n", WSAGetLastError());
+
+    /* uninstall twice */
+    ret = WSCUnInstallNameSpace(&GUID_TEST_NAMESPACE);
+    ok(ret == SOCKET_ERROR, "Expected SOCKET_ERROR, got %d\n", ret);
+    ok(WSAGetLastError() == WSAEINVAL, "Expected WSAEINVAL, got %u\n", WSAGetLastError());
+}
+
 static void test_WSAEnumNameSpaceProvidersA(void)
 {
     LPWSANAMESPACE_INFOA name = NULL;
     DWORD ret, error, blen = 0, i;
+    int seen_test_namespace = 0;
+
     if (!pWSAEnumNameSpaceProvidersA)
     {
         win_skip("WSAEnumNameSpaceProvidersA not found\n");
@@ -10698,6 +10740,16 @@ todo_wine
 
     for (i = 0;i < ret; i++)
     {
+        if (IsEqualGUID(&name[i].NSProviderId, &GUID_TEST_NAMESPACE))
+        {
+            seen_test_namespace = 1;
+            ok(name[i].dwNameSpace == 1234, "Expected 1234, got %u\n", name[i].dwNameSpace);
+            ok(name[i].fActive == 1, "Expected 1, got %d\n", name[i].fActive);
+            ok(name[i].dwVersion == 5678, "Expected 5678, got %u\n", name[i].dwVersion);
+            ok(!strcmp(name[i].lpszIdentifier, test_namespaceA), "Expected %s, got %s\n",
+               test_namespaceA, name[i].lpszIdentifier);
+        }
+
         trace("Name space Identifier (%p): %s\n", name[i].lpszIdentifier,
               name[i].lpszIdentifier);
         switch (name[i].dwNameSpace)
@@ -10716,6 +10768,10 @@ todo_wine
         trace("\tVersion: %d\n", name[i].dwVersion);
     }
 
+    if (!is_limited)
+todo_wine
+        ok(seen_test_namespace, "Test namespace not found in enumeration\n");
+
     HeapFree(GetProcessHeap(), 0, name);
 }
 
@@ -10723,6 +10779,8 @@ static void test_WSAEnumNameSpaceProvidersW(void)
 {
     LPWSANAMESPACE_INFOW name = NULL;
     DWORD ret, error, blen = 0, i;
+    int seen_test_namespace = 0;
+
     if (!pWSAEnumNameSpaceProvidersW)
     {
         win_skip("WSAEnumNameSpaceProvidersW not found\n");
@@ -10775,6 +10833,16 @@ todo_wine
 
     for (i = 0;i < ret; i++)
     {
+        if (IsEqualGUID(&name[i].NSProviderId, &GUID_TEST_NAMESPACE))
+        {
+            seen_test_namespace = 1;
+            ok(name[i].dwNameSpace == 1234, "Expected 1234, got %u\n", name[i].dwNameSpace);
+            ok(name[i].fActive == 1, "Expected 1, got %d\n", name[i].fActive);
+            ok(name[i].dwVersion == 5678, "Expected 5678, got %u\n", name[i].dwVersion);
+            ok(!lstrcmpW(name[i].lpszIdentifier, test_namespaceW), "Expected %s, got %s\n",
+               wine_dbgstr_w(test_namespaceW), wine_dbgstr_w(name[i].lpszIdentifier));
+        }
+
         trace("Name space Identifier (%p): %s\n", name[i].lpszIdentifier,
                wine_dbgstr_w(name[i].lpszIdentifier));
         switch (name[i].dwNameSpace)
@@ -10792,6 +10860,10 @@ todo_wine
         trace("\tActive:  %d\n", name[i].fActive);
         trace("\tVersion: %d\n", name[i].dwVersion);
     }
+
+    if (!is_limited)
+todo_wine
+        ok(seen_test_namespace, "Test namespace not found in enumeration\n");
 
     HeapFree(GetProcessHeap(), 0, name);
 }
@@ -11441,6 +11513,7 @@ START_TEST( sock )
  * called, which is done by Init() below. */
     test_WithoutWSAStartup();
     test_WithWSAStartup();
+    test_WSCInstallNameSpace();
 
     Init();
 
@@ -11522,4 +11595,6 @@ START_TEST( sock )
     test_synchronous_WSAIoctl();
 
     Exit();
+
+    test_WSCUnInstallNameSpace();
 }
