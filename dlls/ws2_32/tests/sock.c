@@ -10822,7 +10822,6 @@ todo_wine
     }
 
     if (!is_limited)
-todo_wine
         ok(seen_test_namespace, "Test namespace not found in enumeration\n");
 
     HeapFree(GetProcessHeap(), 0, name);
@@ -10843,34 +10842,26 @@ static void test_WSAEnumNameSpaceProvidersW(void)
     SetLastError(0xdeadbeef);
     ret = pWSAEnumNameSpaceProvidersW(&blen, name);
     error = WSAGetLastError();
-todo_wine
     ok(ret == SOCKET_ERROR, "Expected failure, got %u\n", ret);
-todo_wine
     ok(error == WSAEFAULT, "Expected 10014, got %u\n", error);
 
     /* Invalid parameter tests */
     SetLastError(0xdeadbeef);
     ret = pWSAEnumNameSpaceProvidersW(NULL, name);
     error = WSAGetLastError();
-todo_wine
     ok(ret == SOCKET_ERROR, "Expected failure, got %u\n", ret);
-todo_wine
     ok(error == WSAEFAULT, "Expected 10014, got %u\n", error);
 
     SetLastError(0xdeadbeef);
     ret = pWSAEnumNameSpaceProvidersW(NULL, NULL);
     error = WSAGetLastError();
-todo_wine
     ok(ret == SOCKET_ERROR, "Expected failure, got %u\n", ret);
-todo_wine
     ok(error == WSAEFAULT, "Expected 10014, got %u\n", error);
 
     SetLastError(0xdeadbeef);
     ret = pWSAEnumNameSpaceProvidersW(&blen, NULL);
     error = WSAGetLastError();
-todo_wine
     ok(ret == SOCKET_ERROR, "Expected failure, got %u\n", ret);
-todo_wine
     ok(error == WSAEFAULT, "Expected 10014, got %u\n", error);
 
     name = HeapAlloc(GetProcessHeap(), 0, blen);
@@ -10881,7 +10872,6 @@ todo_wine
     }
 
     ret = pWSAEnumNameSpaceProvidersW(&blen, name);
-todo_wine
     ok(ret > 0, "Expected more than zero name space providers\n");
 
     for (i = 0;i < ret; i++)
