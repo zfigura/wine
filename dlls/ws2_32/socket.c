@@ -154,6 +154,8 @@
 #include "winnt.h"
 #define USE_WC_PREFIX   /* For CMSG_DATA */
 #include "iphlpapi.h"
+#include "shlwapi.h"
+#undef interface
 #include "wine/server.h"
 #include "wine/debug.h"
 #include "wine/exception.h"
@@ -9043,9 +9045,66 @@ INT WINAPI WSCInstallNameSpace( LPWSTR identifier, LPWSTR path, DWORD namespace,
 /***********************************************************************
  *              WSCUnInstallNameSpace                       (WS2_32.89)
  */
-INT WINAPI WSCUnInstallNameSpace( LPGUID lpProviderId )
+INT WINAPI WSCUnInstallNameSpace( LPGUID provider )
 {
-    FIXME("(%s) Stub!\n", debugstr_guid(lpProviderId));
+    static const WCHAR formatW[] = {'C','a','t','a','l','o','g','_','E','n','t','r','i','e','s','\\','%','0','1','2','i',0};
+    WCHAR key_name[30];
+
+    HKEY catalog_key, provider_key;
+    DWORD count, i, size;
+    GUID guid;
+
+    TRACE("(%s)\n", debugstr_guid(provider));
+
+    size = sizeof(DWORD);
+    if (RegOpenKeyW(HKEY_LOCAL_MACHINE, namespace_catalogW, &catalog_key) != ERROR_SUCCESS)
+        return SOCKET_ERROR;
+
+    if (RegQueryValueExW(catalog_key, Num_Catalog_EntriesW, NULL, NULL, (BYTE *)&count, &size) != ERROR_SUCCESS)
+    {
+        RegCloseKey(catalog_key);
+        return SOCKET_ERROR;
+    }
+
+    for (i = 0; i < count; i++)
+    {
+        sprintfW(key_name, formatW, i);
+        if (RegOpenKeyW(catalog_key, key_name, &provider_key) == ERROR_SUCCESS)
+        {
+            size = sizeof(GUID);
+            RegQueryValueExW(provider_key, ProviderIdW, NULL, NULL, (BYTE *)&guid, &size);
+            RegCloseKey(provider_key);
+
+            if (IsEqualGUID(&guid, provider))
+            {
+                RegDeleteKeyW(catalog_key, key_name);
+                break;
+            }
+        }
+    }
+
+    if (i == count)
+    {
+        RegCloseKey(catalog_key);
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+
+    /* shift all of the remaining indices down */
+    --count;
+    for (; i < count; i++)
+    {
+        sprintfW(key_name, formatW, i);
+        RegCreateKeyW(catalog_key, key_name, &provider_key);
+        sprintfW(key_name, formatW, i+1);
+        SHCopyKeyW(catalog_key, key_name, provider_key, 0);
+        RegCloseKey(provider_key);
+        RegDeleteKeyW(catalog_key, key_name);
+    }
+
+    RegSetValueExW(catalog_key, Num_Catalog_EntriesW, 0, REG_DWORD, (BYTE *)&count, sizeof(DWORD));
+    RegCloseKey(catalog_key);
+
     return NO_ERROR;
 }
 
