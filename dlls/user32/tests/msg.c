@@ -17031,6 +17031,37 @@ static void test_DoubleSetCapture(void)
     DestroyWindow(hwnd);
 }
 
+static DWORD WINAPI send_notify_message_thread(void *param)
+{
+    SendNotifyMessageA((HWND) param, WM_USER, 0, 0);
+    return 0;
+}
+
+static void test_SendMessage_pump(void)
+{
+    /* Sending a message to another thread's window should process sent messages
+     * currently in the queue. On Windows this always happens, i.e. we never
+     * fail to do so if we've already received a reply. */
+
+    HWND hwnd;
+    HANDLE thread;
+
+    hwnd = CreateWindowA("TestWindowClass", "test_SendMessage_pump", 0,
+                         100, 100, 200, 200, 0, 0, 0, 0);
+    ok(hwnd != NULL, "Failed to create window\n");
+    flush_sequence();
+
+    thread = CreateThread(0, 0, send_notify_message_thread, hwnd, 0, 0);
+    ok(WaitForSingleObject(thread, 1000) == WAIT_OBJECT_0, "wait failed\n");
+    ok_sequence(WmEmptySeq, "no messages", FALSE);
+
+    SendMessageA(GetDesktopWindow(), WM_NULL, 0, 0);
+    ok_sequence(WmUser, "SendMessage() pump", FALSE);
+
+    CloseHandle(thread);
+    DestroyWindow(hwnd);
+}
+
 static void init_funcs(void)
 {
     HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
@@ -17177,6 +17208,7 @@ START_TEST(msg)
     test_TrackPopupMenu();
     test_TrackPopupMenuEmpty();
     test_DoubleSetCapture();
+    test_SendMessage_pump();
     /* keep it the last test, under Windows it tends to break the tests
      * which rely on active/foreground windows being correct.
      */
