@@ -3045,13 +3045,13 @@ static void wait_message_reply( UINT flags )
 
         thread_info->wake_mask = thread_info->changed_mask = 0;
 
-        if (wake_bits & QS_SMRESULT) return;  /* got a result */
         if (wake_bits & QS_SENDMESSAGE)
         {
             /* Process the sent message immediately */
             process_sent_messages();
             continue;
         }
+        if (wake_bits & QS_SMRESULT) return;  /* got a result */
 
         wow_handlers.wait_message( 1, &server_queue, INFINITE, wake_mask, 0 );
     }
