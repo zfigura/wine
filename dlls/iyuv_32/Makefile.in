@@ -1,0 +1,4 @@
+MODULE    = iyuv_32.dll
+
+C_SRCS = \
+	iyuv.c
