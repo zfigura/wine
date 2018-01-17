@@ -2373,11 +2373,7 @@ void macdrv_window_lost_focus(HWND hwnd, const macdrv_event *event)
     TRACE("win %p/%p fg %p\n", hwnd, event->window, GetForegroundWindow());
 
     if (hwnd == GetForegroundWindow())
-    {
-        SendMessageW(hwnd, WM_CANCELMODE, 0, 0);
-        if (hwnd == GetForegroundWindow())
-            SetForegroundWindow(GetDesktopWindow());
-    }
+        SetForegroundWindow(GetDesktopWindow());
 }
 
 
