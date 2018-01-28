@@ -1178,10 +1178,6 @@ static HRESULT GST_Connect(GSTInPin *pPin, IPin *pConnectPin, ALLOCATOR_PROPERTI
 
     This->initial = FALSE;
 
-    /* don't set active during test-play, as we don't want to push/pull data
-     * from the source yet */
-    gst_pad_set_active(This->my_src, 1);
-
     This->nextofs = This->nextpullofs = 0;
     return S_OK;
 }
