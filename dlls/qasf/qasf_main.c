@@ -20,12 +20,23 @@
 #define COBJMACROS
 #include "strmif.h"
 #include "wine/strmbase.h"
+#include "dmodshow.h"
+#include "qasf_private.h"
 
 #include "wine/debug.h"
 
+
 WINE_DEFAULT_DEBUG_CHANNEL(qasf);
 
+static const WCHAR DMOWrapperFilterW[] = {'D','M','O',' ','W','r','a','p','p','e','r',' ','F','i','l','t','e','r',0};
+
 FactoryTemplate const g_Templates[] = {
+    {
+        DMOWrapperFilterW,
+        &CLSID_DMOWrapperFilter,
+        create_DMOWrapperFilter,
+        NULL
+    },
 };
 
 int g_cTemplates = sizeof(g_Templates) / sizeof(g_Templates[0]);
