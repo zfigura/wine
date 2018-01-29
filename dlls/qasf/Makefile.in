@@ -1,5 +1,6 @@
 MODULE    = qasf.dll
-IMPORTS   = advapi32 ole32 strmbase strmiids uuid
+IMPORTS   = advapi32 dmoguids ole32 strmbase strmiids uuid
 
 C_SRCS = \
+	dmowrapper.c \
 	qasf_main.c
