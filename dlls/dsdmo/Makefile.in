@@ -1,0 +1,4 @@
+MODULE    = dsdmo.dll
+
+C_SRCS = \
+	dsdmo_main.c
