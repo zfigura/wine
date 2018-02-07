@@ -22,20 +22,178 @@
 #include "windef.h"
 #include "winbase.h"
 #define COBJMACROS
-#include "mediaobj.h"
+#include "mmsystem.h"
+#include "dsound.h"
+#include "dmo.h"
 #include "rpcproxy.h"
 #include "wine/debug.h"
+#include "wine/heap.h"
 
 #include "dsdmo_private.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dsdmo);
+
+static inline struct base_dmo *impl_from_IMediaObject(IMediaObject *iface)
+{
+    return CONTAINING_RECORD(iface, struct base_dmo, IMediaObject_iface);
+}
+
+ULONG WINAPI base_dmo_AddRef(IMediaObject *iface)
+{
+    struct base_dmo *This = impl_from_IMediaObject(iface);
+    ULONG refcount = InterlockedIncrement(&This->refcount);
+
+    TRACE("(%p) AddRef from %d\n", This, refcount + 1);
+
+    return refcount;
+}
+
+HRESULT WINAPI base_dmo_GetStreamCount(IMediaObject *iface, DWORD *input, DWORD *output)
+{
+    struct base_dmo *This = impl_from_IMediaObject(iface);
+
+    TRACE("(%p)->(%p %p)\n", This, input, output);
+
+    if (!input || !output)
+        return E_POINTER;
+
+    *input = This->inputs_count;
+    *output = This->outputs_count;
+
+    return S_OK;
+}
+
+HRESULT WINAPI base_dmo_GetInputType(IMediaObject *iface, DWORD index, DWORD type_index, DMO_MEDIA_TYPE *type)
+{
+    struct base_dmo *This = impl_from_IMediaObject(iface);
+    struct dmo_stream *stream;
+
+    TRACE("(%p)->(%d %d %p)\n", This, index, type_index, type);
+
+    if (index >= This->inputs_count)
+        return DMO_E_INVALIDSTREAMINDEX;
+
+    stream = &This->inputs[index];
+
+    if (type_index >= stream->types_count)
+        return DMO_E_NO_MORE_ITEMS;
+
+    if (type)
+        return MoCopyMediaType(type, &stream->types[type_index]);
+
+    return S_OK;
+}
+
+HRESULT WINAPI base_dmo_GetOutputType(IMediaObject *iface, DWORD index, DWORD type_index, DMO_MEDIA_TYPE *type)
+{
+    struct base_dmo *This = impl_from_IMediaObject(iface);
+    struct dmo_stream *stream;
+
+    TRACE("(%p)->(%d %d %p)\n", This, index, type_index, type);
+
+    if (index >= This->outputs_count)
+        return DMO_E_INVALIDSTREAMINDEX;
+
+    stream = &This->outputs[index];
+
+    if (type_index >= stream->types_count)
+        return DMO_E_NO_MORE_ITEMS;
+
+    if (type)
+        return MoCopyMediaType(type, &stream->types[type_index]);
+
+    return S_OK;
+}
+
+HRESULT WINAPI base_dmo_GetInputCurrentType(IMediaObject *iface, DWORD index, DMO_MEDIA_TYPE *type)
+{
+    struct base_dmo *This = impl_from_IMediaObject(iface);
+    struct dmo_stream *stream;
+
+    TRACE("(%p)->(%d %p)\n", This, index, type);
+
+    if (index >= This->inputs_count)
+        return DMO_E_INVALIDSTREAMINDEX;
+
+    stream = &This->inputs[index];
+
+    if (!stream->current)
+        return DMO_E_TYPE_NOT_SET;
+
+    return MoCopyMediaType(type, stream->current);
+}
+
+HRESULT WINAPI base_dmo_GetOutputCurrentType(IMediaObject *iface, DWORD index, DMO_MEDIA_TYPE *type)
+{
+    struct base_dmo *This = impl_from_IMediaObject(iface);
+    struct dmo_stream *stream;
+
+    TRACE("(%p)->(%d %p)\n", This, index, type);
+
+    if (index >= This->outputs_count)
+        return DMO_E_INVALIDSTREAMINDEX;
+
+    stream = &This->outputs[index];
+
+    if (!stream->current)
+        return DMO_E_TYPE_NOT_SET;
+
+    return MoCopyMediaType(type, stream->current);
+}
+
+HRESULT WINAPI base_dmo_Lock(IMediaObject *iface, LONG lock)
+{
+    struct base_dmo *This = impl_from_IMediaObject(iface);
+
+    TRACE("(%p)->(%d)\n", This, lock);
+
+    if (lock)
+        EnterCriticalSection(&This->cs);
+    else
+        LeaveCriticalSection(&This->cs);
+
+    return S_OK;
+}
+
+HRESULT init_base_dmo(struct base_dmo *This)
+{
+    This->refcount = 0;
+
+    This->inputs = heap_alloc_zero(This->inputs_count * sizeof(This->inputs[0]));
+    This->outputs = heap_alloc_zero(This->outputs_count * sizeof(This->outputs[0]));
+
+    InitializeCriticalSection(&This->cs);
+
+    return S_OK;
+}
+
+void destroy_dmo_stream(struct dmo_stream *stream)
+{
+    MoDeleteMediaType(stream->current);
+    heap_free(stream->types);
+}
+
+void destroy_base_dmo(struct base_dmo *This)
+{
+    int i;
+
+    for (i = 0; i < This->inputs_count; i++)
+        destroy_dmo_stream(&This->inputs[i]);
+    heap_free(This->inputs);
+
+    for (i = 0; i < This->outputs_count; i++)
+        destroy_dmo_stream(&This->outputs[i]);
+    heap_free(This->outputs);
+
+    DeleteCriticalSection(&This->cs);
+}
 
 static HINSTANCE dsdmo_instance;
 LONG module_ref = 0;
 
 typedef struct {
     IClassFactory IClassFactory_iface;
-    HRESULT WINAPI (*fnCreateInstance)(REFIID riid, void **ppv);
+    HRESULT (*fnCreateInstance)(REFIID riid, void **ppv);
 } IClassFactoryImpl;
 
 /******************************************************************

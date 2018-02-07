@@ -1,5 +1,5 @@
 TESTDLL = msdmo.dll
-IMPORTS = advapi32 dmoguids msdmo uuid
+IMPORTS = advapi32 dmoguids msdmo ole32 strmiids uuid
 
 C_SRCS = \
 	msdmo.c

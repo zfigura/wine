@@ -24,4 +24,35 @@ extern LONG module_ref DECLSPEC_HIDDEN;
 static inline void lock_module(void) { InterlockedIncrement( &module_ref ); }
 static inline void unlock_module(void) { InterlockedDecrement( &module_ref ); }
 
+struct dmo_stream {
+    DMO_MEDIA_TYPE *types;
+    DWORD types_count;
+    DMO_MEDIA_TYPE *current;
+};
+
+struct base_dmo {
+    IMediaObject IMediaObject_iface;
+    LONG refcount;
+
+    struct dmo_stream *inputs;
+    DWORD inputs_count;
+    struct dmo_stream *outputs;
+    DWORD outputs_count;
+
+    CRITICAL_SECTION cs;
+};
+
+extern HRESULT create_I3DL2Reverb(REFIID riid, void **ppv);
+
+extern ULONG WINAPI base_dmo_AddRef(IMediaObject *iface);
+extern HRESULT WINAPI base_dmo_GetStreamCount(IMediaObject *iface, DWORD *input, DWORD *output);
+extern HRESULT WINAPI base_dmo_GetInputType(IMediaObject *iface, DWORD index, DWORD type_index, DMO_MEDIA_TYPE *type);
+extern HRESULT WINAPI base_dmo_GetOutputType(IMediaObject *iface, DWORD index, DWORD type_index, DMO_MEDIA_TYPE *type);
+extern HRESULT WINAPI base_dmo_GetInputCurrentType(IMediaObject *iface, DWORD index, DMO_MEDIA_TYPE *type);
+extern HRESULT WINAPI base_dmo_GetOutputCurrentType(IMediaObject *iface, DWORD index, DMO_MEDIA_TYPE *type);
+extern HRESULT WINAPI base_dmo_Lock(IMediaObject *iface, LONG lock);
+
+extern HRESULT init_base_dmo(struct base_dmo *This);
+extern void destroy_base_dmo(struct base_dmo *This);
+
 #endif	/* __WINE_DSDMO_PRIVATE_H */
