@@ -21,6 +21,7 @@
 #include <stdio.h>
 #define COBJMACROS
 #include "dmo.h"
+#include "uuids.h"
 #include "wine/test.h"
 
 DEFINE_GUID(GUID_NULL,0,0,0,0,0,0,0,0,0,0,0);
@@ -110,9 +111,83 @@ static void test_DMOEnum(void)
     IEnumDMO_Release(enum_dmo);
 }
 
+static void test_DMOs(void)
+{
+    DMO_MEDIA_TYPE type;
+    IEnumDMO *enum_dmo;
+    IMediaObject *dmo;
+    CLSID clsid;
+    WCHAR *name;
+    HRESULT hr;
+
+    CoInitialize(NULL);
+
+    hr = DMOEnum(&GUID_NULL, 0, 0, NULL, 0, NULL, &enum_dmo);
+    ok(hr == S_OK, "got %#x\n", hr);
+
+    while ((hr = IEnumDMO_Next(enum_dmo, 1, &clsid, &name, NULL)) == S_OK)
+    {
+        DWORD inputs, outputs, i;
+
+        trace("testing %s\n", wine_dbgstr_guid(&clsid));
+
+        hr = CoCreateInstance(&clsid, NULL, CLSCTX_INPROC_SERVER, &IID_IMediaObject, (void **)&dmo);
+        ok(hr == S_OK, "got %#x\n", hr);
+
+        hr = IMediaObject_GetStreamCount(dmo, &inputs, &outputs);
+        ok(hr == S_OK, "got %#x\n", hr);
+
+        /* test inputs */
+        for (i = 0; i < inputs; i++)
+        {
+            int type_index = 0;
+
+            hr = IMediaObject_GetInputCurrentType(dmo, i, &type);
+            ok(hr == DMO_E_TYPE_NOT_SET, "got %#x\n", hr);
+
+            while ((hr = IMediaObject_GetInputType(dmo, i, type_index, &type)) == S_OK)
+            {
+                MoFreeMediaType(&type);
+                type_index++;
+            }
+            ok(hr == DMO_E_NO_MORE_ITEMS || broken(hr == DMO_E_TYPE_NOT_SET), "got %#x\n", hr);
+        }
+
+        hr = IMediaObject_GetInputCurrentType(dmo, i, &type);
+        ok(hr == DMO_E_INVALIDSTREAMINDEX || broken(hr == DMO_E_TYPE_NOT_SET), "got %#x\n", hr);
+
+        /* and outputs */
+        for (i = 0; i < outputs; i++)
+        {
+            int type_index = 0;
+
+            hr = IMediaObject_GetOutputCurrentType(dmo, i, &type);
+            ok(hr == DMO_E_TYPE_NOT_SET, "got %#x\n", hr);
+
+            while ((hr = IMediaObject_GetOutputType(dmo, i, type_index, &type)) == S_OK)
+            {
+                MoFreeMediaType(&type);
+                type_index++;
+            }
+            ok(hr == DMO_E_NO_MORE_ITEMS || broken(hr == DMO_E_TYPE_NOT_SET || hr == E_FAIL), "got %#x\n", hr);
+        }
+
+        hr = IMediaObject_GetOutputCurrentType(dmo, i, &type);
+        ok(hr == DMO_E_INVALIDSTREAMINDEX || broken(hr == DMO_E_TYPE_NOT_SET), "got %#x\n", hr);
+
+        IMediaObject_Release(dmo);
+    }
+    ok(hr == S_FALSE, "got %#x\n", hr);
+
+    IEnumDMO_Release(enum_dmo);
+
+    CoUninitialize();
+}
+
 START_TEST(msdmo)
 {
     test_DMOUnregister();
     test_DMOGetName();
     test_DMOEnum();
+    test_DMOs();
 }
