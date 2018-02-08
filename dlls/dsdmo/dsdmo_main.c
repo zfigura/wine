@@ -25,6 +25,8 @@
 #include "mmsystem.h"
 #include "dsound.h"
 #include "dmo.h"
+#include "initguid.h"
+#include "uuids.h"
 #include "rpcproxy.h"
 #include "wine/debug.h"
 #include "wine/heap.h"
@@ -272,6 +274,21 @@ static const IClassFactoryVtbl classfactory_vtbl = {
     ClassFactory_LockServer
 };
 
+static IClassFactoryImpl I3DL2Reverb_factory = {{&classfactory_vtbl}, create_I3DL2Reverb};
+
+struct dmo_template
+{
+    IClassFactoryImpl *factory;
+    const CLSID *clsid;
+};
+
+static const struct dmo_template templates[] = {
+    {
+        &I3DL2Reverb_factory,
+        &GUID_DSFX_STANDARD_I3DL2REVERB,
+    }
+};
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 {
     TRACE("%p, %d, %p\n", instance, reason, reserved);
@@ -290,7 +307,22 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
  */
 HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void **ppv)
 {
+    int i;
+
     TRACE("%s, %s, %p\n", debugstr_guid(rclsid), debugstr_guid(riid), ppv);
+
+    if (IsEqualGUID(riid, &IID_IClassFactory))
+    {
+        for (i = 0; i < sizeof(templates)/sizeof(templates[0]); i++)
+        {
+            if (IsEqualCLSID(rclsid, templates[i].clsid))
+            {
+                IClassFactory_AddRef(&templates[i].factory->IClassFactory_iface);
+                *ppv = &templates[i].factory->IClassFactory_iface;
+                return S_OK;
+            }
+        }
+    }
 
     return CLASS_E_CLASSNOTAVAILABLE;
 }
