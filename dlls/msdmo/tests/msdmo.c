@@ -19,6 +19,10 @@
  */
 
 #include <stdio.h>
+#include "windef.h"
+#include "wingdi.h"
+#include "mmsystem.h"
+#include "mmreg.h"
 #define COBJMACROS
 #include "dmo.h"
 #include "uuids.h"
@@ -184,10 +188,65 @@ static void test_DMOs(void)
     CoUninitialize();
 }
 
+static void test_audio_effects(void)
+{
+    DMO_MEDIA_TYPE type;
+    IEnumDMO *enum_dmo;
+    IMediaObject *dmo;
+    CLSID clsid;
+    WCHAR *name;
+    HRESULT hr;
+
+    CoInitialize(NULL);
+
+    hr = DMOEnum(&DMOCATEGORY_AUDIO_EFFECT, 0, 0, NULL, 0, NULL, &enum_dmo);
+    ok(hr == S_OK, "got %#x\n", hr);
+
+    while ((hr = IEnumDMO_Next(enum_dmo, 1, &clsid, &name, NULL)) == S_OK)
+    {
+        WAVEFORMATEX wfx = {WAVE_FORMAT_PCM, 2, 44100, 176400, 4, 16, 0};
+        DWORD inputs, outputs;
+
+        trace("testing %s\n", wine_dbgstr_guid(&clsid));
+
+        hr = CoCreateInstance(&clsid, NULL, CLSCTX_INPROC_SERVER, &IID_IMediaObject, (void **)&dmo);
+        ok(hr == S_OK, "got %#x\n", hr);
+
+        hr = IMediaObject_GetStreamCount(dmo, &inputs, &outputs);
+        ok(hr == S_OK, "got %#x\n", hr);
+        ok(inputs == 1, "got %d\n", inputs);
+        ok(outputs == 1, "got %d\n", outputs);
+
+        type.majortype = MEDIATYPE_Audio;
+        type.subtype = MEDIASUBTYPE_PCM;
+        type.formattype = FORMAT_WaveFormatEx;
+        type.cbFormat = sizeof(wfx);
+        type.pbFormat = (BYTE *)&wfx;
+
+        hr = IMediaObject_SetInputType(dmo, 0, &type, 0);
+        ok(hr == S_OK, "got %#x\n", hr);
+
+        type.subtype = MEDIASUBTYPE_IEEE_FLOAT;
+        wfx.wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
+        wfx.nChannels = 1;
+        wfx.wBitsPerSample = 32;
+        hr = IMediaObject_SetInputType(dmo, 0, &type, 0);
+        ok(hr == S_OK, "got %#x\n", hr);
+
+        IMediaObject_Release(dmo);
+    }
+    ok(hr == S_FALSE, "got %#x\n", hr);
+
+    IEnumDMO_Release(enum_dmo);
+
+    CoUninitialize();
+}
+
 START_TEST(msdmo)
 {
     test_DMOUnregister();
     test_DMOGetName();
     test_DMOEnum();
     test_DMOs();
+    test_audio_effects();
 }
