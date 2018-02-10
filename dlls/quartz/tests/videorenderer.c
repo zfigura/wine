@@ -86,9 +86,28 @@ static void test_query_interface(void)
     RELEASE_EXPECT(pVideoWindow, 1);
 }
 
+static const struct {
+    const GUID *subtype;
+    BOOL todo;
+} vr_subtype_tests[] =
+{
+    {&MEDIASUBTYPE_RGB1, TRUE},
+    {&MEDIASUBTYPE_RGB4, TRUE},
+    {&MEDIASUBTYPE_RGB8},
+    {&MEDIASUBTYPE_RGB565},
+    {&MEDIASUBTYPE_RGB555, TRUE},
+    {&MEDIASUBTYPE_RGB24},
+    {&MEDIASUBTYPE_RGB32},
+    {&MEDIASUBTYPE_ARGB32, TRUE},
+};
+
 static void test_pin(IPin *pin)
 {
     IMemInputPin *mpin = NULL;
+    VIDEOINFOHEADER vih = {0};
+    AM_MEDIA_TYPE mt = {0};
+    HRESULT hr;
+    int i;
 
     IPin_QueryInterface(pin, &IID_IMemInputPin, (void **)&mpin);
 
@@ -100,6 +119,24 @@ static void test_pin(IPin *pin)
         IMemInputPin_Release(mpin);
     }
     /* TODO */
+
+    vih.bmiHeader.biSize = sizeof(vih.bmiHeader);
+    vih.bmiHeader.biWidth = 320;
+    vih.bmiHeader.biHeight = 240;
+    vih.bmiHeader.biPlanes = 1;
+    vih.bmiHeader.biCompression = BI_RGB;
+    mt.majortype = MEDIATYPE_Video;
+    mt.formattype = FORMAT_VideoInfo;
+    mt.cbFormat = sizeof(vih);
+    mt.pbFormat = (BYTE *)&vih;
+
+    for (i = 0; i < sizeof(vr_subtype_tests)/sizeof(vr_subtype_tests[0]); i++)
+    {
+        mt.subtype = *vr_subtype_tests[i].subtype;
+        hr = IPin_QueryAccept(pin, &mt);
+        todo_wine_if(vr_subtype_tests[i].todo)
+        ok(hr == S_OK, "got %#x for %s\n", hr, wine_dbgstr_guid(vr_subtype_tests[i].subtype));
+    }
 }
 
 static void test_basefilter(void)
