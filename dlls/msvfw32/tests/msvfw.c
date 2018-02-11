@@ -316,10 +316,177 @@ static void test_ICInfo(void)
     ok(info.fccHandler == mmioFOURCC('f','a','k','e'), "got 0x%08x\n", info.fccHandler);
 }
 
+static int gdf_test;
+
+static DWORD get_size_image(LONG width, LONG height, WORD depth)
+{
+    DWORD ret = width * depth;
+    ret = (ret + 7) / 8;    /* divide by byte size, rounding up */
+    ret = (ret + 3) & ~3;   /* align to 4 bytes */
+    ret *= abs(height);
+    return ret;
+}
+
+LRESULT CALLBACK gdf_driver_proc(DWORD_PTR id, HDRVR driver, UINT msg, LPARAM lparam1, LPARAM lparam2)
+{
+    if (winetest_debug > 1)
+        trace("(%#lx, %p, %#x, %#lx, %#lx)\n", id, driver, msg, lparam1, lparam2);
+    switch(msg)
+    {
+    case DRV_LOAD:
+    case DRV_OPEN:
+    case DRV_CLOSE:
+    case DRV_FREE:
+        return 1;
+    case ICM_DECOMPRESS_QUERY:
+    {
+        BITMAPINFOHEADER *out = (BITMAPINFOHEADER *)lparam2;
+        DWORD expected_size;
+
+        if (!out)
+            return ICERR_OK;
+
+        ok(out->biSize == sizeof(*out), "got %d\n", out->biSize);
+        ok(out->biPlanes == 1, "got %d\n", out->biPlanes);
+        expected_size = get_size_image(out->biWidth, out->biHeight, out->biBitCount);
+        ok(out->biSizeImage == expected_size, "expected %d, got %d\n", expected_size, out->biSizeImage);
+
+        switch (gdf_test)
+        {
+            case 0:
+                return ICERR_OK;
+            case 1:
+                if (out->biWidth == 30 && out->biHeight == 40 && out->biCompression == BI_RGB && out->biBitCount == 16)
+                    return ICERR_OK;
+                return ICERR_BADFORMAT;
+            case 2:
+                if (out->biWidth == 30 && out->biHeight == 40 && out->biCompression == BI_BITFIELDS && out->biBitCount == 16)
+                    return ICERR_OK;
+                return ICERR_BADFORMAT;
+            case 3:
+                if (out->biWidth == 30 && out->biHeight == 40 && out->biCompression == BI_RGB && out->biBitCount == 24)
+                    return ICERR_OK;
+                return ICERR_BADFORMAT;
+            case 4:
+                if (out->biWidth == 30 && out->biHeight == 40 && out->biCompression == BI_RGB && out->biBitCount == 32)
+                    return ICERR_OK;
+                return ICERR_BADFORMAT;
+            case 5:
+                if (out->biWidth == 10 && out->biHeight == 20 && out->biCompression == BI_RGB && out->biBitCount == 32)
+                    return ICERR_OK;
+                return ICERR_BADFORMAT;
+            case 6:
+                return ICERR_BADFORMAT;
+        }
+
+        return ICERR_BADFORMAT;
+    }
+    case ICM_DECOMPRESS_GET_FORMAT:
+    {
+        BITMAPINFOHEADER *out = (BITMAPINFOHEADER *)lparam2;
+        if (out)
+        {
+            out->biWidth = 50;
+            out->biHeight = 60;
+            out->biBitCount = 0xdead;
+            out->biCompression = 0xbeef;
+            out->biSizeImage = 0;
+        }
+        return ICERR_OK;
+    }
+    }
+    return 0;
+}
+
+static void check_bitmap_header_(int line, BITMAPINFOHEADER *header, LONG width, LONG height, WORD depth, DWORD compression)
+{
+    ok_(__FILE__, line)(header->biWidth == width, "expected %d, got %d\n", width, header->biWidth);
+    ok_(__FILE__, line)(header->biHeight == height, "expected %d, got %d\n", height, header->biHeight);
+    ok_(__FILE__, line)(header->biBitCount == depth, "expected %d, got %d\n", depth, header->biBitCount);
+    ok_(__FILE__, line)(header->biCompression == compression, "expected %#x, got %#x\n", compression, header->biCompression);
+}
+#define check_bitmap_header(a,b,c,d,e) check_bitmap_header_(__LINE__,a,b,c,d,e)
+
+static void test_ICGetDisplayFormat(void)
+{
+    BITMAPINFOHEADER in = {sizeof(in), 10, 20, 1, 16, mmioFOURCC('t','e','s','t'), 0, 0, 0, 0, 0};
+    BITMAPINFOHEADER out = {0};
+    LRESULT lres;
+    BOOL ret;
+    HIC hic;
+
+    ret = ICInstall(ICTYPE_VIDEO, mmioFOURCC('t','e','s','t'), (LPARAM) gdf_driver_proc, NULL, ICINSTALL_FUNCTION);
+    ok(ret, "ICInstall failed\n");
+
+    hic = ICOpen(ICTYPE_VIDEO, mmioFOURCC('t','e','s','t'), ICMODE_DECOMPRESS);
+    ok(ret, "ICOpen failed\n");
+
+    gdf_test = 0;
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 30, 40);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 30, 40, 1, BI_RGB);
+
+    gdf_test = 1;
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 30, 40);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 30, 40, 16, BI_RGB);
+
+    gdf_test = 2;
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 30, 40);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 30, 40, 16, BI_BITFIELDS);
+
+    gdf_test = 3;
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 30, 40);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 30, 40, 24, BI_RGB);
+
+    gdf_test = 4;
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 30, 40);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 30, 40, 32, BI_RGB);
+
+    gdf_test = 5;
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 30, 40);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 10, 20, 32, BI_RGB);
+
+    gdf_test = 6;
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 30, 40);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 50, 60, 0xdead, 0xbeef);
+
+    gdf_test = 0;
+
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 0, 40);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 10, 20, 1, BI_RGB);
+
+    memset(&out, 0, sizeof(out));
+    hic = ICGetDisplayFormat(hic, &in, &out, 1, 30, 0);
+    ok(hic != NULL, "ICGetDisplayFormat failed\n");
+    check_bitmap_header(&out, 10, 20, 1, BI_RGB);
+
+    lres = ICClose(hic);
+    ok(lres == ICERR_OK, "got %ld\n", lres);
+
+    ret = ICRemove(ICTYPE_VIDEO, mmioFOURCC('t','e','s','t'), 0);
+    ok(ret, "ICRemove failed\n");
+}
+
 START_TEST(msvfw)
 {
     test_OpenCase();
     test_Locate();
     test_ICSeqCompress();
     test_ICInfo();
+    test_ICGetDisplayFormat();
 }
