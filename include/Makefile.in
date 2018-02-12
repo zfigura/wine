@@ -702,6 +702,7 @@ SOURCES = \
 	winuser.rh \
 	winver.h \
 	wlanapi.h \
+	wmcodecdsp.idl \
 	wmdrmsdk.idl \
 	wmistr.h \
 	wmium.h \
