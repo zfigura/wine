@@ -1596,6 +1596,7 @@ enable_winusb
 enable_wlanapi
 enable_wldap32
 enable_wmasf
+enable_wmcodecdspuuid
 enable_wmi
 enable_wmiutils
 enable_wmp
@@ -19149,6 +19150,7 @@ wine_fn_config_makefile dlls/wlanapi/tests enable_tests
 wine_fn_config_makefile dlls/wldap32 enable_wldap32
 wine_fn_config_makefile dlls/wldap32/tests enable_tests
 wine_fn_config_makefile dlls/wmasf enable_wmasf
+wine_fn_config_makefile dlls/wmcodecdspuuid enable_wmcodecdspuuid
 wine_fn_config_makefile dlls/wmi enable_wmi
 wine_fn_config_makefile dlls/wmiutils enable_wmiutils
 wine_fn_config_makefile dlls/wmiutils/tests enable_tests
