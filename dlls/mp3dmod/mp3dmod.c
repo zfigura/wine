@@ -21,12 +21,21 @@
 #include <stdarg.h>
 #include "windef.h"
 #include "winbase.h"
+#include "wingdi.h"
+#include "mmsystem.h"
+#include "mmreg.h"
+#include "msacm.h"
 #define COBJMACROS
 #include "objbase.h"
 #include "rpcproxy.h"
 #include "wmcodecdsp.h"
+#include "dmo.h"
+#include "uuids.h"
 #include "wine/debug.h"
 #include "wine/heap.h"
+
+#include "initguid.h"
+DEFINE_GUID(WMMEDIASUBTYPE_MP3, 0x00000055, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71);
 
 WINE_DEFAULT_DEBUG_CHANNEL(mp3dmod);
 
@@ -35,6 +44,9 @@ static HINSTANCE mp3dmod_instance;
 struct mp3_decoder {
     IMediaObject IMediaObject_iface;
     LONG ref;
+
+    DMO_MEDIA_TYPE input_type;
+    DMO_MEDIA_TYPE output_type;
 };
 
 static inline struct mp3_decoder *impl_from_IMediaObject(IMediaObject *iface)
@@ -125,16 +137,109 @@ static HRESULT WINAPI MediaObject_GetOutputType(IMediaObject *iface, DWORD index
 
 static HRESULT WINAPI MediaObject_SetInputType(IMediaObject *iface, DWORD index, const DMO_MEDIA_TYPE *type, DWORD flags)
 {
-    FIXME("(%p)->(%d %p %x) stub!\n", iface, index, type, flags);
+    struct mp3_decoder *This = impl_from_IMediaObject(iface);
+    MPEGLAYER3WAVEFORMAT *wfx;
+    WAVEFORMATEX out;
+    MMRESULT res;
 
-    return E_NOTIMPL;
+    TRACE("(%p)->(%d %p %x)\n", This, index, type, flags);
+
+    if (index > 0)
+        return DMO_E_INVALIDSTREAMINDEX;
+
+    if (flags & DMO_SET_TYPEF_CLEAR)
+    {
+        MoFreeMediaType(&This->input_type);
+        This->input_type.majortype = GUID_NULL;
+        return S_OK;
+    }
+
+    if (!type)
+        return E_POINTER;
+
+    if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio) ||
+        !IsEqualGUID(&type->subtype, &WMMEDIASUBTYPE_MP3) ||
+        !IsEqualGUID(&type->formattype, &FORMAT_WaveFormatEx))
+        return DMO_E_TYPE_NOT_ACCEPTED;
+
+    if (!type->pbFormat)
+        return E_INVALIDARG;
+
+    wfx = (MPEGLAYER3WAVEFORMAT *)type->pbFormat;
+
+    if (!IsEqualGUID(&This->output_type.majortype, &GUID_NULL))
+    {
+        res = acmStreamOpen(NULL, NULL, &wfx->wfx, (WAVEFORMATEX *)This->output_type.pbFormat,
+                            0, 0, 0, ACM_STREAMOPENF_QUERY);
+        if (res != MMSYSERR_NOERROR)
+            return DMO_E_TYPE_NOT_ACCEPTED;
+    }
+    else
+    {
+        /* Make sure that there at least exists a decoder for this type */
+        out.wFormatTag = WAVE_FORMAT_PCM;
+        res = acmFormatSuggest(NULL, &wfx->wfx, &out, sizeof(out), ACM_FORMATSUGGESTF_WFORMATTAG);
+        if (res != MMSYSERR_NOERROR)
+            return DMO_E_TYPE_NOT_ACCEPTED;
+    }
+
+    if (!(flags & DMO_SET_TYPEF_TEST_ONLY))
+    {
+        if (!IsEqualGUID(&This->input_type.majortype, &GUID_NULL))
+            MoFreeMediaType(&This->input_type);
+        MoCopyMediaType(&This->input_type, type);
+    }
+
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaObject_SetOutputType(IMediaObject *iface, DWORD index, const DMO_MEDIA_TYPE *type, DWORD flags)
 {
-    FIXME("(%p)->(%d %p %x) stub!\n", iface, index, type, flags);
+    struct mp3_decoder *This = impl_from_IMediaObject(iface);
+    WAVEFORMATEX *wfx;
+    MMRESULT res;
 
-    return E_NOTIMPL;
+    TRACE("(%p)->(%d %p %x)\n", This, index, type, flags);
+
+    if (index > 0)
+        return DMO_E_INVALIDSTREAMINDEX;
+
+    if (flags & DMO_SET_TYPEF_CLEAR)
+    {
+        MoFreeMediaType(&This->output_type);
+        This->output_type.majortype = GUID_NULL;
+        return S_OK;
+    }
+
+    if (!type)
+        return E_POINTER;
+
+    if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio) ||
+        !IsEqualGUID(&type->subtype, &MEDIASUBTYPE_PCM) ||
+        !IsEqualGUID(&type->formattype, &FORMAT_WaveFormatEx))
+        return DMO_E_TYPE_NOT_ACCEPTED;
+
+    if (!type->pbFormat)
+        return E_INVALIDARG;
+
+    wfx = (WAVEFORMATEX *)type->pbFormat;
+
+    if (!IsEqualGUID(&This->input_type.majortype, &GUID_NULL))
+    {
+        res = acmStreamOpen(NULL, NULL, (WAVEFORMATEX *)This->input_type.pbFormat,
+                            wfx, 0, 0, 0, ACM_STREAMOPENF_QUERY);
+        if (res != MMSYSERR_NOERROR)
+            return DMO_E_TYPE_NOT_ACCEPTED;
+    }
+
+    if (!(flags & DMO_SET_TYPEF_TEST_ONLY))
+    {
+        if (!IsEqualGUID(&This->output_type.majortype, &GUID_NULL))
+            MoFreeMediaType(&This->output_type);
+        MoCopyMediaType(&This->output_type, type);
+    }
+
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaObject_GetInputCurrentType(IMediaObject *iface, DWORD index, DMO_MEDIA_TYPE *type)
@@ -220,7 +325,7 @@ static HRESULT WINAPI MediaObject_ProcessInput(IMediaObject *iface, DWORD index,
     FIXME("(%p)->(%d %p %x %s %s) stub!\n", iface, index, buffer, flags,
           wine_dbgstr_longlong(timestamp), wine_dbgstr_longlong(timelength));
 
-    return E_NOTIMPL;
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaObject_ProcessOutput(IMediaObject *iface, DWORD flags, DWORD count, DMO_OUTPUT_DATA_BUFFER *buffers, DWORD *status)
@@ -273,6 +378,9 @@ static HRESULT create_mp3_decoder(REFIID riid, void **obj)
 
     This->IMediaObject_iface.lpVtbl = &IMediaObject_vtbl;
     This->ref = 0;
+
+    This->input_type.majortype = GUID_NULL;
+    This->output_type.majortype = GUID_NULL;
 
     return IMediaObject_QueryInterface(&This->IMediaObject_iface, riid, obj);
 }

@@ -1,5 +1,5 @@
 MODULE    = mp3dmod.dll
-IMPORTS   = dmoguids uuid wmcodecdspuuid
+IMPORTS   = dmoguids msacm32 msdmo strmiids uuid wmcodecdspuuid
 
 C_SRCS = \
 	mp3dmod.c
