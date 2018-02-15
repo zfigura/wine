@@ -67,6 +67,25 @@ static inline BOOL isSpace(WCHAR c)
     return c == ' ' || c == '\f' || c == '\n' || c == '\r' || c == '\t' || c == '\v';
 }
 
+static const WCHAR *argify_get_arg(const WCHAR *args, int index)
+{
+    const WCHAR *p = args;
+    int i;
+
+    while (isSpace(*p))
+        p++;
+
+    for (i = 2; i < index; i++)
+    {
+        while (*p && !isSpace(*p))
+            p++;
+        while (isSpace(*p))
+            p++;
+    }
+
+    return p;
+}
+
 /***********************************************************************
  *	SHELL_ArgifyW [Internal]
  *
@@ -107,7 +126,16 @@ static BOOL SHELL_ArgifyW(WCHAR* out, int len, const WCHAR* fmt, const WCHAR* lp
                 if (used < len)
                     *res++ = '%';
                 break;
-
+            case '*':
+                if (args)
+                {
+                    used += strlenW(args);
+                    if (used < len)
+                        lstrcpynW(res, args, len - used);
+                    res += strlenW(args);
+                    break;
+                }
+                /* else fall through */
             case '2':
             case '3':
             case '4':
@@ -117,39 +145,16 @@ static BOOL SHELL_ArgifyW(WCHAR* out, int len, const WCHAR* fmt, const WCHAR* lp
             case '8':
             case '9':
             case '0':
-            case '*':
                 if (args)
                 {
-                    if (*fmt == '*')
+                    const WCHAR *p = argify_get_arg(args, *fmt - '0');
+                    while (*p && !isSpace(*p))
                     {
                         used++;
                         if (used < len)
-                            *res++ = '"';
-                        while(*args)
-                        {
-                            used++;
-                            if (used < len)
-                                *res++ = *args++;
-                            else
-                                args++;
-                        }
-                        used++;
-                        if (used < len)
-                            *res++ = '"';
-                    }
-                    else
-                    {
-                        while(*args && !isSpace(*args))
-                        {
-                            used++;
-                            if (used < len)
-                                *res++ = *args++;
-                            else
-                                args++;
-                        }
-
-                        while(isSpace(*args))
-                            ++args;
+                            *res++ = *p++;
+                        else
+                            p++;
                     }
                     break;
                 }

@@ -1429,7 +1429,7 @@ static const argify_tests_t argify_tests[] =
      * parameters string, including the trailing spaces, no matter what
      * arguments have already been used.
      */
-    {"Params232S", "p2 p3 p4 ", TRUE,
+    {"Params232S", "p2 p3 p4 ", FALSE,
      " p2 p3 \"p2\" \"p2 p3 p4 \""},
 
     /* Unquoted argument references like %2 don't automatically quote their
