@@ -1282,3 +1282,16 @@ interface IAMVfwCaptureDialogs : IUnknown
             [in] long data1,
             [in] long data2);
 }
+
+[
+    local,
+    object,
+    uuid(e46a9787-2b71-444d-a4b5-1fab7b708d6a),
+    pointer_default(unique),
+]
+interface IVideoFrameStep : IUnknown
+{
+    HRESULT Step(DWORD frames, [unique] IUnknown *obj);
+    HRESULT CanStep(long multiple, [unique] IUnknown *obj);
+    HRESULT CancelStep();
+}
