@@ -559,6 +559,7 @@ static UINT ACTION_ProcessExecSequence(MSIPACKAGE *package)
         '`','S','e','q','u','e','n','c','e','`',' ', '>',' ','0',' ',
         'O','R','D','E','R',' ', 'B','Y',' ','`','S','e','q','u','e','n','c','e','`',0};
     MSIQUERY *view;
+    void *cookie;
     UINT rc;
 
     if (package->ExecuteSequenceRun)
@@ -569,6 +570,9 @@ static UINT ACTION_ProcessExecSequence(MSIPACKAGE *package)
 
     package->ExecuteSequenceRun = TRUE;
 
+    if (is_wow64 && package->platform == PLATFORM_X64)
+        Wow64DisableWow64FsRedirection(&cookie);
+
     rc = MSI_OpenQuery(package->db, &view, query);
     if (rc == ERROR_SUCCESS)
     {
@@ -578,6 +582,10 @@ static UINT ACTION_ProcessExecSequence(MSIPACKAGE *package)
         rc = MSI_IterateRecords(view, NULL, ITERATE_Actions, package);
         msiobj_release(&view->hdr);
     }
+
+    if (is_wow64 && package->platform == PLATFORM_X64)
+        Wow64RevertWow64FsRedirection(cookie);
+
     return rc;
 }
 
