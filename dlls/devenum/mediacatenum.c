@@ -25,6 +25,7 @@
 #include "devenum_private.h"
 #include "oleauto.h"
 #include "ocidl.h"
+#include "dmoreg.h"
 
 #include "wine/debug.h"
 
@@ -47,6 +48,8 @@ typedef struct
     LONG ref;
     enum device_type type;
     WCHAR path[MAX_PATH];
+    /* specific to DMOs */
+    CLSID guid;
 } RegPropBagImpl;
 
 
@@ -114,18 +117,35 @@ static HRESULT WINAPI DEVENUM_IPropertyBag_Read(
     VARIANT* pVar,
     IErrorLog* pErrorLog)
 {
+    static const WCHAR friendly_name[] = {'F','r','i','e','n','d','l','y','N','a','m','e',0};
     LPVOID pData = NULL;
     DWORD received;
     DWORD type = 0;
     RegPropBagImpl *This = impl_from_IPropertyBag(iface);
     HRESULT res = S_OK;
     LONG reswin32 = ERROR_SUCCESS;
+    WCHAR name[80];
     HKEY hkey;
 
     TRACE("(%p)->(%s, %p, %p)\n", This, debugstr_w(pszPropName), pVar, pErrorLog);
 
     if (!pszPropName || !pVar)
         return E_POINTER;
+
+    if (This->type == DEVICE_DMO)
+    {
+        if (!strcmpW(pszPropName, friendly_name))
+        {
+            res = DMOGetName(&This->guid, name);
+            if (SUCCEEDED(res))
+            {
+                V_VT(pVar) = VT_BSTR;
+                V_BSTR(pVar) = SysAllocString(name);
+            }
+            return res;
+        }
+        reswin32 = ERROR_NOT_FOUND;
+    }
 
     if (This->type == DEVICE_FILTER)
         reswin32 = RegOpenKeyW(HKEY_CLASSES_ROOT, This->path, &hkey);
@@ -246,6 +266,9 @@ static HRESULT WINAPI DEVENUM_IPropertyBag_Write(
 
     TRACE("(%p)->(%s, %p)\n", This, debugstr_w(pszPropName), pVar);
 
+    if (This->type == DEVICE_DMO)
+        return E_ACCESSDENIED;
+
     switch (V_VT(pVar))
     {
     case VT_BSTR:
@@ -320,7 +343,10 @@ static HRESULT create_PropertyBag(MediaCatMoniker *mon, IPropertyBag **ppBag)
         strcpyW(rpb->path, clsidW);
     else if (rpb->type == DEVICE_CODEC)
         strcpyW(rpb->path, wszActiveMovieKey);
-    if (mon->has_class)
+    else if (rpb->type == DEVICE_DMO)
+        rpb->guid = mon->guid;
+
+    if (mon->has_class && (mon->type == DEVICE_FILTER || mon->type == DEVICE_CODEC))
     {
         StringFromGUID2(&mon->class, rpb->path + strlenW(rpb->path), CHARS_IN_GUID);
         if (rpb->type == DEVICE_FILTER)
@@ -658,8 +684,6 @@ static HRESULT WINAPI DEVENUM_IMediaCatMoniker_RelativePathTo(IMoniker *iface, I
 static HRESULT WINAPI DEVENUM_IMediaCatMoniker_GetDisplayName(IMoniker *iface, IBindCtx *pbc,
         IMoniker *pmkToLeft, LPOLESTR *ppszDisplayName)
 {
-    static const WCHAR swW[] = {'s','w',':',0};
-    static const WCHAR cmW[] = {'c','m',':',0};
     MediaCatMoniker *This = impl_from_IMoniker(iface);
     WCHAR *buffer;
 
@@ -677,8 +701,10 @@ static HRESULT WINAPI DEVENUM_IMediaCatMoniker_GetDisplayName(IMoniker *iface, I
         strcatW(buffer, swW);
     else if (This->type == DEVICE_CODEC)
         strcatW(buffer, cmW);
+    else if (This->type == DEVICE_DMO)
+        strcatW(buffer, dmoW);
 
-    if (This->has_class)
+    if (This->has_class && (This->type == DEVICE_FILTER || This->type == DEVICE_CODEC))
     {
         StringFromGUID2(&This->class, buffer + strlenW(buffer), CHARS_IN_GUID);
         strcatW(buffer, backslashW);
