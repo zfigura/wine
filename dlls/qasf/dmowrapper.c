@@ -30,6 +30,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(qasf);
 
 struct dmo_wrapper {
     BaseFilter filter;
+    IDMOWrapperFilter IDMOWrapperFilter_iface;
 };
 
 static inline struct dmo_wrapper *impl_from_BaseFilter(BaseFilter *filter)
@@ -55,6 +56,10 @@ static HRESULT WINAPI BaseFilter_QueryInterface(IBaseFilter *iface, REFIID riid,
         IsEqualIID(riid, &IID_IBaseFilter))
     {
         *ppv = &This->filter.IBaseFilter_iface;
+    }
+    else if (IsEqualIID(riid, &IID_IDMOWrapperFilter))
+    {
+        *ppv = &This->IDMOWrapperFilter_iface;
     }
     else
     {
@@ -90,6 +95,45 @@ static const IBaseFilterVtbl BaseFilter_vtbl = {
 static const BaseFilterFuncTable filter_func_table = {
 };
 
+static inline struct dmo_wrapper *impl_from_IDMOWrapperFilter(IDMOWrapperFilter *iface)
+{
+    return CONTAINING_RECORD(iface, struct dmo_wrapper, IDMOWrapperFilter_iface);
+}
+
+static HRESULT WINAPI DMOWrapperFilter_QueryInterface(IDMOWrapperFilter *iface, REFIID iid, void **obj)
+{
+    struct dmo_wrapper *This = impl_from_IDMOWrapperFilter(iface);
+    return IBaseFilter_QueryInterface(&This->filter.IBaseFilter_iface, iid, obj);
+}
+
+static ULONG WINAPI DMOWrapperFilter_AddRef(IDMOWrapperFilter *iface)
+{
+    struct dmo_wrapper *This = impl_from_IDMOWrapperFilter(iface);
+    return IBaseFilter_AddRef(&This->filter.IBaseFilter_iface);
+}
+
+static ULONG WINAPI DMOWrapperFilter_Release(IDMOWrapperFilter *iface)
+{
+    struct dmo_wrapper *This = impl_from_IDMOWrapperFilter(iface);
+    return IBaseFilter_Release(&This->filter.IBaseFilter_iface);
+}
+
+static HRESULT WINAPI DMOWrapperFilter_Init(IDMOWrapperFilter *iface, REFCLSID clsid, REFCLSID cat)
+{
+    struct dmo_wrapper *This = impl_from_IDMOWrapperFilter(iface);
+
+    FIXME("(%p/%p)->(%s, %s) stub!\n", This, iface, debugstr_guid(clsid), debugstr_guid(cat));
+
+    return E_NOTIMPL;
+}
+
+static const IDMOWrapperFilterVtbl DMOWrapperFilter_vtbl = {
+    DMOWrapperFilter_QueryInterface,
+    DMOWrapperFilter_AddRef,
+    DMOWrapperFilter_Release,
+    DMOWrapperFilter_Init,
+};
+
 IUnknown * WINAPI create_DMOWrapperFilter(IUnknown *outer, HRESULT *hr)
 {
     struct dmo_wrapper *This;
@@ -107,6 +151,8 @@ IUnknown * WINAPI create_DMOWrapperFilter(IUnknown *outer, HRESULT *hr)
 
     BaseFilter_Init(&This->filter, &BaseFilter_vtbl, &CLSID_DMOWrapperFilter,
         (DWORD_PTR) (__FILE__ ": DMOWrapperFilter.csFilter"), &filter_func_table);
+
+    This->IDMOWrapperFilter_iface.lpVtbl = &DMOWrapperFilter_vtbl;
 
     *hr = S_OK;
     return (IUnknown *)&This->filter.IBaseFilter_iface;
