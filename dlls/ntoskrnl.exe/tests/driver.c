@@ -200,6 +200,9 @@ static void test_event(void)
     r = KeSetEvent(&event, 0, FALSE);
     ok(r == TRUE, "got %d\n", r);
     ok(event.Header.SignalState == TRUE, "got state %d\n", event.Header.SignalState);
+
+    KeClearEvent(&event);
+    ok(event.Header.SignalState == FALSE, "got state %d\n", event.Header.SignalState);
 }
 
 static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)

@@ -52,7 +52,9 @@ void WINAPI KeInitializeEvent( PRKEVENT event, EVENT_TYPE type, BOOLEAN state )
  */
 VOID WINAPI KeClearEvent(PRKEVENT event)
 {
-    FIXME("stub: %p\n", event);
+    TRACE("(%p)\n", event);
+
+    event->Header.SignalState = FALSE;
 }
 
 /***********************************************************************
