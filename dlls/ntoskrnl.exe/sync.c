@@ -69,8 +69,12 @@ LONG WINAPI KeResetEvent( PRKEVENT event )
  */
 LONG WINAPI KeSetEvent( PRKEVENT event, KPRIORITY increment, BOOLEAN wait )
 {
+    LONG old = event->Header.SignalState;
+
     FIXME("(%p, %d, %d): stub\n", event, increment, wait);
-    return 0;
+
+    event->Header.SignalState = TRUE;
+    return old;
 }
 
 /***********************************************************************

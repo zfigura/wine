@@ -175,6 +175,7 @@ todo_wine
 static void test_event(void)
 {
     KEVENT event;
+    LONG r;
 
     memset(&event, 0xcc, sizeof(event));
     KeInitializeEvent(&event, NotificationEvent, TRUE);
@@ -191,6 +192,14 @@ static void test_event(void)
     ok(event.Header.Size == sizeof(event)/sizeof(DWORD), "got Size %u\n", event.Header.Size);
     ok(event.Header.SignalState == FALSE, "got SignalState %d\n", event.Header.SignalState);
     ok(IsListEmpty(&event.Header.WaitListHead), "expected empty wait list\n");
+
+    r = KeSetEvent(&event, 0, FALSE);
+    ok(r == FALSE, "got %d\n", r);
+    ok(event.Header.SignalState == TRUE, "got state %d\n", event.Header.SignalState);
+
+    r = KeSetEvent(&event, 0, FALSE);
+    ok(r == TRUE, "got %d\n", r);
+    ok(event.Header.SignalState == TRUE, "got state %d\n", event.Header.SignalState);
 }
 
 static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)
