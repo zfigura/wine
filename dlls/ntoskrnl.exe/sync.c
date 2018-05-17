@@ -62,8 +62,12 @@ VOID WINAPI KeClearEvent(PRKEVENT event)
  */
 LONG WINAPI KeResetEvent( PRKEVENT event )
 {
-    FIXME("(%p): stub\n", event);
-    return 0;
+    LONG old = event->Header.SignalState;
+
+    TRACE("(%p)\n", event);
+
+    event->Header.SignalState = FALSE;
+    return old;
 }
 
 /***********************************************************************
