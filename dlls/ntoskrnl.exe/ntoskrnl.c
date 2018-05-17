@@ -600,34 +600,6 @@ NTSTATUS CDECL wine_ntoskrnl_main_loop( HANDLE stop_event )
 
 
 /***********************************************************************
- *           ExAcquireFastMutexUnsafe  (NTOSKRNL.EXE.@)
- */
-#ifdef DEFINE_FASTCALL1_ENTRYPOINT
-DEFINE_FASTCALL1_ENTRYPOINT(ExAcquireFastMutexUnsafe)
-void WINAPI __regs_ExAcquireFastMutexUnsafe(PFAST_MUTEX FastMutex)
-#else
-void WINAPI ExAcquireFastMutexUnsafe(PFAST_MUTEX FastMutex)
-#endif
-{
-    FIXME("(%p): stub\n", FastMutex);
-}
-
-
-/***********************************************************************
- *           ExReleaseFastMutexUnsafe  (NTOSKRNL.EXE.@)
- */
-#ifdef DEFINE_FASTCALL1_ENTRYPOINT
-DEFINE_FASTCALL1_ENTRYPOINT(ExReleaseFastMutexUnsafe)
-void WINAPI __regs_ExReleaseFastMutexUnsafe(PFAST_MUTEX FastMutex)
-#else
-void WINAPI ExReleaseFastMutexUnsafe(PFAST_MUTEX FastMutex)
-#endif
-{
-    FIXME("(%p): stub\n", FastMutex);
-}
-
-
-/***********************************************************************
  *           IoAcquireCancelSpinLock  (NTOSKRNL.EXE.@)
  */
 void WINAPI IoAcquireCancelSpinLock(PKIRQL irql)
@@ -1861,80 +1833,6 @@ PRKTHREAD WINAPI KeGetCurrentThread(void)
 }
 
 /***********************************************************************
- *           KeInitializeEvent   (NTOSKRNL.EXE.@)
- */
-void WINAPI KeInitializeEvent( PRKEVENT Event, EVENT_TYPE Type, BOOLEAN State )
-{
-    FIXME( "stub: %p %d %d\n", Event, Type, State );
-}
-
-
- /***********************************************************************
- *           KeInitializeMutex   (NTOSKRNL.EXE.@)
- */
-void WINAPI KeInitializeMutex(PRKMUTEX Mutex, ULONG Level)
-{
-    FIXME( "stub: %p, %u\n", Mutex, Level );
-}
-
-
- /***********************************************************************
- *           KeWaitForMutexObject   (NTOSKRNL.EXE.@)
- */
-NTSTATUS WINAPI KeWaitForMutexObject(PRKMUTEX Mutex, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
-                                     BOOLEAN Alertable, PLARGE_INTEGER Timeout)
-{
-    FIXME( "stub: %p, %d, %d, %d, %p\n", Mutex, WaitReason, WaitMode, Alertable, Timeout );
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-
- /***********************************************************************
- *           KeReleaseMutex   (NTOSKRNL.EXE.@)
- */
-LONG WINAPI KeReleaseMutex(PRKMUTEX Mutex, BOOLEAN Wait)
-{
-    FIXME( "stub: %p, %d\n", Mutex, Wait );
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-
-/***********************************************************************
- *           KeInitializeSemaphore   (NTOSKRNL.EXE.@)
- */
-void WINAPI KeInitializeSemaphore( PRKSEMAPHORE Semaphore, LONG Count, LONG Limit )
-{
-    FIXME( "(%p %d %d) stub\n", Semaphore , Count, Limit );
-}
-
-
-/***********************************************************************
- *           KeInitializeSpinLock   (NTOSKRNL.EXE.@)
- */
-void WINAPI KeInitializeSpinLock( PKSPIN_LOCK SpinLock )
-{
-    FIXME( "stub: %p\n", SpinLock );
-}
-
-
-/***********************************************************************
- *           KeInitializeTimerEx   (NTOSKRNL.EXE.@)
- */
-void WINAPI KeInitializeTimerEx( PKTIMER Timer, TIMER_TYPE Type )
-{
-    FIXME( "stub: %p %d\n", Timer, Type );
-}
-
-
-/***********************************************************************
- *           KeInitializeTimer   (NTOSKRNL.EXE.@)
- */
-void WINAPI KeInitializeTimer( PKTIMER Timer )
-{
-    KeInitializeTimerEx(Timer, NotificationTimer);
-}
-
-/***********************************************************************
  *           KeInsertQueue   (NTOSKRNL.EXE.@)
  */
 LONG WINAPI KeInsertQueue(PRKQUEUE Queue, PLIST_ENTRY Entry)
@@ -1997,44 +1895,12 @@ void WINAPI KeQueryTickCount( LARGE_INTEGER *count )
     KeTickCount.High2Time = count->u.HighPart;
 }
 
-
-/***********************************************************************
- *           KeReleaseSemaphore   (NTOSKRNL.EXE.@)
- */
-LONG WINAPI KeReleaseSemaphore( PRKSEMAPHORE Semaphore, KPRIORITY Increment,
-                                LONG Adjustment, BOOLEAN Wait )
-{
-    FIXME("(%p %d %d %d) stub\n", Semaphore, Increment, Adjustment, Wait );
-    return 0;
-}
-
-
 /***********************************************************************
  *           KeQueryTimeIncrement   (NTOSKRNL.EXE.@)
  */
 ULONG WINAPI KeQueryTimeIncrement(void)
 {
     return 10000;
-}
-
-
-/***********************************************************************
- *           KeResetEvent   (NTOSKRNL.EXE.@)
- */
-LONG WINAPI KeResetEvent( PRKEVENT Event )
-{
-    FIXME("(%p): stub\n", Event);
-    return 0;
-}
-
-
-/***********************************************************************
- *           KeSetEvent   (NTOSKRNL.EXE.@)
- */
-LONG WINAPI KeSetEvent( PRKEVENT Event, KPRIORITY Increment, BOOLEAN Wait )
-{
-    FIXME("(%p, %d, %d): stub\n", Event, Increment, Wait);
-    return 0;
 }
 
 
@@ -2053,32 +1919,6 @@ KPRIORITY WINAPI KeSetPriorityThread( PKTHREAD Thread, KPRIORITY Priority )
 VOID WINAPI KeSetSystemAffinityThread(KAFFINITY Affinity)
 {
     FIXME("(%lx) stub\n", Affinity);
-}
-
-/***********************************************************************
- *           KeWaitForSingleObject   (NTOSKRNL.EXE.@)
- */
-NTSTATUS WINAPI KeWaitForSingleObject(PVOID Object,
-                                      KWAIT_REASON WaitReason,
-                                      KPROCESSOR_MODE WaitMode,
-                                      BOOLEAN Alertable,
-                                      PLARGE_INTEGER Timeout)
-{
-    FIXME( "stub: %p, %d, %d, %d, %p\n", Object, WaitReason, WaitMode, Alertable, Timeout );
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-/***********************************************************************
- *           KeWaitForMultipleObjects   (NTOSKRNL.EXE.@)
- */
-NTSTATUS WINAPI KeWaitForMultipleObjects(ULONG Count, PVOID Object[], WAIT_TYPE WaitType,
-                                         KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
-                                         BOOLEAN Alertable, PLARGE_INTEGER Timeout,
-                                         PKWAIT_BLOCK WaitBlockArray)
-{
-    FIXME( "stub: %u, %p, %d, %d, %d, %d, %p, %p\n", Count, Object, WaitType, WaitReason, WaitMode,
-           Alertable, Timeout, WaitBlockArray );
-    return STATUS_NOT_IMPLEMENTED;
 }
 
 /***********************************************************************
@@ -2875,15 +2715,6 @@ NTSTATUS WINAPI CmUnRegisterCallback(LARGE_INTEGER cookie)
 }
 
 /***********************************************************************
- *           KeDelayExecutionThread  (NTOSKRNL.EXE.@)
- */
-NTSTATUS WINAPI KeDelayExecutionThread(KPROCESSOR_MODE waitmode, BOOLEAN alertable, PLARGE_INTEGER interval)
-{
-    FIXME("(%u, %u, %p): stub\n", waitmode, alertable, interval);
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-/***********************************************************************
  *           IoAttachDevice  (NTOSKRNL.EXE.@)
  */
 NTSTATUS WINAPI IoAttachDevice(DEVICE_OBJECT *source, UNICODE_STRING *target, DEVICE_OBJECT *attached)
@@ -3311,15 +3142,6 @@ void WINAPI IoInvalidateDeviceRelations( DEVICE_OBJECT *device_object, DEVICE_RE
 }
 
 /***********************************************************************
- *           KeSetTimerEx (NTOSKRNL.EXE.@)
- */
-BOOL WINAPI KeSetTimerEx( KTIMER *timer, LARGE_INTEGER duetime, LONG period, KDPC *dpc )
-{
-    FIXME("stub: %p %s %u %p\n", timer, wine_dbgstr_longlong(duetime.QuadPart), period, dpc);
-    return TRUE;
-}
-
-/***********************************************************************
  *           IoCreateFile (NTOSKRNL.EXE.@)
  */
 NTSTATUS WINAPI IoCreateFile(HANDLE *handle, ACCESS_MASK access, OBJECT_ATTRIBUTES *attr,
@@ -3329,58 +3151,6 @@ NTSTATUS WINAPI IoCreateFile(HANDLE *handle, ACCESS_MASK access, OBJECT_ATTRIBUT
 {
     FIXME(": stub\n");
     return STATUS_NOT_IMPLEMENTED;
-}
-
-/***********************************************************************
- *           KeClearEvent (NTOSKRNL.EXE.@)
- */
-VOID WINAPI KeClearEvent(PRKEVENT event)
-{
-    FIXME("stub: %p\n", event);
-}
-
-/***********************************************************************
- *           KeAcquireInStackQueuedSpinLock (NTOSKRNL.EXE.@)
- */
-#ifdef DEFINE_FASTCALL2_ENTRYPOINT
-DEFINE_FASTCALL2_ENTRYPOINT( KeAcquireInStackQueuedSpinLock )
-void WINAPI DECLSPEC_HIDDEN __regs_KeAcquireInStackQueuedSpinLock( KSPIN_LOCK *spinlock,
-                                                                   KLOCK_QUEUE_HANDLE *handle )
-#else
-void WINAPI KeAcquireInStackQueuedSpinLock( KSPIN_LOCK *spinlock, KLOCK_QUEUE_HANDLE *handle )
-#endif
-{
-    FIXME( "stub: %p %p\n", spinlock, handle );
-}
-
-/***********************************************************************
- *           KeReleaseInStackQueuedSpinLock (NTOSKRNL.EXE.@)
- */
-#ifdef DEFINE_FASTCALL1_ENTRYPOINT
-DEFINE_FASTCALL1_ENTRYPOINT( KeReleaseInStackQueuedSpinLock )
-void WINAPI DECLSPEC_HIDDEN __regs_KeReleaseInStackQueuedSpinLock( KLOCK_QUEUE_HANDLE *handle )
-#else
-void WINAPI KeReleaseInStackQueuedSpinLock( KLOCK_QUEUE_HANDLE *handle )
-#endif
-{
-    FIXME( "stub: %p\n", handle );
-}
-
-/***********************************************************************
- *           KeAcquireSpinLockRaiseToDpc (NTOSKRNL.EXE.@)
- */
-KIRQL WINAPI KeAcquireSpinLockRaiseToDpc(KSPIN_LOCK *spinlock)
-{
-    FIXME( "stub: %p\n", spinlock );
-    return 0;
-}
-
-/***********************************************************************
- *           KeReleaseSpinLock (NTOSKRNL.EXE.@)
- */
-void WINAPI KeReleaseSpinLock( KSPIN_LOCK *spinlock, KIRQL irql )
-{
-    FIXME( "stub: %p %u\n", spinlock, irql );
 }
 
 /***********************************************************************
