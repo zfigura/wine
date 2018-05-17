@@ -172,6 +172,27 @@ todo_wine
     IoFreeMdl(mdl);
 }
 
+static void test_event(void)
+{
+    KEVENT event;
+
+    memset(&event, 0xcc, sizeof(event));
+    KeInitializeEvent(&event, NotificationEvent, TRUE);
+
+    ok(event.Header.Type == NotificationEvent, "got Type %#x\n", event.Header.Type);
+    ok(event.Header.Size == sizeof(event)/sizeof(DWORD), "got Size %u\n", event.Header.Size);
+    ok(event.Header.SignalState == TRUE, "got SignalState %d\n", event.Header.SignalState);
+    ok(IsListEmpty(&event.Header.WaitListHead), "expected empty wait list\n");
+
+    memset(&event, 0xcc, sizeof(event));
+    KeInitializeEvent(&event, SynchronizationEvent, FALSE);
+
+    ok(event.Header.Type == SynchronizationEvent, "got Type %#x\n", event.Header.Type);
+    ok(event.Header.Size == sizeof(event)/sizeof(DWORD), "got Size %u\n", event.Header.Size);
+    ok(event.Header.SignalState == FALSE, "got SignalState %d\n", event.Header.SignalState);
+    ok(IsListEmpty(&event.Header.WaitListHead), "expected empty wait list\n");
+}
+
 static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)
 {
     ULONG length = stack->Parameters.DeviceIoControl.OutputBufferLength;
@@ -197,6 +218,7 @@ static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)
 
     test_currentprocess();
     test_mdl_map();
+    test_event();
 
     /* print process report */
     if (test_input->winetest_debug)

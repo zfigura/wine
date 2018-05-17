@@ -39,7 +39,12 @@ WINE_DEFAULT_DEBUG_CHANNEL(ntoskrnl);
  */
 void WINAPI KeInitializeEvent( PRKEVENT event, EVENT_TYPE type, BOOLEAN state )
 {
-    FIXME( "stub: %p %d %d\n", event, type, state );
+    TRACE("(%p, %#x, %d\n", event, type, state);
+
+    event->Header.Type = type;
+    event->Header.Size = sizeof(KEVENT) / sizeof(DWORD);
+    event->Header.SignalState = state;
+    InitializeListHead(&event->Header.WaitListHead);
 }
 
 /***********************************************************************
