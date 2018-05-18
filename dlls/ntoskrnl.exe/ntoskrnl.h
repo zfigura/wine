@@ -38,3 +38,7 @@
                        "pushl %eax\n\t" \
                        "jmp " __ASM_NAME("__regs_") #name __ASM_STDCALL(12))
 #endif
+
+struct _KTHREAD
+{
+};

@@ -43,8 +43,10 @@
 #include "wine/unicode.h"
 #include "wine/server.h"
 #include "wine/debug.h"
-
+#include "wine/heap.h"
 #include "wine/rbtree.h"
+
+#include "ntoskrnl.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ntoskrnl);
 WINE_DECLARE_DEBUG_CHANNEL(relay);
@@ -1828,8 +1830,12 @@ PEPROCESS WINAPI IoGetCurrentProcess(void)
  */
 PRKTHREAD WINAPI KeGetCurrentThread(void)
 {
-    FIXME("() stub\n");
-    return NULL;
+    TRACE("()\n");
+
+    if (!NtCurrentTeb()->Spare4)
+        NtCurrentTeb()->Spare4 = heap_alloc_zero(sizeof(struct _KTHREAD));
+
+    return NtCurrentTeb()->Spare4;
 }
 
 /***********************************************************************

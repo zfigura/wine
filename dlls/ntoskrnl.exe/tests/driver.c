@@ -152,6 +152,14 @@ todo_wine
     ok(current != NULL, "Expected current process to be non-NULL\n");
 }
 
+static void test_currentthread(void)
+{
+    PKTHREAD current;
+
+    current = KeGetCurrentThread();
+    ok(current != NULL, "Expected current thread to be non-NULL\n");
+}
+
 static void test_mdl_map(void)
 {
     char buffer[20] = "test buffer";
@@ -238,6 +246,7 @@ static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)
     ZwOpenFile(&okfile, FILE_APPEND_DATA, &attr, &io, 0, 0);
 
     test_currentprocess();
+    test_currentthread();
     test_mdl_map();
     test_event();
 
