@@ -182,6 +182,8 @@ todo_wine
 
 static void test_event(void)
 {
+    LARGE_INTEGER timeout;
+    NTSTATUS status;
     KEVENT event;
     LONG r;
 
@@ -220,6 +222,24 @@ static void test_event(void)
     r = KeResetEvent(&event);
     ok(r == FALSE, "got %d\n", r);
     ok(event.Header.SignalState == FALSE, "got state %d\n", event.Header.SignalState);
+
+    /* test waiting */
+
+    memset(&event, 0xcc, sizeof(event));
+    KeInitializeEvent(&event, NotificationEvent, FALSE);
+
+    timeout.QuadPart = 0;
+    status = KeWaitForSingleObject(&event, Executive, KernelMode, TRUE, &timeout);
+    ok(status == STATUS_TIMEOUT, "got %#x\n", status);
+
+    KeSetEvent(&event, 0, FALSE);
+
+    timeout.QuadPart = 0;
+    status = KeWaitForSingleObject(&event, Executive, KernelMode, TRUE, &timeout);
+    ok(status == STATUS_SUCCESS, "got %#x\n", status);
+
+    status = KeWaitForSingleObject(&event, Executive, KernelMode, TRUE, NULL);
+    ok(status == STATUS_SUCCESS, "got %#x\n", status);
 }
 
 static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)

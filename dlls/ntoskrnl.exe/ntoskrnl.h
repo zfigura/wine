@@ -41,4 +41,6 @@
 
 struct _KTHREAD
 {
+    HANDLE wait_event;
+    KWAIT_BLOCK waitblocks[THREAD_WAIT_OBJECTS];
 };

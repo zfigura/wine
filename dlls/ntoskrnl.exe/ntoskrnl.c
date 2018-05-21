@@ -1833,7 +1833,13 @@ PRKTHREAD WINAPI KeGetCurrentThread(void)
     TRACE("()\n");
 
     if (!NtCurrentTeb()->Spare4)
-        NtCurrentTeb()->Spare4 = heap_alloc_zero(sizeof(struct _KTHREAD));
+    {
+        struct _KTHREAD *kthread = heap_alloc_zero(sizeof(struct _KTHREAD));
+
+        kthread->wait_event = CreateEventW(NULL, FALSE, FALSE, NULL);
+
+        NtCurrentTeb()->Spare4 = kthread;
+    }
 
     return NtCurrentTeb()->Spare4;
 }

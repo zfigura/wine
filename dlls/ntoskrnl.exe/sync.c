@@ -32,7 +32,23 @@
 #include "ddk/wdm.h"
 #include "wine/debug.h"
 
+#include "ntoskrnl.h"
+
 WINE_DEFAULT_DEBUG_CHANNEL(ntoskrnl);
+
+static void signal_object(DISPATCHER_HEADER *obj)
+{
+    LIST_ENTRY *mark, *entry;
+    KWAIT_BLOCK *waitblock;
+
+    mark = &obj->WaitListHead;
+
+    for (entry = mark->Flink; entry != mark; entry = entry->Flink)
+    {
+        waitblock = CONTAINING_RECORD(entry, KWAIT_BLOCK, WaitListEntry);
+        NtSetEvent(waitblock->Thread->wait_event, NULL);
+    }
+}
 
 /***********************************************************************
  *           KeInitializeEvent   (NTOSKRNL.EXE.@)
@@ -77,9 +93,11 @@ LONG WINAPI KeSetEvent( PRKEVENT event, KPRIORITY increment, BOOLEAN wait )
 {
     LONG old = event->Header.SignalState;
 
-    FIXME("(%p, %d, %d): stub\n", event, increment, wait);
+    TRACE("%p %d %d\n", event, increment, wait);
 
     event->Header.SignalState = TRUE;
+    signal_object(&event->Header);
+
     return old;
 }
 
@@ -258,7 +276,54 @@ NTSTATUS WINAPI KeWaitForMultipleObjects(ULONG count, void **objects, WAIT_TYPE 
                                          BOOLEAN alertable, LARGE_INTEGER *timeout,
                                          KWAIT_BLOCK *waitblocks)
 {
-    FIXME( "stub: %u, %p, %d, %d, %d, %d, %p, %p\n",
+    struct _KTHREAD *kthread = KeGetCurrentThread();
+    DISPATCHER_HEADER *obj;
+    NTSTATUS status;
+    ULONG i;
+
+    TRACE( "%u %p %d %d %d %d %p %p\n",
         count, objects, type, reason, mode, alertable, timeout, waitblocks );
-    return STATUS_NOT_IMPLEMENTED;
+
+    if (waitblocks)
+    {
+        FIXME("waitblocks not implemented\n");
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    /* check if any of our objects were already signalled */
+
+    for (i = 0; i < count; i++)
+    {
+        obj = (DISPATCHER_HEADER *)objects[i];
+        if (obj->SignalState)
+            return i;
+    }
+
+    for (i = 0; i < count; i++)
+    {
+        obj = (DISPATCHER_HEADER *)objects[i];
+        kthread->waitblocks[i].Thread = KeGetCurrentThread();
+        InsertHeadList(&obj->WaitListHead, &kthread->waitblocks[i].WaitListEntry);
+    }
+
+    status = NtWaitForSingleObject(kthread->wait_event, alertable, timeout);
+
+    if (status == STATUS_SUCCESS)
+    {
+        /* determine which object was signaled */
+        for (i = 0; i < count; i++)
+        {
+            obj = (DISPATCHER_HEADER *)objects[i];
+            if (obj->SignalState)
+            {
+                status = i;
+                break;
+            }
+        }
+    }
+
+    for (i = 0; i < count; i++)
+        RemoveEntryList(&kthread->waitblocks[i].WaitListEntry);
+
+    return status;
 }
