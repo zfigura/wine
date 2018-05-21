@@ -247,8 +247,7 @@ NTSTATUS WINAPI KeDelayExecutionThread(KPROCESSOR_MODE waitmode, BOOLEAN alertab
 NTSTATUS WINAPI KeWaitForSingleObject(void *object, KWAIT_REASON reason, KPROCESSOR_MODE mode,
                                       BOOLEAN alertable, LARGE_INTEGER *timeout)
 {
-    FIXME( "stub: %p, %d, %d, %d, %p\n", object, reason, mode, alertable, timeout );
-    return STATUS_NOT_IMPLEMENTED;
+    return KeWaitForMultipleObjects(1, &object, WaitAny, reason, mode, alertable, timeout, NULL);
 }
 
 /***********************************************************************

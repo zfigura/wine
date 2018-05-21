@@ -168,6 +168,17 @@ typedef struct _FAST_MUTEX
     ULONG OldIrql;
 } FAST_MUTEX, *PFAST_MUTEX;
 
+typedef struct _KWAIT_BLOCK {
+    LIST_ENTRY WaitListEntry;
+    struct _KTHREAD *RESTRICTED_POINTER Thread;
+    PVOID Object;
+    struct _KWAIT_BLOCK *RESTRICTED_POINTER NextWaitBlock;
+    USHORT WaitKey;
+    USHORT WaitType;
+} KWAIT_BLOCK, *PKWAIT_BLOCK, *RESTRICTED_POINTER PRKWAIT_BLOCK;
+
+#define THREAD_WAIT_OBJECTS 3
+
 #define MAXIMUM_VOLUME_LABEL_LENGTH       (32 * sizeof(WCHAR))
 
 typedef struct _VPB {
@@ -1418,6 +1429,7 @@ LONG      WINAPI KeResetEvent(PRKEVENT);
 LONG      WINAPI KeSetEvent(PRKEVENT,KPRIORITY,BOOLEAN);
 KPRIORITY WINAPI KeSetPriorityThread(PKTHREAD,KPRIORITY);
 void      WINAPI KeSetSystemAffinityThread(KAFFINITY);
+NTSTATUS  WINAPI KeWaitForMultipleObjects(ULONG, void **, WAIT_TYPE, KWAIT_REASON, KPROCESSOR_MODE, BOOLEAN, LARGE_INTEGER *, KWAIT_BLOCK *);
 
 PVOID     WINAPI MmAllocateContiguousMemory(SIZE_T,PHYSICAL_ADDRESS);
 PVOID     WINAPI MmAllocateNonCachedMemory(SIZE_T);
