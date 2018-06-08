@@ -282,6 +282,27 @@ NTSTATUS esync_create_event( HANDLE *handle, ACCESS_MASK access,
     return ret;
 }
 
+NTSTATUS esync_set_event( HANDLE handle, LONG *prev )
+{
+    struct event *event = esync_get_object( handle );
+    static const uint64_t value = 1;
+
+    TRACE("%p.\n", handle);
+
+    if (!event) return STATUS_INVALID_HANDLE;
+
+    if (prev)
+    {
+        FIXME("Can't write previous value.\n");
+        *prev = 1;
+    }
+
+    if (write( event->obj.fd, &value, sizeof(value) ) == -1)
+        return FILE_GetNtStatus();
+
+    return STATUS_SUCCESS;
+}
+
 #define TICKSPERSEC        10000000
 #define TICKSPERMSEC       10000
 
