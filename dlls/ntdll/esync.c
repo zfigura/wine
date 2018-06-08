@@ -23,6 +23,7 @@
 
 #include <assert.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
 #ifdef HAVE_SYS_EVENTFD_H
 # include <sys/eventfd.h>
@@ -198,4 +199,25 @@ NTSTATUS esync_create_semaphore(HANDLE *handle, ACCESS_MASK access,
     }
 
     return ret;
+}
+
+NTSTATUS esync_release_semaphore( HANDLE handle, ULONG count, ULONG *prev )
+{
+    struct semaphore *semaphore = esync_get_object( handle );
+    uint64_t count64 = count;
+
+    TRACE("%p, %d, %p.\n", handle, count, prev);
+
+    if (!semaphore) return STATUS_INVALID_HANDLE;
+
+    if (prev)
+    {
+        FIXME("Can't write previous value.\n");
+        *prev = 1;
+    }
+
+    if (write( semaphore->obj.fd, &count64, sizeof(count64) ) == -1)
+        return FILE_GetNtStatus();
+
+    return STATUS_SUCCESS;
 }
