@@ -438,6 +438,10 @@ NTSTATUS WINAPI NtSetEvent( HANDLE handle, LONG *prev_state )
 NTSTATUS WINAPI NtResetEvent( HANDLE handle, LONG *prev_state )
 {
     NTSTATUS ret;
+
+    if (do_esync())
+        return esync_reset_event( handle, prev_state );
+
     SERVER_START_REQ( event_op )
     {
         req->handle = wine_server_obj_handle( handle );
