@@ -5664,6 +5664,7 @@ enum esync_type
     ESYNC_SEMAPHORE = 1,
     ESYNC_AUTO_EVENT,
     ESYNC_MANUAL_EVENT,
+    ESYNC_MUTEX,
     ESYNC_MANUAL_SERVER,
     ESYNC_QUEUE,
 };
@@ -6558,6 +6559,6 @@ union generic_reply
     struct get_esync_fd_reply get_esync_fd_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 557
+#define SERVER_PROTOCOL_VERSION 558
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
