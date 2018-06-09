@@ -21,6 +21,7 @@
 #include "config.h"
 #include "wine/port.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
 #ifdef HAVE_SYS_EVENTFD_H
@@ -143,6 +144,21 @@ int esync_create_fd( int initval, int flags )
 #else
     return -1;
 #endif
+}
+
+/* Wake up a server-side esync object. */
+void esync_wake_up( struct object *obj )
+{
+    static const uint64_t value = 1;
+    int fd;
+
+    if (obj->ops->get_esync_fd)
+    {
+        fd = obj->ops->get_esync_fd( obj );
+
+        if (write( fd, &value, sizeof(value) ) == -1)
+            perror( "esync: write" );
+    }
 }
 
 DECL_HANDLER(create_esync)
