@@ -5675,6 +5675,24 @@ struct create_esync_reply
 };
 
 
+struct open_esync_request
+{
+    struct request_header __header;
+    unsigned int access;
+    unsigned int attributes;
+    obj_handle_t rootdir;
+    int          type;
+    /* VARARG(name,unicode_str); */
+    char __pad_28[4];
+};
+struct open_esync_reply
+{
+    struct reply_header __header;
+    obj_handle_t handle;
+    int          type;
+};
+
+
 struct get_esync_fd_request
 {
     struct request_header __header;
@@ -5992,6 +6010,7 @@ enum request
     REQ_set_job_completion_port,
     REQ_terminate_job,
     REQ_create_esync,
+    REQ_open_esync,
     REQ_get_esync_fd,
     REQ_NB_REQUESTS
 };
@@ -6292,6 +6311,7 @@ union generic_request
     struct set_job_completion_port_request set_job_completion_port_request;
     struct terminate_job_request terminate_job_request;
     struct create_esync_request create_esync_request;
+    struct open_esync_request open_esync_request;
     struct get_esync_fd_request get_esync_fd_request;
 };
 union generic_reply
@@ -6590,6 +6610,7 @@ union generic_reply
     struct set_job_completion_port_reply set_job_completion_port_reply;
     struct terminate_job_reply terminate_job_reply;
     struct create_esync_reply create_esync_reply;
+    struct open_esync_reply open_esync_reply;
     struct get_esync_fd_reply get_esync_fd_reply;
 };
 
