@@ -232,6 +232,7 @@ struct debug_info
 struct ntdll_thread_data
 {
     struct debug_info *debug_info;    /* info for debugstr functions */
+    int                esync_queue_fd;/* fd to wait on for driver events */
     void              *start_stack;   /* stack for thread startup */
     int                request_fd;    /* fd for sending server requests */
     int                reply_fd;      /* fd for receiving server replies */
