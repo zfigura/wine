@@ -464,14 +464,46 @@ static void test_slist(void)
     ok(entry == NULL, "Expected entry == NULL, got %p\n", entry);
 }
 
+static DWORD WINAPI manual_event_proc(void *arg)
+{
+    HANDLE *events = arg;
+    DWORD ret;
+
+    while (!(ret = WaitForSingleObject( events[0], 200 )))
+    {
+        ResetEvent( events[0] );
+        ok(shared_data == 0, "got wrong state %d\n", shared_data);
+        shared_data++;
+        SetEvent( events[1] );
+    }
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+    return 0;
+}
+
+static DWORD WINAPI auto_event_proc(void *arg)
+{
+    HANDLE *events = arg;
+    DWORD ret;
+
+    while (!(ret = WaitForSingleObject( events[0], 200 )))
+    {
+        ok(shared_data == 0, "got wrong state %d\n", shared_data);
+        shared_data++;
+        SetEvent( events[1] );
+    }
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+    return 0;
+}
+
 static void test_event(void)
 {
-    HANDLE handle, handle2;
+    HANDLE handle, handle2, handles[2], thread;
     SECURITY_ATTRIBUTES sa;
     SECURITY_DESCRIPTOR sd;
     ACL acl;
     DWORD ret;
     BOOL val;
+    int i;
 
     /* no sd */
     handle = CreateEventA(NULL, FALSE, FALSE, __FILE__ ": Test Event");
@@ -542,6 +574,173 @@ static void test_event(void)
     ok( GetLastError() == ERROR_INVALID_PARAMETER, "wrong error %u\n", GetLastError());
 
     CloseHandle( handle );
+
+    handle = CreateEventA( NULL, TRUE, FALSE, NULL );
+    ok(!!handle, "got error %u\n", GetLastError());
+
+    ret = WaitForSingleObject( handle, 0 );
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+
+    ret = SetEvent( handle );
+    ok(ret, "got error %u\n", GetLastError());
+
+    ret = SetEvent( handle );
+    ok(ret, "got error %u\n", GetLastError());
+
+    for (i = 0; i < 100; i++)
+    {
+        ret = WaitForSingleObject( handle, 0 );
+        ok(ret == 0, "got %u\n", ret);
+    }
+
+    ret = ResetEvent( handle );
+    ok(ret, "got error %u\n", GetLastError());
+
+    ret = ResetEvent( handle );
+    ok(ret, "got error %u\n", GetLastError());
+
+    ret = WaitForSingleObject( handle, 0 );
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+
+    handle2 = CreateEventA( NULL, FALSE, TRUE, NULL );
+    ok(!!handle2, "got error %u\n", GetLastError());
+
+    ret = WaitForSingleObject( handle2, 0 );
+    ok(ret == 0, "got %u\n", ret);
+
+    ret = WaitForSingleObject( handle2, 0 );
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+
+    ret = SetEvent( handle2 );
+    ok(ret, "got error %u\n", GetLastError());
+
+    ret = SetEvent( handle2 );
+    ok(ret, "got error %u\n", GetLastError());
+
+    ret = ResetEvent( handle2 );
+    ok(ret, "got error %u\n", GetLastError());
+
+    ret = ResetEvent( handle2 );
+    ok(ret, "got error %u\n", GetLastError());
+
+    ret = WaitForSingleObject( handle2, 0 );
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+
+    handles[0] = handle;
+    handles[1] = handle2;
+
+    ret = WaitForMultipleObjects( 2, handles, FALSE, 0 );
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+
+    SetEvent( handle );
+    SetEvent( handle2 );
+
+    ret = WaitForMultipleObjects( 2, handles, FALSE, 0 );
+    ok(ret == 0, "got %u\n", ret);
+
+    ret = WaitForMultipleObjects( 2, handles, FALSE, 0 );
+    ok(ret == 0, "got %u\n", ret);
+
+    ret = WaitForSingleObject( handle2, 0 );
+    ok(ret == 0, "got %u\n", ret);
+
+    ResetEvent( handle );
+    SetEvent( handle2 );
+
+    ret = WaitForMultipleObjects( 2, handles, FALSE, 0 );
+    ok(ret == 1, "got %u\n", ret);
+
+    ret = WaitForMultipleObjects( 2, handles, FALSE, 0 );
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+
+    SetEvent( handle );
+    SetEvent( handle2 );
+
+    ret = WaitForMultipleObjects( 2, handles, TRUE, 0 );
+    ok(ret == 0, "got %u\n", ret);
+
+    ret = WaitForMultipleObjects( 2, handles, TRUE, 0 );
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+
+    SetEvent( handle2 );
+    ResetEvent( handle );
+
+    ret = WaitForMultipleObjects( 2, handles, TRUE, 0 );
+    ok(ret == WAIT_TIMEOUT, "got %u\n", ret);
+
+    ret = WaitForSingleObject( handle2, 0 );
+    ok(ret == 0, "got %u\n", ret);
+
+    handles[0] = handle2;
+    handles[1] = handle;
+    SetEvent( handle );
+    SetEvent( handle2 );
+
+    ret = WaitForMultipleObjects( 2, handles, FALSE, 0 );
+    ok(ret == 0, "got %u\n", ret);
+
+    ret = WaitForMultipleObjects( 2, handles, FALSE, 0 );
+    ok(ret == 1, "got %u\n", ret);
+
+    ret = WaitForMultipleObjects( 2, handles, FALSE, 0 );
+    ok(ret == 1, "got %u\n", ret);
+
+    ret = CloseHandle( handle );
+    ok(ret, "got error %u\n", GetLastError());
+
+    ret = CloseHandle( handle2 );
+    ok(ret, "got error %u\n", GetLastError());
+
+    shared_data = 0;
+    handles[0] = CreateEventA(NULL, TRUE, FALSE, NULL);
+    ok(!!handles[0], "got error %u\n", GetLastError());
+    handles[1] = CreateEventA(NULL, TRUE, FALSE, NULL);
+    ok(!!handles[1], "got error %u\n", GetLastError());
+    thread = CreateThread( NULL, 0, manual_event_proc, handles, 0, NULL );
+
+    for (i = 0; i < 1000; ++i)
+    {
+        SetEvent( handles[0] );
+        ret = WaitForSingleObject( handles[1], 200 );
+        ResetEvent( handles[1] );
+        ok(!ret, "got %u\n", ret);
+        ok(shared_data == 1, "got wrong state %d\n", shared_data);
+        shared_data--;
+    }
+    ret = WaitForSingleObject( thread, 1000 );
+    ok(!ret, "got %u\n", ret);
+    CloseHandle( thread );
+    ok(!shared_data, "got wrong state %d\n", shared_data);
+
+    ret = CloseHandle( handles[0] );
+    ok(ret, "got error %u\n", GetLastError());
+    ret = CloseHandle( handles[1] );
+    ok(ret, "got error %u\n", GetLastError());
+
+    shared_data = 0;
+    handles[0] = CreateEventA(NULL, FALSE, FALSE, NULL);
+    ok(!!handles[0], "got error %u\n", GetLastError());
+    handles[1] = CreateEventA(NULL, FALSE, FALSE, NULL);
+    ok(!!handles[1], "got error %u\n", GetLastError());
+    thread = CreateThread( NULL, 0, auto_event_proc, handles, 0, NULL );
+
+    for (i = 0; i < 1000; ++i)
+    {
+        SetEvent( handles[0] );
+        ret = WaitForSingleObject( handles[1], 200 );
+        ok(!ret, "got %u\n", ret);
+        ok(shared_data == 1, "got wrong state %d\n", shared_data);
+        shared_data--;
+    }
+    ret = WaitForSingleObject( thread, 1000 );
+    ok(!ret, "got %u\n", ret);
+    CloseHandle( thread );
+    ok(!shared_data, "got wrong state %d\n", shared_data);
+
+    ret = CloseHandle( handles[0] );
+    ok(ret, "got error %u\n", GetLastError());
+    ret = CloseHandle( handles[1] );
+    ok(ret, "got error %u\n", GetLastError());
 
     /* resource notifications are events too */
 
