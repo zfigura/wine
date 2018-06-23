@@ -1,4 +1,9 @@
 MODULE    = dsdmo.dll
+IMPORTS   = dmoguids uuid
 
 C_SRCS = \
-	dsdmo_main.c
+	dsdmo_main.c \
+	effects.c
+
+IDL_SRCS = \
+	dsdmo_classes.idl
