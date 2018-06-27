@@ -804,7 +804,6 @@ static void focus_out( Display *display , HWND hwnd )
         return;
     }
     if (hwnd != GetForegroundWindow()) return;
-    SendMessageW( hwnd, WM_CANCELMODE, 0, 0 );
 
     /* don't reset the foreground window, if the window which is
        getting the focus is a Wine window */
