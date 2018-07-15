@@ -27,35 +27,95 @@
 
 IUnknown *wrapper_unk;
 
-static HRESULT WINAPI MediaObject_QueryInterface(IMediaObject *iface, REFIID iid, void **obj)
+struct media_obj
 {
-    if (IsEqualGUID(iid, &IID_IMediaObject) || IsEqualGUID(iid, &IID_IUnknown))
-    {
-        *obj = iface;
-        return S_OK;
-    }
+    IUnknown IUnknown_inner;
+    IMediaObject IMediaObject_iface;
+    IUnknown *outer;
+    LONG ref;
+};
+
+static inline struct media_obj *impl_from_IUnknown(IUnknown *iface)
+{
+    return CONTAINING_RECORD(iface, struct media_obj, IUnknown_inner);
+}
+
+static HRESULT WINAPI Unknown_QueryInterface(IUnknown *iface, REFIID iid, void **obj)
+{
+    struct media_obj *This = impl_from_IUnknown(iface);
+
+    if (IsEqualGUID(iid, &IID_IUnknown))
+        *obj = &This->IUnknown_inner;
+    else if (IsEqualGUID(iid, &IID_IMediaObject))
+        *obj = &This->IMediaObject_iface;
     else if (IsEqualGUID(iid, &IID_IDMOQualityControl) ||
              IsEqualGUID(iid, &IID_IDMOVideoOutputOptimizations))
+    {
+        *obj = NULL;
         return E_NOINTERFACE;
+    }
+    else
+    {
+        ok(0, "unexpected iid %s\n", wine_dbgstr_guid(iid));
+        *obj = NULL;
+        return E_NOINTERFACE;
+    }
 
-    ok(0, "unexpected iid %s\n", wine_dbgstr_guid(iid));
-    return E_NOINTERFACE;
+    IUnknown_AddRef((IUnknown *)*obj);
+    return S_OK;
+}
+
+static ULONG WINAPI Unknown_AddRef(IUnknown *iface)
+{
+    struct media_obj *This = impl_from_IUnknown(iface);
+    ULONG refcount = InterlockedIncrement(&This->ref);
+
+    return refcount;
+}
+
+static ULONG WINAPI Unknown_Release(IUnknown *iface)
+{
+    struct media_obj *This = impl_from_IUnknown(iface);
+    ULONG refcount = InterlockedDecrement(&This->ref);
+
+    return refcount;
+}
+
+static const IUnknownVtbl Unknown_vtbl = {
+    Unknown_QueryInterface,
+    Unknown_AddRef,
+    Unknown_Release,
+};
+
+static inline struct media_obj *impl_from_IMediaObject(IMediaObject *iface)
+{
+    return CONTAINING_RECORD(iface, struct media_obj, IMediaObject_iface);
+}
+
+static HRESULT WINAPI MediaObject_QueryInterface(IMediaObject *iface, REFIID iid, void **obj)
+{
+    struct media_obj *This = impl_from_IMediaObject(iface);
+    return IUnknown_QueryInterface(This->outer, iid, obj);
 }
 
 static ULONG WINAPI MediaObject_AddRef(IMediaObject *iface)
 {
-    return 2;
+    struct media_obj *This = impl_from_IMediaObject(iface);
+    return IUnknown_AddRef(This->outer);
 }
 
 static ULONG WINAPI MediaObject_Release(IMediaObject *iface)
 {
-    return 1;
+    struct media_obj *This = impl_from_IMediaObject(iface);
+    return IUnknown_Release(This->outer);
 }
 
 static HRESULT WINAPI MediaObject_GetStreamCount(IMediaObject *iface, DWORD *input, DWORD *output)
 {
-    ok(0, "unexpected call\n");
-    return E_NOTIMPL;
+    if (winetest_debug > 1) trace("GetStreamCount(%p, %p)\n", input, output);
+    *input = 2;
+    *output = 2;
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaObject_GetInputStreamInfo(IMediaObject *iface, DWORD index, DWORD *flags)
@@ -66,7 +126,8 @@ static HRESULT WINAPI MediaObject_GetInputStreamInfo(IMediaObject *iface, DWORD 
 
 static HRESULT WINAPI MediaObject_GetOutputStreamInfo(IMediaObject *iface, DWORD index, DWORD *flags)
 {
-    ok(0, "unexpected call\n");
+    if (winetest_debug > 1) trace("GetOutputStreamInfo(%u, %p)\n", index, flags);
+    
     return E_NOTIMPL;
 }
 
@@ -206,7 +267,7 @@ static const IMediaObjectVtbl MediaObject_vtbl = {
     MediaObject_Lock,
 };
 
-static IMediaObject MediaObject = { &MediaObject_vtbl };
+static struct media_obj test_media_obj;
 
 static HRESULT WINAPI ClassFactory_QueryInterface(IClassFactory *iface, REFIID iid, void **obj)
 {
@@ -233,13 +294,22 @@ static ULONG WINAPI ClassFactory_Release(IClassFactory *iface)
     return 1;
 }
 
-static HRESULT WINAPI ClassFactory_CreateInstance(IClassFactory *iface, IUnknown *outer, REFIID iid, void **obj)
+static HRESULT WINAPI ClassFactory_CreateInstance(IClassFactory *iface,
+    IUnknown *outer, REFIID iid, void **obj)
 {
+    HRESULT hr;
+
     ok(outer == wrapper_unk, "expected %p, got %p\n", wrapper_unk, outer);
     ok(IsEqualGUID(iid, &IID_IUnknown), "got iid %s\n", wine_dbgstr_guid(iid));
 
-    *obj = &MediaObject;
-    return S_OK;
+    test_media_obj.IUnknown_inner.lpVtbl = &Unknown_vtbl;
+    test_media_obj.IMediaObject_iface.lpVtbl = &MediaObject_vtbl;
+    test_media_obj.outer = outer;
+    test_media_obj.ref = 1;
+
+    hr = IUnknown_QueryInterface(&test_media_obj.IUnknown_inner, iid, obj);
+    IUnknown_Release(&test_media_obj.IUnknown_inner);
+    return hr;
 }
 
 static HRESULT WINAPI ClassFactory_LockServer(IClassFactory *iface, BOOL lock)
@@ -266,6 +336,7 @@ static void test_dmo_wrapper(void)
     IDMOWrapperFilter *wrapper;
     DWORD cookie;
     HRESULT hr;
+    LONG ref;
 
     hr = DMORegister(nameW, &CLSID_test_dmo, &DMOCATEGORY_AUDIO_DECODER, 0, 0, NULL, 0, NULL);
     if (hr == E_FAIL)
@@ -290,7 +361,11 @@ static void test_dmo_wrapper(void)
     ok(hr == S_OK, "got %#x\n", hr);
 
     IUnknown_Release(wrapper_unk);
-    IDMOWrapperFilter_Release(wrapper);
+
+    /* check for reference leaks */
+    ref = IDMOWrapperFilter_Release(wrapper);
+    ok(!ref, "Release returned %u\n", ref);
+    ok(!test_media_obj.ref, "got %d refs left\n", test_media_obj.ref);
 
     CoRevokeClassObject(cookie);
     DMOUnregister(&CLSID_test_dmo, &DMOCATEGORY_AUDIO_DECODER);
