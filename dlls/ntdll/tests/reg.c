@@ -1400,7 +1400,7 @@ static DWORD get_key_value( HANDLE root, const char *name, DWORD flags )
 static void _check_key_value( int line, HANDLE root, const char *name, DWORD flags, DWORD expect )
 {
     DWORD dw = get_key_value( root, name, flags );
-    ok_(__FILE__,line)( dw == expect, "%08x: wrong value %u/%u\n", flags, dw, expect );
+    ok_(__FILE__,line)( dw == expect, "%08x: expected %u, got %u\n", flags, expect, dw );
 }
 #define check_key_value(root,name,flags,expect) _check_key_value( __LINE__, root, name, flags, expect )
 
@@ -1425,14 +1425,71 @@ static void _check_key_name( int line, HANDLE key, const char *expect )
 }
 #define check_key_name(key,name) _check_key_name( __LINE__, key, name )
 
+static BOOL is_vista;
+
+/* there are several ways to open the same key; these helpers check that all of
+ * them yield the same behaviour */
+static void check_redirection_software( HANDLE key )
+{
+    DWORD value;
+
+    check_key_name( key, "\\Registry\\Machine\\Software" );
+
+    if (ptr_size == 64)
+    {
+        /* KEY_WOW64 flags have no effect on 64-bit */
+        check_key_value( key, "Wine\\Winetest", 0, 64 );
+        check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, 64 );
+        check_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY, 64 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, 32 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_64KEY, 32 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_32KEY, 32 );
+    }
+    else
+    {
+        value = get_key_value( key, "Wine\\Winetest", 0 );
+        ok( value == 64 || broken(value == 32) /* xp64 */, "wrong value %u\n", value );
+        check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, 64 );
+        check_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY, 32 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, 32 );
+        value = get_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_64KEY );
+        ok( value == 32 || broken(value == 64) /* xp64 */, "wrong value %u\n", value );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_32KEY, 32 );
+    }
+}
+
+static void check_redirection_software_wow6432node( HANDLE key )
+{
+    check_key_name( key, "\\Registry\\Machine\\Software\\WOW6432Node" );
+
+    if (ptr_size == 64)
+    {
+        /* KEY_WOW64 flags have no effect on 64-bit */
+        check_key_value( key, "Wine\\Winetest", 0, 32 );
+        check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, 32 );
+        check_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY, 32 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, 0 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_64KEY, 0 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_32KEY, 0 );
+    }
+    else
+    {
+        check_key_value( key, "Wine\\Winetest", 0, 32 );
+        check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, is_vista ? 64 : 32 );
+        check_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY, 32 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, is_vista ? 32 : 0 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_64KEY, is_vista ? 64 : 0 );
+        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_32KEY, is_vista ? 32 : 0 );
+    }
+}
+
 static void test_redirection(void)
 {
     NTSTATUS status;
     char buffer[1024];
     KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
     DWORD dw, len;
-    HANDLE key, root32, root64, key32, key64, int32, int64;
-    BOOL is_vista = FALSE;
+    HANDLE key, subkey, root32, root64, key32, key64, int32, int64;
 
     if (ptr_size != 64)
     {
@@ -1483,7 +1540,6 @@ static void test_redirection(void)
 
     if (ptr_size == 32)
     {
-        check_key_name( key, "\\Registry\\Machine\\Software\\WOW6432Node" );
         /* the Vista mechanism allows opening Wow6432Node from a 32-bit key too */
         /* the new (and simpler) Win7 mechanism doesn't */
         if (get_key_value( key, "Wow6432Node\\Wine\\Winetest", 0 ) == 32)
@@ -1491,55 +1547,75 @@ static void test_redirection(void)
             trace( "using Vista-style Wow6432Node handling\n" );
             is_vista = TRUE;
         }
-        check_key_value( key, "Wine\\Winetest", 0, 32 );
-        check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, is_vista ? 64 : 32 );
-        check_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY, 32 );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, is_vista ? 32 : 0 );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_64KEY, is_vista ? 64 : 0 );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_32KEY, is_vista ? 32 : 0 );
+
+        check_redirection_software_wow6432node( key );
     }
     else
-    {
-        check_key_name( key, "\\Registry\\Machine\\Software" );
-        check_key_value( key, "Wine\\Winetest", 0, 64 );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, 32 );
-    }
+        check_redirection_software( key );
+
     pNtClose( key );
 
+    status = create_key( &key, 0, "\\Registry\\Machine\\Software", KEY_WOW64_32KEY );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
     if (ptr_size == 32)
-    {
-        HANDLE subkey;
+        check_redirection_software_wow6432node( key );
+    else
+        check_redirection_software( key );
+    pNtClose( key );
 
-        status = create_key( &key, 0, "\\Registry\\Machine\\Software", KEY_WOW64_64KEY );
-        ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
-        check_key_name( key, "\\Registry\\Machine\\Software" );
-        dw = get_key_value( key, "Wine\\Winetest", 0 );
-        ok( dw == 64 || broken(dw == 32) /* xp64 */, "wrong value %u\n", dw );
-        check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, 64 );
-        check_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY, 32 );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, 32 );
-        dw = get_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_64KEY );
-        ok( dw == 32 || broken(dw == 64) /* xp64 */, "wrong value %u\n", dw );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_32KEY, 32 );
+    status = create_key( &key, 0, "\\Registry\\Machine\\Software", KEY_WOW64_64KEY );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software( key );
 
-        status = create_key( &subkey, key, "", KEY_WOW64_32KEY );
-        ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
-        check_key_name( subkey, "\\Registry\\Machine\\Software\\WOW6432Node" );
-        pNtClose( subkey );
+    status = create_key( &subkey, key, "", 0 );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software( subkey );
+    pNtClose( subkey );
 
-        pNtClose( key );
+    status = create_key( &subkey, key, "", KEY_WOW64_64KEY );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software( subkey );
+    pNtClose( subkey );
 
-        status = create_key( &key, 0, "\\Registry\\Machine\\Software", KEY_WOW64_32KEY );
-        ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
-        check_key_name( key, "\\Registry\\Machine\\Software\\WOW6432Node" );
-        check_key_value( key, "Wine\\Winetest", 0, 32 );
-        check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, is_vista ? 64 : 32 );
-        check_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY, 32 );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", 0, is_vista ? 32 : 0 );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_64KEY, is_vista ? 64 : 0 );
-        check_key_value( key, "Wow6432Node\\Wine\\Winetest", KEY_WOW64_32KEY, is_vista ? 32 : 0 );
-        pNtClose( key );
-    }
+    status = create_key( &subkey, key, "", KEY_WOW64_32KEY );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    if (ptr_size == 32)
+        check_redirection_software_wow6432node( subkey );
+    else
+        check_redirection_software( subkey );
+    pNtClose( subkey );
+
+    status = create_key( &subkey, key, "Wow6432Node", 0 );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software_wow6432node( subkey );
+    pNtClose( subkey );
+
+    status = create_key( &subkey, key, "Wow6432Node", KEY_WOW64_64KEY );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software_wow6432node( subkey );
+    pNtClose( subkey );
+
+    status = create_key( &subkey, key, "Wow6432Node", KEY_WOW64_32KEY );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software_wow6432node( subkey );
+    pNtClose( subkey );
+
+    pNtClose( key );
+
+    status = create_key( &key, 0, "\\Registry\\Machine\\Software\\Wow6432Node", 0 );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software_wow6432node( key );
+    pNtClose( key );
+
+    status = create_key( &key, 0, "\\Registry\\Machine\\Software\\Wow6432Node", KEY_WOW64_64KEY );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software_wow6432node( key );
+    pNtClose( key );
+
+    status = create_key( &key, 0, "\\Registry\\Machine\\Software\\Wow6432Node", KEY_WOW64_32KEY );
+    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
+    check_redirection_software_wow6432node( key );
+    pNtClose( key );
 
     check_key_value( 0, "\\Registry\\Machine\\Software\\Wine\\Winetest", 0, ptr_size );
     check_key_value( 0, "\\Registry\\Machine\\Software\\Wow6432Node\\Wine\\Winetest", 0, 32 );
@@ -1558,13 +1634,6 @@ static void test_redirection(void)
         check_key_value( 0, "\\Registry\\Machine\\Software\\Wow6432Node\\Wine\\Winetest", KEY_WOW64_64KEY, is_vista ? 64 : 32 );
         check_key_value( 0, "\\Registry\\Machine\\Software\\Wow6432Node\\Wine\\Winetest", KEY_WOW64_32KEY, 32 );
     }
-
-    status = create_key( &key, 0, "\\Registry\\Machine\\Software\\Wow6432Node", 0 );
-    ok( status == STATUS_SUCCESS, "NtCreateKey failed: 0x%08x\n", status );
-    check_key_value( key, "Wine\\Winetest", 0, 32 );
-    check_key_value( key, "Wine\\Winetest", KEY_WOW64_64KEY, (ptr_size == 64) ? 32 : (is_vista ? 64 : 32) );
-    check_key_value( key, "Wine\\Winetest", KEY_WOW64_32KEY, 32 );
-    pNtClose( key );
 
     if (ptr_size == 32)
     {
