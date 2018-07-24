@@ -1905,6 +1905,14 @@ static void test_device_interface_key(void)
     RegCloseKey(dikey);
     RegCloseKey(key);
 
+    dikey = SetupDiOpenDeviceInterfaceRegKey(set, &iface, 0, KEY_READ);
+    ok(dikey != INVALID_HANDLE_VALUE, "got error %u\n", GetLastError());
+    sz = sizeof(buffer);
+    ret = RegQueryValueA(dikey, NULL, buffer, &sz);
+    ok(!ret, "RegQueryValue failed: %u\n", ret);
+    ok(!strcmp(buffer, "test"), "got wrong data %s\n", buffer);
+    RegCloseKey(dikey);
+
     ret = SetupDiDeleteDeviceInterfaceRegKey(set, &iface, 0);
     ok(ret, "got error %u\n", GetLastError());
 
