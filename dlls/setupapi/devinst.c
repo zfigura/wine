@@ -2706,6 +2706,47 @@ BOOL WINAPI SetupDiDeleteDeviceInterfaceRegKey(HDEVINFO devinfo,
 }
 
 /***********************************************************************
+ *      SetupDiOpenDeviceInterfaceRegKey (SETUPAPI.@)
+ */
+HKEY WINAPI SetupDiOpenDeviceInterfaceRegKey(HDEVINFO devinfo,
+    SP_DEVICE_INTERFACE_DATA *iface_data, DWORD reserved, REGSAM access)
+{
+    struct device_iface *iface;
+    HKEY refstr_key, params_key;
+    WCHAR *path;
+    LONG ret;
+
+    TRACE("%p %p %d %#x\n", devinfo, iface_data, reserved, access);
+
+    iface = (struct device_iface *)iface_data->Reserved;
+    if (!(path = get_refstr_key_path(iface)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+
+    ret = RegCreateKeyExW(HKEY_LOCAL_MACHINE, path, 0, NULL, 0, 0, NULL,
+        &refstr_key, NULL);
+    heap_free(path);
+    if (ret)
+    {
+        SetLastError(ret);
+        return INVALID_HANDLE_VALUE;
+    }
+
+    ret = RegCreateKeyExW(refstr_key, DeviceParameters, 0, NULL, 0, access,
+        NULL, &params_key, NULL);
+    RegCloseKey(refstr_key);
+    if (ret)
+    {
+        SetLastError(ret);
+        return INVALID_HANDLE_VALUE;
+    }
+
+    return params_key;
+}
+
+/***********************************************************************
  *		SetupDiEnumDeviceInterfaces (SETUPAPI.@)
  *
  * PARAMS
