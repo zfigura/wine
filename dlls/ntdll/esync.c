@@ -294,7 +294,7 @@ NTSTATUS esync_close( HANDLE handle )
 }
 
 static NTSTATUS create_esync( enum esync_type type, HANDLE *handle,
-    ACCESS_MASK access, const OBJECT_ATTRIBUTES *attr, int initval )
+    ACCESS_MASK access, const OBJECT_ATTRIBUTES *attr, int initval, int max )
 {
     NTSTATUS ret;
     data_size_t len;
@@ -314,6 +314,7 @@ static NTSTATUS create_esync( enum esync_type type, HANDLE *handle,
         req->access  = access;
         req->initval = initval;
         req->type    = type;
+        req->max     = max;
         wine_server_add_data( req, objattr, len );
         ret = wine_server_call( req );
         if (!ret || ret == STATUS_OBJECT_NAME_EXISTS)
@@ -378,60 +379,21 @@ static NTSTATUS open_esync( enum esync_type type, HANDLE *handle,
     return ret;
 }
 
-RTL_CRITICAL_SECTION shm_init_section;
-static RTL_CRITICAL_SECTION_DEBUG critsect_debug =
-{
-    0, 0, &shm_init_section,
-    { &critsect_debug.ProcessLocksList, &critsect_debug.ProcessLocksList },
-      0, 0, { (DWORD_PTR)(__FILE__ ": shm_init_section") }
-};
-RTL_CRITICAL_SECTION shm_init_section = { &critsect_debug, -1, 0, 0, 0, 0 };
-
 NTSTATUS esync_create_semaphore(HANDLE *handle, ACCESS_MASK access,
     const OBJECT_ATTRIBUTES *attr, LONG initial, LONG max)
 {
-    NTSTATUS ret;
-
     TRACE("name %s, initial %d, max %d.\n",
         attr ? debugstr_us(attr->ObjectName) : "<no name>", initial, max);
 
-    /* We need this lock to protect against a potential (though unlikely) race:
-     * if a different process tries to open a named object and manages to use
-     * it between the time we get back from the server and the time we
-     * initialize the shared memory, it'll have uninitialized values for the
-     * object's state. That requires us to be REALLY slow, but we're not taking
-     * any chances. Synchronize on the CS here so that we're sure to be ready
-     * before anyone else can open the object. */
-    RtlEnterCriticalSection( &shm_init_section );
-
-    ret = create_esync( ESYNC_SEMAPHORE, handle, access, attr, initial );
-    if (!ret)
-    {
-        /* Initialize the shared memory portion.
-         * Note we store max here (even though we don't need to) just to keep
-         * it the same size as the mutex's shm portion. */
-        struct esync *obj = get_cached_object( *handle );
-        struct semaphore *semaphore = obj->shm;
-        semaphore->max = max;
-        semaphore->count = initial;
-    }
-
-    RtlLeaveCriticalSection( &shm_init_section );
-
-    return ret;
+    return create_esync( ESYNC_SEMAPHORE, handle, access, attr, initial, max );
 }
 
 NTSTATUS esync_open_semaphore( HANDLE *handle, ACCESS_MASK access,
     const OBJECT_ATTRIBUTES *attr )
 {
-    NTSTATUS ret;
-
     TRACE("name %s.\n", debugstr_us(attr->ObjectName));
 
-    RtlEnterCriticalSection( &shm_init_section );
-    ret = open_esync( ESYNC_SEMAPHORE, handle, access, attr );
-    RtlLeaveCriticalSection( &shm_init_section );
-    return ret;
+    return open_esync( ESYNC_SEMAPHORE, handle, access, attr );
 }
 
 NTSTATUS esync_release_semaphore( HANDLE handle, ULONG count, ULONG *prev )
@@ -497,41 +459,20 @@ NTSTATUS esync_create_event( HANDLE *handle, ACCESS_MASK access,
     const OBJECT_ATTRIBUTES *attr, EVENT_TYPE event_type, BOOLEAN initial )
 {
     enum esync_type type = (event_type == SynchronizationEvent ? ESYNC_AUTO_EVENT : ESYNC_MANUAL_EVENT);
-    NTSTATUS ret;
 
     TRACE("name %s, %s-reset, initial %d.\n",
         attr ? debugstr_us(attr->ObjectName) : "<no name>",
         event_type == NotificationEvent ? "manual" : "auto", initial);
 
-    RtlEnterCriticalSection( &shm_init_section );
-
-    ret = create_esync( type, handle, access, attr, initial );
-
-    if (!ret)
-    {
-        /* Initialize the shared memory portion. */
-        struct esync *obj = get_cached_object( *handle );
-        struct event *event = obj->shm;
-        event->signaled = initial;
-        event->locked = 0;
-    }
-
-    RtlLeaveCriticalSection( &shm_init_section );
-
-    return ret;
+    return create_esync( type, handle, access, attr, initial, 0 );
 }
 
 NTSTATUS esync_open_event( HANDLE *handle, ACCESS_MASK access,
     const OBJECT_ATTRIBUTES *attr )
 {
-    NTSTATUS ret;
-
     TRACE("name %s.\n", debugstr_us(attr->ObjectName));
 
-    RtlEnterCriticalSection( &shm_init_section );
-    ret = open_esync( ESYNC_AUTO_EVENT, handle, access, attr ); /* doesn't matter which */
-    RtlLeaveCriticalSection( &shm_init_section );
-    return ret;
+    return open_esync( ESYNC_AUTO_EVENT, handle, access, attr ); /* doesn't matter which */
 }
 
 static inline void small_pause(void)
@@ -695,39 +636,18 @@ NTSTATUS esync_query_event( HANDLE handle, EVENT_INFORMATION_CLASS class,
 NTSTATUS esync_create_mutex( HANDLE *handle, ACCESS_MASK access,
     const OBJECT_ATTRIBUTES *attr, BOOLEAN initial )
 {
-    NTSTATUS ret;
-
     TRACE("name %s, initial %d.\n",
         attr ? debugstr_us(attr->ObjectName) : "<no name>", initial);
 
-    RtlEnterCriticalSection( &shm_init_section );
-
-    ret = create_esync( ESYNC_MUTEX, handle, access, attr, initial ? 0 : 1 );
-    if (!ret)
-    {
-        /* Initialize the shared memory portion. */
-        struct esync *obj = get_cached_object( *handle );
-        struct mutex *mutex = obj->shm;
-        mutex->tid = initial ? GetCurrentThreadId() : 0;
-        mutex->count = initial ? 1 : 0;
-    }
-
-    RtlLeaveCriticalSection( &shm_init_section );
-
-    return ret;
+    return create_esync( ESYNC_MUTEX, handle, access, attr, initial ? 0 : 1, 0 );
 }
 
 NTSTATUS esync_open_mutex( HANDLE *handle, ACCESS_MASK access,
     const OBJECT_ATTRIBUTES *attr )
 {
-    NTSTATUS ret;
-
     TRACE("name %s.\n", debugstr_us(attr->ObjectName));
 
-    RtlEnterCriticalSection( &shm_init_section );
-    ret = open_esync( ESYNC_MUTEX, handle, access, attr );
-    RtlLeaveCriticalSection( &shm_init_section );
-    return ret;
+    return open_esync( ESYNC_MUTEX, handle, access, attr );
 }
 
 NTSTATUS esync_release_mutex( HANDLE *handle, LONG *prev )
