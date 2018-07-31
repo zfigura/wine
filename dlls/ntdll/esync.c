@@ -1069,6 +1069,7 @@ NTSTATUS esync_wait_objects( DWORD count, const HANDLE *handles, BOOLEAN wait_an
                             return i;
                         }
                     }
+                    break;
                 }
                 case ESYNC_MANUAL_EVENT:
                 {
