@@ -169,16 +169,20 @@ void memory_examine(const struct dbg_lvalue *lvalue, int count, char format)
     switch (format)
     {
     case 'u':
-        if (count == 1) count = 256;
-        memory_get_string(dbg_curr_process, linear, 
-                          TRUE, TRUE, buffer, min(count, sizeof(buffer)));
-        dbg_printf("%s\n", buffer);
+        for (i = 0; i < count; i++)
+        {
+            memory_get_string(dbg_curr_process, linear, TRUE, TRUE, buffer, sizeof(buffer));
+            dbg_printf("u\"%s\"\n", buffer);
+            linear = (char *)linear + strlen(buffer) + 1;
+        }
         break;
     case 's':
-        if (count == 1) count = 256;
-        memory_get_string(dbg_curr_process, linear,
-                          TRUE, FALSE, buffer, min(count, sizeof(buffer)));
-        dbg_printf("%s\n", buffer);
+        for (i = 0; i < count; i++)
+        {
+            memory_get_string(dbg_curr_process, linear, TRUE, FALSE, buffer, sizeof(buffer));
+            dbg_printf("\"%s\"\n", buffer);
+            linear = (WCHAR *)linear + strlen(buffer) + 1;
+        }
         break;
     case 'i':
         while (count-- && memory_disasm_one_insn(&addr));
