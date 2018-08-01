@@ -33,6 +33,8 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(winedbg);
 
+char last_format = 'x';
+
 void* be_cpu_linearize(HANDLE hThread, const ADDRESS64* addr)
 {
     assert(addr->Mode == AddrModeFlat);
@@ -144,6 +146,7 @@ BOOL memory_write_value(const struct dbg_lvalue* lvalue, DWORD size, void* value
  */
 void memory_examine(const struct dbg_lvalue *lvalue, int count, char format)
 {
+    static int last_count = 1;
     int			i;
     char                buffer[256];
     ADDRESS64           addr;
@@ -151,6 +154,11 @@ void memory_examine(const struct dbg_lvalue *lvalue, int count, char format)
 
     types_extract_as_address(lvalue, &addr);
     linear = memory_to_linear_addr(&addr);
+
+    if (!count)
+        count = last_count;
+    if (!format)
+        format = last_format;
 
     if (format != 'i' && count > 1)
     {
@@ -165,16 +173,16 @@ void memory_examine(const struct dbg_lvalue *lvalue, int count, char format)
         memory_get_string(dbg_curr_process, linear, 
                           TRUE, TRUE, buffer, min(count, sizeof(buffer)));
         dbg_printf("%s\n", buffer);
-        return;
+        break;
     case 's':
         if (count == 1) count = 256;
         memory_get_string(dbg_curr_process, linear,
                           TRUE, FALSE, buffer, min(count, sizeof(buffer)));
         dbg_printf("%s\n", buffer);
-        return;
+        break;
     case 'i':
         while (count-- && memory_disasm_one_insn(&addr));
-        return;
+        break;
     case 'g':
         while (count--)
         {
@@ -196,7 +204,7 @@ void memory_examine(const struct dbg_lvalue *lvalue, int count, char format)
                 dbg_printf(": ");
             }
         }
-        return;
+        break;
 
 #define DO_DUMP2(_t,_l,_f,_vv) {                                        \
             _t _v;                                                      \
@@ -233,6 +241,9 @@ void memory_examine(const struct dbg_lvalue *lvalue, int count, char format)
     case 'c': DO_DUMP2(char, 32, " %c", (_v < 0x20) ? ' ' : _v); break;
     case 'b': DO_DUMP2(char, 16, " %02x", (_v) & 0xff); break;
     }
+
+    last_count = count;
+    last_format = format;
 }
 
 BOOL memory_get_string(struct dbg_process* pcs, void* addr, BOOL in_debuggee,
@@ -516,46 +527,44 @@ static void print_typed_basic(const struct dbg_lvalue* lvalue)
  */
 void print_basic(const struct dbg_lvalue* lvalue, char format)
 {
+    unsigned size;
+    LONGLONG res = types_extract_as_longlong(lvalue, &size, NULL);
+    WCHAR wch;
+
     if (lvalue->type.id == dbg_itype_none)
     {
         dbg_printf("Unable to evaluate expression\n");
         return;
     }
 
-    if (format != 0)
+    switch (format)
     {
-        unsigned size;
-        LONGLONG res = types_extract_as_longlong(lvalue, &size, NULL);
-        WCHAR wch;
+    case 'x':
+        dbg_print_hex(size, (ULONGLONG)res);
+        return;
 
-        switch (format)
-        {
-        case 'x':
-            dbg_print_hex(size, (ULONGLONG)res);
-            return;
+    case 'd':
+        dbg_print_longlong(res, TRUE);
+        return;
 
-        case 'd':
-            dbg_print_longlong(res, TRUE);
-            return;
+    case 'c':
+        dbg_printf("%d = '%c'", (char)(res & 0xff), (char)(res & 0xff));
+        return;
 
-        case 'c':
-            dbg_printf("%d = '%c'", (char)(res & 0xff), (char)(res & 0xff));
-            return;
+    case 'u':
+        wch = (WCHAR)(res & 0xFFFF);
+        dbg_printf("%d = '", wch);
+        dbg_outputW(&wch, 1);
+        dbg_printf("'");
+        return;
 
-        case 'u':
-            wch = (WCHAR)(res & 0xFFFF);
-            dbg_printf("%d = '", wch);
-            dbg_outputW(&wch, 1);
-            dbg_printf("'");
-            return;
-
-        case 'i':
-        case 's':
-        case 'w':
-        case 'b':
-            dbg_printf("Format specifier '%c' is meaningless in 'print' command\n", format);
-        }
+    case 'i':
+    case 's':
+    case 'w':
+    case 'b':
+        dbg_printf("Format specifier '%c' is meaningless in 'print' command\n", format);
     }
+
     if (lvalue->type.id == dbg_itype_segptr)
     {
         dbg_print_longlong(types_extract_as_longlong(lvalue, NULL, NULL), TRUE);

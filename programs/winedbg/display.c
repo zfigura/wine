@@ -69,6 +69,9 @@ BOOL display_add(struct expr *exp, int count, char format)
                                          maxdisplays * sizeof(*displaypoints));
     }
 
+    if (!count)
+        count = 1;
+
     if (i == ndisplays) ndisplays++;
 
     displaypoints[i].exp           = expr_clone(exp, &local_binding);

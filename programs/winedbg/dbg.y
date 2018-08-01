@@ -218,13 +218,13 @@ set_command:
     ;
 
 x_command:
-      tEXAM expr_lvalue         { memory_examine(&$2, 1, 'x'); }
+      tEXAM expr_lvalue         { memory_examine(&$2, 0, 0); }
     | tEXAM tFORMAT expr_lvalue { memory_examine(&$3, $2 >> 8, $2 & 0xff); }
     ;
 
 print_command:
       tPRINT expr_lvalue         { print_value(&$2, 0, 0); }
-    | tPRINT tFORMAT expr_lvalue { if (($2 >> 8) == 1) print_value(&$3, $2 & 0xff, 0); else dbg_printf("Count is meaningless in print command\n"); }
+    | tPRINT tFORMAT expr_lvalue { if (!($2 >> 8)) print_value(&$3, $2 & 0xff, 0); else dbg_printf("Count is meaningless in print command\n"); }
     ;
 
 break_command:
@@ -256,7 +256,7 @@ watch_command:
 
 display_command:
       tDISPLAY     	       	{ display_print(); }
-    | tDISPLAY expr            	{ display_add($2, 1, 0); }
+    | tDISPLAY expr            	{ display_add($2, 0, 0); }
     | tDISPLAY tFORMAT expr     { display_add($3, $2 >> 8, $2 & 0xff); }
     | tENABLE tDISPLAY tNUM     { display_enable($3, TRUE); }
     | tDISABLE tDISPLAY tNUM    { display_enable($3, FALSE); }

@@ -168,7 +168,7 @@ STRING     \"[^\n"]+\"
                                           dbg_lval.integer |= *last;
                                           return tFORMAT; }
 
-<FORMAT_EXPECTED>"/"{FORMAT}          	{ dbg_lval.integer = (1 << 8) | yytext[1]; return tFORMAT; }
+<FORMAT_EXPECTED>"/"{FORMAT}          	{ dbg_lval.integer = yytext[1]; return tFORMAT; }
 
 {STRING} 				{ dbg_lval.string = lexeme_alloc(yytext + 1); dbg_lval.string[strlen(dbg_lval.string) - 1] = '\0'; return tSTRING; }
 <ASTRING_EXPECTED>[^\n]+                { char* p = yytext; while (*p == ' ' || *p == '\t') p++;

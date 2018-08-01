@@ -461,6 +461,9 @@ void print_value(const struct dbg_lvalue* lvalue, char format, int level)
         format = '\0';
     }
 
+    if (!format)
+        format = last_format;
+
     switch (tag)
     {
     case SymTagBaseType:
@@ -565,6 +568,8 @@ void print_value(const struct dbg_lvalue* lvalue, char format, int level)
 leave:
 
     if (level == 0) dbg_printf("\n");
+
+    last_format = format;
 }
 
 static BOOL CALLBACK print_types_cb(PSYMBOL_INFO sym, ULONG size, void* ctx)
