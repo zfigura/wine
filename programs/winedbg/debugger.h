@@ -114,6 +114,8 @@ struct dbg_lvalue       /* structure to hold left-values... */
     struct dbg_type     type;
 };
 
+extern char last_format;
+
 enum dbg_exec_mode
 {
     dbg_exec_cont,       		/* Continue execution */
