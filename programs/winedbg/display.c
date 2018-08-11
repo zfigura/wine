@@ -74,9 +74,9 @@ void display_add(struct expr *exp, unsigned int count, const char *formatstr)
 
     for (p = formatstr; isalpha(*p); p++)
     {
-        if (strchr("acdgux", *p))
+        if (strchr("acdGux", *p))
             format = *p;
-        else if (strchr("bhisw", *p))
+        else if (strchr("bghisw", *p))
             size = *p;
         else
         {

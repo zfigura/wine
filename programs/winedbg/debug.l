@@ -123,7 +123,7 @@ static int syntax_error;
 OCTDIGIT   [0-7]
 DIGIT	   [0-9]
 HEXDIGIT   [0-9a-fA-F]
-FORMAT     [0-9]*[ubcdgiswxah]+
+FORMAT     [0-9]*[ubcdgGiswxah]+
 IDENTIFIER [_a-zA-Z~?][_a-zA-Z0-9~?@]*
 PATHNAME   [\\/_a-zA-Z0-9\.~@][\\/\-_a-zA-Z0-9\.~@]*
 STRING     \"[^\n"]+\"

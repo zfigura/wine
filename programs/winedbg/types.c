@@ -579,9 +579,9 @@ void command_print(const struct dbg_lvalue *addr, unsigned int count, const char
 
     for (p = formatstr; isalpha(*p); p++)
     {
-        if (strchr("acdgux", *p))
+        if (strchr("acdGux", *p))
             format = *p;
-        else if (strchr("bhisw", *p))
+        else if (strchr("bghisw", *p))
         {
             dbg_printf("Format specifier '%c' is meaningless in 'print' command.\n", *p);
             return;
