@@ -53,6 +53,12 @@
 #define DEBUG_STATUS_CANT_DEREF         (DEBUG_STATUS_OFFSET+6) /* either not deref:able, or index out of bounds */
 #define DEBUG_STATUS_NOT_AN_INTEGER     (DEBUG_STATUS_OFFSET+7) /* requiring an integral value */
 
+struct format
+{
+    unsigned int        count;
+    char *              string;
+};
+
 /*
  * Return values for symbol_get_function_line_status.  Used to determine
  * what to do when the 'step' command is given.
@@ -335,7 +341,7 @@ extern char*            lexeme_alloc_size(int);
 
   /* display.c */
 extern BOOL             display_print(void);
-extern BOOL             display_add(struct expr* exp, int count, char format);
+extern void             display_add(struct expr *exp, unsigned int count, const char *formatstr);
 extern BOOL             display_delete(int displaynum);
 extern BOOL             display_info(void);
 extern BOOL             display_enable(int displaynum, int enable);
@@ -373,9 +379,10 @@ extern void             info_win32_exception(void);
 extern void             info_wine_dbg_channel(BOOL add, const char* chnl, const char* name);
 
   /* memory.c */
+extern void             command_x(const struct dbg_lvalue *lvalue, unsigned int count, const char *formatstr);
 extern BOOL             memory_read_value(const struct dbg_lvalue* lvalue, DWORD size, void* result);
 extern BOOL             memory_write_value(const struct dbg_lvalue* val, DWORD size, void* value);
-extern void             memory_examine(const struct dbg_lvalue *lvalue, int count, char format);
+extern void             memory_examine(const struct dbg_lvalue *lvalue, unsigned int count, char format, int size);
 extern void*            memory_to_linear_addr(const ADDRESS64* address);
 extern BOOL             memory_get_current_pc(ADDRESS64* address);
 extern BOOL             memory_get_current_stack(ADDRESS64* address);
@@ -443,7 +450,8 @@ extern enum dbg_start   minidump_reload(int argc, char* argv[]);
 extern enum dbg_start   tgt_module_load(const char* name, BOOL keep);
 
   /* types.c */
-extern void             print_value(const struct dbg_lvalue* addr, char format, int level);
+extern void             command_print(const struct dbg_lvalue *addr, unsigned int count, const char *formatstr);
+extern void             print_value(const struct dbg_lvalue *addr, char format, int level);
 extern BOOL             types_print_type(const struct dbg_type*, BOOL details);
 extern BOOL             print_types(void);
 extern long int         types_extract_as_integer(const struct dbg_lvalue*);
