@@ -199,25 +199,70 @@ HRESULT WINAPI CreateProxyFromTypeInfo(ITypeInfo *typeinfo, IUnknown *outer,
 struct typelib_stub
 {
     CStdStubBuffer stub;
+    IID iid;
+    MIDL_STUB_DESC stub_desc;
+    MIDL_SERVER_INFO server_info;
+    CInterfaceStubVtbl stub_vtbl;
+    unsigned short *offset_table;
 };
+
+static ULONG WINAPI typelib_stub_Release(IRpcStubBuffer *iface)
+{
+    struct typelib_stub *This = CONTAINING_RECORD(iface, struct typelib_stub, stub);
+    ULONG refcount = InterlockedDecrement(&This->stub.RefCount);
+
+    TRACE("(%p) decreasing refs to %d\n", This, refcount);
+
+    if (!refcount)
+    {
+        /* test_Release shows that native doesn't call Disconnect here.
+           We'll leave it in for the time being. */
+        IRpcStubBuffer_Disconnect(iface);
+
+        heap_free((void *)This->stub_desc.pFormatTypes);
+        heap_free((void *)This->server_info.ProcString);
+        heap_free(This->offset_table);
+        heap_free(This);
+    }
+
+    return refcount;
+}
 
 static HRESULT typelib_stub_init(struct typelib_stub *This,
     IUnknown *server, IRpcStubBuffer **stub)
 {
-    This->stub.RefCount = 1;
-    *stub = (IRpcStubBuffer *)&This->stub;
+    HRESULT hr;
 
-    return E_NOTIMPL;
+    hr = IUnknown_QueryInterface(server, This->stub_vtbl.header.piid,
+        (void **)&This->stub.pvServerObject);
+    if (FAILED(hr))
+    {
+        WARN("Failed to get interface %s, hr %#x.\n",
+            debugstr_guid(This->stub_vtbl.header.piid), hr);
+        This->stub.pvServerObject = server;
+        IUnknown_AddRef(server);
+    }
+
+    This->stub.lpVtbl = &This->stub_vtbl.Vtbl;
+    This->stub.RefCount = 1;
+
+    *stub = (IRpcStubBuffer *)&This->stub;
+    return S_OK;
 }
 
 HRESULT WINAPI CreateStubFromTypeInfo(ITypeInfo *typeinfo, REFIID iid,
     IUnknown *server, IRpcStubBuffer **stub)
 {
     struct typelib_stub *This;
+    WORD funcs, parentfuncs;
     HRESULT hr;
 
     TRACE("typeinfo %p, iid %s, server %p, stub %p.\n",
         typeinfo, debugstr_guid(iid), server, stub);
+
+    hr = get_iface_info(typeinfo, &funcs, &parentfuncs);
+    if (FAILED(hr))
+        return hr;
 
     if (!(This = heap_alloc_zero(sizeof(*This))))
     {
@@ -225,9 +270,33 @@ HRESULT WINAPI CreateStubFromTypeInfo(ITypeInfo *typeinfo, REFIID iid,
         return E_OUTOFMEMORY;
     }
 
+    init_stub_desc(&This->stub_desc);
+    This->server_info.pStubDesc = &This->stub_desc;
+
+    hr = build_format_strings(typeinfo, funcs, &This->stub_desc.pFormatTypes,
+        &This->server_info.ProcString, &This->offset_table);
+    if (FAILED(hr))
+    {
+        heap_free(This);
+        return hr;
+    }
+    This->server_info.FmtStringOffset = &This->offset_table[-3];
+
+    This->iid = *iid;
+    This->stub_vtbl.header.piid = &This->iid;
+    This->stub_vtbl.header.pServerInfo = &This->server_info;
+    This->stub_vtbl.header.DispatchTableCount = funcs + parentfuncs;
+    This->stub_vtbl.Vtbl = CStdStubBuffer_Vtbl;
+    This->stub_vtbl.Vtbl.Release = typelib_stub_Release;
+
     hr = typelib_stub_init(This, server, stub);
     if (FAILED(hr))
+    {
+        heap_free((void *)This->stub_desc.pFormatTypes);
+        heap_free((void *)This->server_info.ProcString);
+        heap_free(This->offset_table);
         heap_free(This);
+    }
 
     return hr;
 }
