@@ -139,6 +139,53 @@ BOOL memory_write_value(const struct dbg_lvalue* lvalue, DWORD size, void* value
     return ret;
 }
 
+/* Returns the length in bytes of the returned string, including terminating null. */
+static int print_string(struct dbg_process *pcs, void *addr, BOOL in_debuggee, int size)
+{
+    WCHAR val;
+    SIZE_T read;
+    int len = 0;
+
+    if (!addr) return 0;
+
+    if (in_debuggee)
+    {
+        if (size == sizeof(WCHAR))
+            dbg_printf("L");
+        dbg_printf("\"");
+        while (1)
+        {
+            val = 0;
+            if (!pcs->process_io->read(pcs->handle, addr, &val, size, &read) || read != size)
+                break;
+
+            len += size;
+
+            if (!val) break;
+            if (isprintW(val))
+                dbg_printf("%lc", val);
+            else
+                dbg_printf("\\x%x", val);
+        }
+        dbg_printf("\"");
+    }
+    else
+    {
+        if (size == sizeof(WCHAR))
+        {
+            dbg_printf("%s", debugstr_w(addr));
+            len = (strlenW(addr) + 1) * sizeof(WCHAR);
+        }
+        else
+        {
+            dbg_printf("%s", debugstr_a(addr));
+            len = strlen(addr) + 1;
+        }
+    }
+
+    return len;
+}
+
 /***********************************************************************
  *           memory_examine
  *
@@ -152,7 +199,6 @@ void memory_examine(const struct dbg_lvalue *lvalue, unsigned int count,
     unsigned int stride;
     unsigned int i;
     ULONGLONG val;
-    char                buffer[256];
     ADDRESS64           addr;
     void               *linear;
 
@@ -187,14 +233,10 @@ void memory_examine(const struct dbg_lvalue *lvalue, unsigned int count,
         switch (format)
         {
         case 'u':
-            memory_get_string(dbg_curr_process, linear, TRUE, TRUE, buffer, sizeof(buffer));
-            dbg_printf("u\"%s\"", buffer);
-            addr.Offset += (strlen(buffer) + 1) * sizeof(WCHAR);
+            addr.Offset += print_string(dbg_curr_process, linear, TRUE, sizeof(WCHAR));
             break;
         case 's':
-            memory_get_string(dbg_curr_process, linear, TRUE, FALSE, buffer, sizeof(buffer));
-            dbg_printf("\"%s\"", buffer);
-            addr.Offset += strlen(buffer) + 1;
+            addr.Offset += print_string(dbg_curr_process, linear, TRUE, sizeof(char));
             break;
         case 'i':
             if (!memory_disasm_one_insn(&addr))
@@ -476,18 +518,9 @@ static void print_typed_basic(const struct dbg_lvalue* lvalue)
             types_get_info(&sub_lvalue.type, TI_GET_BASETYPE, &bt) &&
             types_get_info(&sub_lvalue.type, TI_GET_LENGTH, &size64))
         {
-            char    buffer[1024];
-
             if (!val_ptr) dbg_printf("0x0");
             else if (((bt == btChar || bt == btInt) && size64 == 1) || (bt == btUInt && size64 == 2))
-            {
-                if (memory_get_string(dbg_curr_process, val_ptr, sub_lvalue.cookie == DLV_TARGET,
-                                      size64 == 2, buffer, sizeof(buffer)))
-                    dbg_printf("\"%s\"", buffer);
-                else
-                    dbg_printf("*** invalid address %p ***", val_ptr);
-                break;
-            }
+                print_string(dbg_curr_process, val_ptr, sub_lvalue.cookie == DLV_TARGET, size64);
         }
         dbg_printf("%p", val_ptr);
         break;
