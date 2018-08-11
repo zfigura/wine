@@ -46,6 +46,7 @@ static void parser(const char*);
     IMAGEHLP_LINE64     listing;
     struct expr*        expression;
     struct type_expr_t  type;
+    struct format      *format;
 }
 
 %token tCONT tPASS tSTEP tLIST tNEXT tQUIT tHELP tBACKTRACE tALL tINFO tUP tDOWN
@@ -56,7 +57,8 @@ static void parser(const char*);
 %token tFRAME tSHARE tMODULE tCOND tDISPLAY tUNDISPLAY tDISASSEMBLE
 %token tSTEPI tNEXTI tFINISH tSHOW tDIR tWHATIS tSOURCE
 %token <string> tPATH tIDENTIFIER tSTRING tINTVAR
-%token <integer> tNUM tFORMAT
+%token <integer> tNUM
+%token <format> tFORMAT
 %token tSYMBOLFILE tRUN tATTACH tDETACH tKILL tMAINTENANCE tTYPE tMINIDUMP
 %token tNOPROCESS
 
@@ -218,13 +220,13 @@ set_command:
     ;
 
 x_command:
-      tEXAM expr_lvalue         { memory_examine(&$2, 0, 0); }
-    | tEXAM tFORMAT expr_lvalue { memory_examine(&$3, $2 >> 8, $2 & 0xff); }
+      tEXAM expr_lvalue         { command_x(&$2, 0, NULL); }
+    | tEXAM tFORMAT expr_lvalue { command_x(&$3, $2->count, $2->string); }
     ;
 
 print_command:
-      tPRINT expr_lvalue         { print_value(&$2, 0, 0); }
-    | tPRINT tFORMAT expr_lvalue { if (!($2 >> 8)) print_value(&$3, $2 & 0xff, 0); else dbg_printf("Count is meaningless in print command\n"); }
+      tPRINT expr_lvalue         { command_print(&$2, 0, NULL); }
+    | tPRINT tFORMAT expr_lvalue { command_print(&$3, $2->count, $2->string); }
     ;
 
 break_command:
@@ -255,9 +257,9 @@ watch_command:
 
 
 display_command:
-      tDISPLAY     	       	{ display_print(); }
-    | tDISPLAY expr            	{ display_add($2, 0, 0); }
-    | tDISPLAY tFORMAT expr     { display_add($3, $2 >> 8, $2 & 0xff); }
+      tDISPLAY                  { display_print(); }
+    | tDISPLAY expr             { display_add($2, 0, NULL); }
+    | tDISPLAY tFORMAT expr     { display_add($3, $2->count, $2->string); }
     | tENABLE tDISPLAY tNUM     { display_enable($3, TRUE); }
     | tDISABLE tDISPLAY tNUM    { display_enable($3, FALSE); }
     | tDELETE tDISPLAY tNUM     { display_delete($3); }

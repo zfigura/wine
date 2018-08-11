@@ -29,6 +29,7 @@
 
 #define YY_NO_UNISTD_H
 #include "debugger.h"
+#include "wine/heap.h"
 #include "dbg.tab.h"
 
 #undef YY_INPUT
@@ -59,6 +60,13 @@ void lexeme_flush(void)
 {
     while (--next_lexeme >= 0) HeapFree(GetProcessHeap(), 0, local_lexemes[next_lexeme]);
     next_lexeme = 0;
+}
+
+struct format *parse_format(const char *str)
+{
+    struct format *ret = heap_alloc(sizeof(*ret));
+    ret->count = strtoul(str+1, &ret->string, 0);
+    return ret;
 }
 
 static size_t read_input(const char* pfx, char* buf, int size)
@@ -115,7 +123,7 @@ static int syntax_error;
 OCTDIGIT   [0-7]
 DIGIT	   [0-9]
 HEXDIGIT   [0-9a-fA-F]
-FORMAT     [ubcdgiswxa]
+FORMAT     [0-9]*[ubcdgiswxah]+
 IDENTIFIER [_a-zA-Z~?][_a-zA-Z0-9~?@]*
 PATHNAME   [\\/_a-zA-Z0-9\.~@][\\/\-_a-zA-Z0-9\.~@]*
 STRING     \"[^\n"]+\"
@@ -163,12 +171,7 @@ STRING     \"[^\n"]+\"
 "'\\"[a-z]"'"                           { dbg_lval.integer = yytext[2] - 'a'; return tNUM;}
 "'"."'"                                 { dbg_lval.integer = yytext[1]; return tNUM;}
 
-<FORMAT_EXPECTED>"/"{DIGIT}+{FORMAT}	{ char* last;
-                                          dbg_lval.integer = strtol(yytext+1, &last, 0) << 8;
-                                          dbg_lval.integer |= *last;
-                                          return tFORMAT; }
-
-<FORMAT_EXPECTED>"/"{FORMAT}          	{ dbg_lval.integer = yytext[1]; return tFORMAT; }
+<FORMAT_EXPECTED>"/"{FORMAT}          	{ dbg_lval.format = parse_format(yytext); return tFORMAT; }
 
 {STRING} 				{ dbg_lval.string = lexeme_alloc(yytext + 1); dbg_lval.string[strlen(dbg_lval.string) - 1] = '\0'; return tSTRING; }
 <ASTRING_EXPECTED>[^\n]+                { char* p = yytext; while (*p == ' ' || *p == '\t') p++;
