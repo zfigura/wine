@@ -205,7 +205,7 @@ void memory_examine(const struct dbg_lvalue *lvalue, unsigned int count,
     if (!format)
         format = last_format;
     if (!size)
-        size = last_size;
+        size = (format == 's' ? 1 : last_size);
     if (!count)
         count = last_count;
 
@@ -232,11 +232,8 @@ void memory_examine(const struct dbg_lvalue *lvalue, unsigned int count,
 
         switch (format)
         {
-        case 'u':
-            addr.Offset += print_string(dbg_curr_process, linear, TRUE, sizeof(WCHAR));
-            break;
         case 's':
-            addr.Offset += print_string(dbg_curr_process, linear, TRUE, sizeof(char));
+            addr.Offset += print_string(dbg_curr_process, linear, TRUE, size);
             break;
         case 'i':
             if (!memory_disasm_one_insn(&addr))
@@ -279,6 +276,12 @@ void memory_examine(const struct dbg_lvalue *lvalue, unsigned int count,
                 case 8: dbg_printf(sizeof(void *) == 8 ? "%ld" : "%lld", (LONGLONG)val);
                 }
             }
+            addr.Offset += size;
+            break;
+        case 'u':
+            val = 0;
+            if (dbg_read_memory(linear, &val, size))
+                dbg_printf(sizeof(void *) == 8 ? "%lu" : "%llu", val);
             addr.Offset += size;
             break;
         case 'a':
@@ -600,7 +603,6 @@ void print_basic(const struct dbg_lvalue* lvalue, char format)
 {
     unsigned size;
     LONGLONG res = types_extract_as_longlong(lvalue, &size, NULL);
-    WCHAR wch;
 
     if (lvalue->type.id == dbg_itype_none)
     {
@@ -623,10 +625,7 @@ void print_basic(const struct dbg_lvalue* lvalue, char format)
         return;
 
     case 'u':
-        wch = (WCHAR)(res & 0xFFFF);
-        dbg_printf("%d = '", wch);
-        dbg_outputW(&wch, 1);
-        dbg_printf("'");
+        dbg_print_longlong(res, FALSE);
         return;
     }
 
