@@ -32,6 +32,7 @@ struct display
     struct expr*        exp;
     int                 count;
     char                format;
+    char                size;
     char                enabled;
     char                func_buffer[sizeof(SYMBOL_INFO) + 256];
     SYMBOL_INFO*        func;
@@ -52,8 +53,10 @@ static inline BOOL cmp_symbol(const SYMBOL_INFO* si1, const SYMBOL_INFO* si2)
         !memcmp(si1->Name, si2->Name, si1->NameLen);
 }
 
-BOOL display_add(struct expr *exp, int count, char format)
+void display_add(struct expr *exp, unsigned int count, const char *formatstr)
 {
+    char format = 0, size = 0;
+    const char *p;
     unsigned i;
     BOOL local_binding = FALSE;
 
@@ -69,7 +72,23 @@ BOOL display_add(struct expr *exp, int count, char format)
                                          maxdisplays * sizeof(*displaypoints));
     }
 
-    if (!count)
+    for (p = formatstr; isalpha(*p); p++)
+    {
+        if (strchr("acdgux", *p))
+            format = *p;
+        else if (strchr("bhisw", *p))
+            size = *p;
+        else
+        {
+            dbg_printf("Unknown format '%c'.\n", *p);
+            return;
+        }
+    }
+
+    if (!format)
+        format = last_format;
+
+    if (size && !count)
         count = 1;
 
     if (i == ndisplays) ndisplays++;
@@ -77,6 +96,7 @@ BOOL display_add(struct expr *exp, int count, char format)
     displaypoints[i].exp           = expr_clone(exp, &local_binding);
     displaypoints[i].count         = count;
     displaypoints[i].format        = format;
+    displaypoints[i].size          = size;
     displaypoints[i].enabled       = TRUE;
     if (local_binding)
     {
@@ -89,12 +109,12 @@ BOOL display_add(struct expr *exp, int count, char format)
         {
             expr_free(displaypoints[i].exp);
             displaypoints[i].exp = NULL;
-            return FALSE;
+            return;
         }
     }
     else displaypoints[i].func = NULL;
 
-    return TRUE;
+    last_format = format;
 }
 
 BOOL display_info(void)
@@ -155,11 +175,11 @@ static void print_one_display(int i)
     dbg_printf(" = ");
     if (!displaypoints[i].enabled)
         dbg_printf("(disabled)\n");
+    else if (displaypoints[i].size || displaypoints[i].count)
+        memory_examine(&lvalue, displaypoints[i].count, displaypoints[i].format,
+                       displaypoints[i].size);
     else
-	if (displaypoints[i].format == 'i')
-            memory_examine(&lvalue, displaypoints[i].count, displaypoints[i].format);
-	else
-            print_value(&lvalue, displaypoints[i].format, 0);
+        print_value(&lvalue, displaypoints[i].format, 0);
 }
 
 BOOL display_print(void)

@@ -448,21 +448,15 @@ void print_value(const struct dbg_lvalue* lvalue, char format, int level)
         return;
     }
 
+    if (!format)
+        format = last_format;
+
     if (type.id == dbg_itype_none)
     {
         /* No type, just print the addr value */
         print_bare_address(&lvalue->addr);
         goto leave;
     }
-
-    if (format == 'i' || format == 's' || format == 'w' || format == 'b' || format == 'g')
-    {
-        dbg_printf("Format specifier '%c' is meaningless in 'print' command\n", format);
-        format = '\0';
-    }
-
-    if (!format)
-        format = last_format;
 
     switch (tag)
     {
@@ -570,6 +564,36 @@ leave:
     if (level == 0) dbg_printf("\n");
 
     last_format = format;
+}
+
+void command_print(const struct dbg_lvalue *addr, unsigned int count, const char *formatstr)
+{
+    char format = 0;
+    const char *p;
+
+    if (count)
+    {
+        dbg_printf("Count %u is meaningless in 'print' command.\n", count);
+        return;
+    }
+
+    for (p = formatstr; isalpha(*p); p++)
+    {
+        if (strchr("acdgux", *p))
+            format = *p;
+        else if (strchr("bhisw", *p))
+        {
+            dbg_printf("Format specifier '%c' is meaningless in 'print' command.\n", *p);
+            return;
+        }
+        else
+        {
+            dbg_printf("Unknown format '%c'.\n", *p);
+            return;
+        }
+    }
+
+    print_value(addr, format, 0);
 }
 
 static BOOL CALLBACK print_types_cb(PSYMBOL_INFO sym, ULONG size, void* ctx)

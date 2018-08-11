@@ -144,110 +144,142 @@ BOOL memory_write_value(const struct dbg_lvalue* lvalue, DWORD size, void* value
  *
  * Implementation of the 'x' command.
  */
-void memory_examine(const struct dbg_lvalue *lvalue, int count, char format)
+void memory_examine(const struct dbg_lvalue *lvalue, unsigned int count,
+                    char format, int size)
 {
-    static int last_count = 1;
-    int			i;
+    static unsigned int last_count = 1;
+    static int last_size = sizeof(void *);
+    unsigned int stride;
+    unsigned int i;
+    ULONGLONG val;
     char                buffer[256];
     ADDRESS64           addr;
     void               *linear;
 
-    types_extract_as_address(lvalue, &addr);
-    linear = memory_to_linear_addr(&addr);
-
-    if (!count)
-        count = last_count;
     if (!format)
         format = last_format;
+    if (!size)
+        size = last_size;
+    if (!count)
+        count = last_count;
 
-    if (format != 'i' && count > 1)
-    {
-        print_address(&addr, FALSE);
-        dbg_printf(": ");
-    }
+    if (strchr("usig", format))
+        stride = 1;
+    else if (size == 1)
+        stride = 8;
+    else
+        stride = 16 / size;
 
-    switch (format)
+    types_extract_as_address(lvalue, &addr);
+
+    for (i = 0; i < count; ++i)
     {
-    case 'u':
-        for (i = 0; i < count; i++)
+        linear = memory_to_linear_addr(&addr);
+
+        if (i % stride == 0 && format != 'i')
         {
+            if (i) dbg_printf("\n");
+            print_address(&addr, FALSE);
+            dbg_printf(":");
+        }
+        dbg_printf("\t");
+
+        switch (format)
+        {
+        case 'u':
             memory_get_string(dbg_curr_process, linear, TRUE, TRUE, buffer, sizeof(buffer));
-            dbg_printf("u\"%s\"\n", buffer);
-            linear = (char *)linear + strlen(buffer) + 1;
-        }
-        break;
-    case 's':
-        for (i = 0; i < count; i++)
-        {
+            dbg_printf("u\"%s\"", buffer);
+            addr.Offset += (strlen(buffer) + 1) * sizeof(WCHAR);
+            break;
+        case 's':
             memory_get_string(dbg_curr_process, linear, TRUE, FALSE, buffer, sizeof(buffer));
-            dbg_printf("\"%s\"\n", buffer);
-            linear = (WCHAR *)linear + strlen(buffer) + 1;
-        }
-        break;
-    case 'i':
-        while (count-- && memory_disasm_one_insn(&addr));
-        break;
-    case 'g':
-        while (count--)
+            dbg_printf("\"%s\"", buffer);
+            addr.Offset += strlen(buffer) + 1;
+            break;
+        case 'i':
+            if (!memory_disasm_one_insn(&addr))
+                return;
+            break;
+        case 'g':
         {
             GUID guid;
+
             if (!dbg_read_memory(linear, &guid, sizeof(guid)))
             {
                 memory_report_invalid_addr(linear);
-                break;
+                return;
             }
-            dbg_printf("{%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}\n",
+            dbg_printf("{%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}",
                        guid.Data1, guid.Data2, guid.Data3,
                        guid.Data4[0], guid.Data4[1], guid.Data4[2], guid.Data4[3],
                        guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7]);
-            linear = (char*)linear + sizeof(guid);
             addr.Offset += sizeof(guid);
-            if (count)
+            break;
+        }
+        case 'c':
+            if (dbg_read_memory(linear, &val, 1))
             {
-                print_address(&addr, FALSE);
-                dbg_printf(": ");
+                if (isprint((char)val))
+                    dbg_printf("%d '\\x%02x'", (signed char)val, (unsigned char)val);
+                else
+                    dbg_printf("%d '%c'", (signed char)val, (char)val);
             }
+            addr.Offset += size;
+            break;
+        case 'd':
+            if (dbg_read_memory(linear, &val, size))
+            {
+                switch (size)
+                {
+                case 1: dbg_printf("%hhd", (signed char)val); break;
+                case 2: dbg_printf("%hd", (short)val); break;
+                case 4: dbg_printf("%d", (int)val); break;
+                case 8: dbg_printf(sizeof(void *) == 8 ? "%ld" : "%lld", (LONGLONG)val);
+                }
+            }
+            addr.Offset += size;
+            break;
+        case 'a':
+            /* FIXME: should print symbol info */
+        case 'x':
+            val = 0;
+            if (dbg_read_memory(linear, &val, size))
+                dbg_printf(sizeof(void *) == 8 ? "0x%0*lx" : "0x%0*llx", size * 2, val);
+            addr.Offset += size;
+            break;
         }
-        break;
-
-#define DO_DUMP2(_t,_l,_f,_vv) {                                        \
-            _t _v;                                                      \
-            for (i = 0; i < count; i++) {                               \
-                if (!dbg_read_memory(linear, &_v, sizeof(_t)))          \
-                { memory_report_invalid_addr(linear); break; }          \
-                dbg_printf(_f, (_vv));                                  \
-                addr.Offset += sizeof(_t);                              \
-                linear = (char*)linear + sizeof(_t);                    \
-                if ((i % (_l)) == (_l) - 1 && i != count - 1)           \
-                {                                                       \
-                    dbg_printf("\n");                                   \
-                    print_address(&addr, FALSE);                        \
-                    dbg_printf(": ");                                   \
-                }                                                       \
-            }                                                           \
-            dbg_printf("\n");                                           \
-        }
-#define DO_DUMP(_t,_l,_f) DO_DUMP2(_t,_l,_f,_v)
-
-    case 'x': DO_DUMP(int, 4, " %8.8x"); break;
-    case 'd': DO_DUMP(unsigned int, 4, " %4.4d"); break;
-    case 'w': DO_DUMP(unsigned short, 8, " %04x"); break;
-    case 'a':
-        if (sizeof(DWORD_PTR) == 4)
-        {
-            DO_DUMP(DWORD_PTR, 4, " %8.8lx");
-        }
-        else
-        {
-            DO_DUMP(DWORD_PTR, 2, " %16.16lx");
-        }
-        break;
-    case 'c': DO_DUMP2(char, 32, " %c", (_v < 0x20) ? ' ' : _v); break;
-    case 'b': DO_DUMP2(char, 16, " %02x", (_v) & 0xff); break;
     }
+    dbg_printf("\n");
 
     last_count = count;
     last_format = format;
+}
+
+void command_x(const struct dbg_lvalue *lvalue, unsigned int count,
+               const char *formatstr)
+{
+    char format = 0;
+    size_t size = 0;
+    const char *p;
+
+    for (p = formatstr; isalpha(*p); p++)
+    {
+        if (strchr("acdgisux", *p))
+            format = *p;
+        else if (*p == 'b')
+            size = 1;
+        else if (*p == 'h')
+            size = 2;
+        else if (*p == 'w')
+            size = 4;
+        else
+        {
+            dbg_printf("Unknown format '%c'.\n", *p);
+            return;
+        }
+    }
+
+    memory_examine(lvalue, count, format, size);
 }
 
 BOOL memory_get_string(struct dbg_process* pcs, void* addr, BOOL in_debuggee,
@@ -552,7 +584,7 @@ void print_basic(const struct dbg_lvalue* lvalue, char format)
         return;
 
     case 'c':
-        dbg_printf("%d = '%c'", (char)(res & 0xff), (char)(res & 0xff));
+        dbg_printf("%d '%c'", (signed char)res, (char)res);
         return;
 
     case 'u':
@@ -561,12 +593,6 @@ void print_basic(const struct dbg_lvalue* lvalue, char format)
         dbg_outputW(&wch, 1);
         dbg_printf("'");
         return;
-
-    case 'i':
-    case 's':
-    case 'w':
-    case 'b':
-        dbg_printf("Format specifier '%c' is meaningless in 'print' command\n", format);
     }
 
     if (lvalue->type.id == dbg_itype_segptr)

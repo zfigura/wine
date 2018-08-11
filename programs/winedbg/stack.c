@@ -54,14 +54,14 @@ void stack_info(int len)
     switch (lvalue.addr.Mode)
     {
     case AddrModeFlat: /* 32-bit or 64-bit mode */
-        memory_examine(&lvalue, len, 'a');
+        memory_examine(&lvalue, len, 'x', sizeof(void *));
         break;
     case AddrMode1632: /* 32-bit mode */
-        memory_examine(&lvalue, len, 'x');
+        memory_examine(&lvalue, len, 'x', 4);
         break;
     case AddrModeReal:  /* 16-bit mode */
     case AddrMode1616:
-        memory_examine(&lvalue, len, 'w');
+        memory_examine(&lvalue, len, 'x', 2);
 	break;
     }
 }
