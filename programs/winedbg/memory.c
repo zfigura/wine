@@ -163,7 +163,7 @@ void memory_examine(const struct dbg_lvalue *lvalue, unsigned int count,
     if (!count)
         count = last_count;
 
-    if (strchr("usig", format))
+    if (strchr("usiG", format))
         stride = 1;
     else if (size == 1)
         stride = 8;
@@ -200,7 +200,7 @@ void memory_examine(const struct dbg_lvalue *lvalue, unsigned int count,
             if (!memory_disasm_one_insn(&addr))
                 return;
             break;
-        case 'g':
+        case 'G':
         {
             GUID guid;
 
@@ -264,7 +264,7 @@ void command_x(const struct dbg_lvalue *lvalue, unsigned int count,
 
     for (p = formatstr; isalpha(*p); p++)
     {
-        if (strchr("acdgisux", *p))
+        if (strchr("acdGisux", *p))
             format = *p;
         else if (*p == 'b')
             size = 1;
@@ -272,6 +272,8 @@ void command_x(const struct dbg_lvalue *lvalue, unsigned int count,
             size = 2;
         else if (*p == 'w')
             size = 4;
+        else if (*p == 'g')
+            size = 8;
         else
         {
             dbg_printf("Unknown format '%c'.\n", *p);
