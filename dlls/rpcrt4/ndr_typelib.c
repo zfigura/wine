@@ -42,6 +42,25 @@ static size_t write_type_tfs(ITypeInfo *typeinfo, unsigned char *str,
 #define WRITE_INT(str, len, val) \
     do { if ((str)) *((int *)((str) + (len))) = (val); (len) += 4; } while (0)
 
+extern const unsigned char oleaut_tfs[];
+extern const size_t oleaut_tfs_size;
+extern const unsigned short oleaut_offsets[5];
+extern const USER_MARSHAL_ROUTINE_QUADRUPLE oleaut_user_marshal[];
+
+static unsigned short write_oleaut_tfs(VARTYPE vt)
+{
+    switch (vt)
+    {
+    case VT_BSTR:       return oleaut_offsets[0];
+    case VT_UNKNOWN:    return oleaut_offsets[1];
+    case VT_DISPATCH:   return oleaut_offsets[2];
+    case VT_VARIANT:    return oleaut_offsets[3];
+    case VT_SAFEARRAY:  return oleaut_offsets[4];
+    }
+
+    return 0;
+}
+
 static unsigned char get_base_type(VARTYPE vt)
 {
     switch (vt)
@@ -343,6 +362,9 @@ static size_t write_type_tfs(ITypeInfo *typeinfo, unsigned char *str,
     size_t off;
 
     TRACE("vt %d%s\n", desc->vt, toplevel ? " (toplevel)" : "");
+
+    if ((off = write_oleaut_tfs(desc->vt)))
+        return off;
 
     switch (desc->vt)
     {
@@ -688,7 +710,7 @@ static HRESULT build_format_strings(ITypeInfo *typeinfo, WORD funcs,
     const unsigned char **type_ret,
     const unsigned char **proc_ret, unsigned short **offset_ret)
 {
-    size_t typelen = 0, proclen = 0;
+    size_t typelen = oleaut_tfs_size, proclen = 0;
     unsigned char *type, *proc;
     unsigned short *offset;
     HRESULT hr;
@@ -706,7 +728,8 @@ static HRESULT build_format_strings(ITypeInfo *typeinfo, WORD funcs,
         goto err;
     }
 
-    typelen = 0;
+    memcpy(type, oleaut_tfs, oleaut_tfs_size);
+    typelen = oleaut_tfs_size;
     proclen = 0;
 
     hr = write_iface_fs(typeinfo, funcs, type, &typelen, proc, &proclen, offset);
@@ -763,6 +786,7 @@ static void init_stub_desc(MIDL_STUB_DESC *desc)
     desc->pfnAllocate = NdrOleAllocate;
     desc->pfnFree = NdrOleFree;
     desc->Version = 0x50002;
+    desc->aUserMarshalQuadruple = oleaut_user_marshal;
     /* type format string is initialized with proc format string and offset table */
 }
 

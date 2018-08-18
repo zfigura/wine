@@ -2,7 +2,7 @@ EXTRADEFS = -D_RPCRT4_ -DMSWMSG
 MODULE    = rpcrt4.dll
 IMPORTLIB = rpcrt4
 IMPORTS   = uuid advapi32
-DELAYIMPORTS = iphlpapi wininet secur32 user32 ws2_32
+DELAYIMPORTS = iphlpapi wininet secur32 user32 ws2_32 oleaut32
 
 C_SRCS = \
 	cproxy.c \
@@ -28,3 +28,22 @@ C_SRCS = \
 RC_SRCS = version.rc
 
 IDL_SRCS = epm.idl
+
+EXTRA_OBJS = ndr_typelib_generated.o
+
+ndr_typelib_generated.c: $(WIDL)
+	echo > ndr_typelib_generated.c '/* Automatically generated from Makefile.in, do not edit */' && \
+	echo >> ndr_typelib_generated.c '#include "oaidl.h"' && \
+	echo >> ndr_typelib_generated.c '#include "rpcproxy.h"' && \
+	echo > ndr_typelib_generated.idl 'import "oaidl.idl"; [object] interface dummy {void dummy(BSTR a, IUnknown *b, IDispatch *c, VARIANT d, LPSAFEARRAY e); }' && \
+	$(WIDL) $(WIDLFLAGS) -I $(top_srcdir)/include -p -o ndr_typelib_generated_p.c ndr_typelib_generated.idl && \
+	echo >> ndr_typelib_generated.c 'const unsigned char oleaut_tfs[] = {' && \
+	awk '/__MIDL_TypeFormatString =/,/};/' ndr_typelib_generated_p.c | head -n -2 | tail -n +5 >> ndr_typelib_generated.c && \
+	echo >> ndr_typelib_generated.c '};' && \
+	sed -n -e 's/#define TYPE_FORMAT_STRING_SIZE \([0-9]\+\)/const size_t oleaut_tfs_size = \1;/p' ndr_typelib_generated_p.c >> ndr_typelib_generated.c && \
+	echo >> ndr_typelib_generated.c 'const unsigned short oleaut_offsets[] = {' && \
+	sed -n -e 's/.*&__MIDL_TypeFormatString.Format\[\([0-9]\+\)\].*/    \1,/p' ndr_typelib_generated_p.c | head -n 5 >> ndr_typelib_generated.c && \
+	echo >> ndr_typelib_generated.c '};' && \
+	echo >> ndr_typelib_generated.c 'const USER_MARSHAL_ROUTINE_QUADRUPLE oleaut_user_marshal[] = ' && \
+	awk '/UserMarshalRoutines\[\] =/,/};/' ndr_typelib_generated_p.c | tail -n +2 >> ndr_typelib_generated.c && \
+	rm ndr_typelib_generated_p.c ndr_typelib_generated.idl
