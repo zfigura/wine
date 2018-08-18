@@ -41,7 +41,7 @@ static inline void release_iface_(unsigned int line, void *iface)
 }
 #define release_iface(a) release_iface_(__LINE__, a)
 
-#ifdef __i386__
+#if defined(__i386__) || defined(__x86_64__)
 static const int tmarshal_todo = 0;
 #else
 static const int tmarshal_todo = 1;
@@ -993,7 +993,6 @@ static HRESULT WINAPI Widget_int_ptr(IWidget *iface, int *in, int *out, int *in_
     if (testmode == 0)  /* Invoke() */
         ok(*out == 456, "Got [out] %d.\n", *out);
     else if (testmode == 1)
-todo_wine
         ok(!*out, "Got [out] %d.\n", *out);
     ok(*in_out == 789, "Got [in, out] %d.\n", *in_out);
 
@@ -1006,7 +1005,6 @@ todo_wine
 
 static HRESULT WINAPI Widget_int_ptr_ptr(IWidget *iface, int **in, int **out, int **in_out)
 {
-todo_wine_if(testmode == 2)
     ok(!*out, "Got [out] %p.\n", *out);
     if (testmode == 0)
     {
@@ -1074,11 +1072,9 @@ static HRESULT WINAPI Widget_iface_in(IWidget *iface, IUnknown *unk, IDispatch *
 
 static HRESULT WINAPI Widget_iface_out(IWidget *iface, IUnknown **unk, IDispatch **disp, ISomethingFromDispatch **sfd)
 {
-todo_wine {
     ok(!*unk, "Got iface %p.\n", *unk);
     ok(!*disp, "Got iface %p.\n", *disp);
     ok(!*sfd, "Got iface %p.\n", *sfd);
-}
 
     if (testmode == 0)
     {
@@ -1094,7 +1090,6 @@ static HRESULT WINAPI Widget_iface_ptr(IWidget *iface, ISomethingFromDispatch **
 {
     HRESULT hr;
 
-todo_wine_if(testmode == 0 || testmode == 1)
     ok(!*out, "Got [out] %p.\n", *out);
     if (testmode == 0 || testmode == 1)
     {
@@ -1136,7 +1131,6 @@ static HRESULT WINAPI Widget_bstr(IWidget *iface, BSTR in, BSTR *out, BSTR *in_p
         len = SysStringByteLen(in);
         ok(len == sizeof(test_bstr1), "Got wrong length %u.\n", len);
         ok(!memcmp(in, test_bstr1, len), "Got string %s.\n", wine_dbgstr_wn(in, len / sizeof(WCHAR)));
-todo_wine_if(*out)
         ok(!*out, "Got unexpected output %p.\n", *out);
         len = SysStringLen(*in_ptr);
         ok(len == lstrlenW(test_bstr2), "Got wrong length %u.\n", len);
@@ -1169,7 +1163,6 @@ static HRESULT WINAPI Widget_variant(IWidget *iface, VARIANT in, VARIANT *out, V
         ok(V_I4(out) == 1, "Got wrong value %d.\n", V_I4(out));
     }
     else
-todo_wine
         ok(V_VT(out) == VT_EMPTY, "Got wrong type %u.\n", V_VT(out));
     ok(V_VT(in_ptr) == VT_I4, "Got wrong type %u.\n", V_VT(in_ptr));
     ok(V_I4(in_ptr) == -1, "Got wrong value %d.\n", V_I4(in_ptr));
@@ -1226,7 +1219,6 @@ static HRESULT WINAPI Widget_safearray(IWidget *iface, SAFEARRAY *in, SAFEARRAY 
     HRESULT hr;
 
     check_safearray(in, 3);
-todo_wine
     ok(!*out, "Got array %p.\n", *out);
     check_safearray(*in_ptr, 7);
     check_safearray(*in_out, 9);
@@ -1244,7 +1236,6 @@ static HRESULT WINAPI Widget_mystruct(IWidget *iface, MYSTRUCT in, MYSTRUCT *out
 {
     static const MYSTRUCT empty = {0};
     ok(!memcmp(&in, &test_mystruct1, sizeof(in)), "Structs didn't match.\n");
-todo_wine
     ok(!memcmp(out, &empty, sizeof(*out)), "Structs didn't match.\n");
     ok(!memcmp(in_ptr, &test_mystruct3, sizeof(*in_ptr)), "Structs didn't match.\n");
     ok(!memcmp(in_out, &test_mystruct4, sizeof(*in_out)), "Structs didn't match.\n");
@@ -1271,7 +1262,6 @@ static HRESULT WINAPI Widget_rect(IWidget *iface, RECT in, RECT *out, RECT *in_p
 {
     static const RECT empty = {0};
     ok(EqualRect(&in, &test_rect1), "Rects didn't match.\n");
-todo_wine
     ok(EqualRect(out, &empty), "Rects didn't match.\n");
     ok(EqualRect(in_ptr, &test_rect3), "Rects didn't match.\n");
     ok(EqualRect(in_out, &test_rect4), "Rects didn't match.\n");
@@ -1286,7 +1276,6 @@ static HRESULT WINAPI Widget_array(IWidget *iface, array_t in, array_t out, arra
 {
     static const array_t empty = {0};
     ok(!memcmp(in, test_array1, sizeof(array_t)), "Arrays didn't match.\n");
-todo_wine
     ok(!memcmp(out, empty, sizeof(array_t)), "Arrays didn't match.\n");
     ok(!memcmp(in_out, test_array3, sizeof(array_t)), "Arrays didn't match.\n");
 
@@ -1301,7 +1290,6 @@ static HRESULT WINAPI Widget_array_ptr(IWidget *iface, array_t *in, array_t *out
 {
     static const array_t empty = {0};
     ok(!memcmp(*in, test_array1, sizeof(array_t)), "Arrays didn't match.\n");
-todo_wine
     ok(!memcmp(*out, empty, sizeof(array_t)), "Arrays didn't match.\n");
     ok(!memcmp(*in_out, test_array3, sizeof(array_t)), "Arrays didn't match.\n");
 
@@ -1318,10 +1306,8 @@ static HRESULT WINAPI Widget_variant_array(IWidget *iface, VARIANT in[2], VARIAN
     ok(V_I4(&in[0]) == 1, "Got wrong value %d.\n", V_I4(&in[0]));
     ok(V_VT(&in[1]) == VT_I4, "Got wrong type %u.\n", V_VT(&in[1]));
     ok(V_I4(&in[1]) == 2, "Got wrong value %d.\n", V_I4(&in[1]));
-todo_wine {
     ok(V_VT(&out[0]) == VT_EMPTY, "Got wrong type %u.\n", V_VT(&out[0]));
     ok(V_VT(&out[1]) == VT_EMPTY, "Got wrong type %u.\n", V_VT(&out[1]));
-}
     ok(V_VT(&in_out[0]) == VT_I4, "Got wrong type %u.\n", V_VT(&in_out[0]));
     ok(V_I4(&in_out[0]) == 5, "Got wrong type %u.\n", V_VT(&in_out[0]));
     ok(V_VT(&in_out[1]) == VT_I4, "Got wrong type %u.\n", V_VT(&in_out[1]));
@@ -1842,12 +1828,10 @@ static void test_marshal_pointer(IWidget *widget, IDispatch *disp)
     in_out = 789;
     hr = IWidget_int_ptr(widget, &in, &out, &in_out);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-todo_wine
     ok(in == 123, "Got [in] %d.\n", in);
     ok(out == 654, "Got [out] %d.\n", out);
     ok(in_out == 321, "Got [in, out] %d.\n", in_out);
 
-if (0) {
     out = in_out = -1;
     hr = IWidget_int_ptr(widget, NULL, &out, &in_out);
     ok(hr == HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), "Got hr %#x.\n", hr);
@@ -1865,7 +1849,6 @@ if (0) {
     ok(hr == HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), "Got hr %#x.\n", hr);
     ok(in == -1, "[in] parameter should not have been cleared.\n");
     ok(!out, "[out] parameter should have been cleared.\n");
-}
 
     /* We can't test Invoke() with double pointers, as it is not possible to fit
      * more than one level of indirection into a VARIANTARG. */
@@ -1908,7 +1891,6 @@ if (0) {
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     ok(!in_out_ptr, "Got [in, out] %p.\n", in_out_ptr);
 
-if (0) {
     out_ptr = &out;
     in_out_ptr = &in_out;
     hr = IWidget_int_ptr_ptr(widget, NULL, &out_ptr, &in_out_ptr);
@@ -1929,7 +1911,6 @@ if (0) {
     ok(hr == HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), "Got hr %#x.\n", hr);
     ok(in_ptr == &in, "[in] parameter should not have been cleared.\n");
     ok(!out_ptr, "[out] parameter should have been cleared.\n");
-}
 }
 
 static void test_marshal_iface(IWidget *widget, IDispatch *disp)
@@ -1970,11 +1951,9 @@ static void test_marshal_iface(IWidget *widget, IDispatch *disp)
     testmode = 1;
     hr = IWidget_iface_out(widget, &proxy_unk, &proxy_disp, &proxy_sfd);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-todo_wine {
     ok(!proxy_unk, "Got unexpected proxy %p.\n", proxy_unk);
     ok(!proxy_disp, "Got unexpected proxy %p.\n", proxy_disp);
     ok(!proxy_sfd, "Got unexpected proxy %p.\n", proxy_sfd);
-}
 
     testmode = 0;
     sfd_in = sfd1 = create_disp_obj();
@@ -1983,7 +1962,6 @@ todo_wine {
     hr = IWidget_iface_ptr(widget, &sfd_in, &sfd_out, &sfd_in_out);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     ok(sfd_in == sfd1, "[in] parameter should not have changed.\n");
-todo_wine
     ok(!sfd_out, "[out] parameter should have been cleared.\n");
     ok(sfd_in_out == sfd3, "[in, out] parameter should not have changed.\n");
     release_iface(sfd1);
@@ -2193,7 +2171,6 @@ static void test_marshal_bstr(IWidget *widget, IDispatch *disp)
     hr = IDispatch_Invoke(disp, DISPID_TM_BSTR, &IID_NULL, LOCALE_NEUTRAL,
             DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-todo_wine
     ok(in[1] == test_bstr1[1], "[in] parameter should not be changed.\n");
     ok(in_ptr[1] == 'X', "[in] pointer should be changed.\n");
     ok(in_out[1] == 'X', "[in, out] parameter should be changed.\n");
@@ -2208,10 +2185,8 @@ todo_wine
     out = (BSTR)0xdeadbeef;
     hr = IWidget_bstr(widget, in, &out, &in_ptr, &in_out);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-todo_wine {
     ok(in[1] == test_bstr1[1], "[in] parameter should not be changed.\n");
     ok(in_ptr[1] == test_bstr2[1], "[in] pointer should not be changed.\n");
-}
     ok(in_out[1] == 'X', "[in, out] parameter should be changed.\n");
     len = SysStringLen(out);
     ok(len == lstrlenW(test_bstr4), "Got wrong length %d.\n", len);
@@ -2274,10 +2249,8 @@ static void test_marshal_variant(IWidget *widget, IDispatch *disp)
     ok(V_VT(&arg[3]) == VT_CY, "Got wrong type %u.\n", V_VT(&arg[3]));
     ok(V_VT(&out) == VT_UI1, "Got wrong type %u.\n", V_VT(&out));
     ok(V_UI1(&out) == 3, "Got wrong value %d.\n", V_UI1(&out));
-todo_wine {
     ok(V_VT(&in_ptr) == VT_I4, "Got wrong type %u.\n", V_VT(&in_ptr));
     ok(V_I2(&in_ptr) == -1, "Got wrong value %d.\n", V_I1(&in_ptr));
-}
     ok(V_VT(&in_out) == VT_I1, "Got wrong type %u.\n", V_VT(&in_out));
     ok(V_I1(&in_out) == 5, "Got wrong value %d.\n", V_I1(&in_out));
 }
@@ -2316,7 +2289,6 @@ static void test_marshal_struct(IWidget *widget, IDispatch *disp)
     hr = IWidget_mystruct(widget, test_mystruct1, &out, &in_ptr, &in_out);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     ok(!memcmp(&out, &test_mystruct5, sizeof(MYSTRUCT)), "Structs didn't match.\n");
-todo_wine
     ok(!memcmp(&in_ptr, &test_mystruct3, sizeof(MYSTRUCT)), "Structs didn't match.\n");
     ok(!memcmp(&in_out, &test_mystruct7, sizeof(MYSTRUCT)), "Structs didn't match.\n");
 
@@ -2338,7 +2310,6 @@ todo_wine
     hr = IWidget_rect(widget, test_rect1, &rect_out, &rect_in_ptr, &rect_in_out);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     ok(EqualRect(&rect_out, &test_rect5), "Rects didn't match.\n");
-todo_wine
     ok(EqualRect(&rect_in_ptr, &test_rect3), "Rects didn't match.\n");
     ok(EqualRect(&rect_in_out, &test_rect7), "Rects didn't match.\n");
 }
@@ -2355,7 +2326,6 @@ static void test_marshal_array(IWidget *widget, IDispatch *disp)
     memcpy(in_out, test_array3, sizeof(array_t));
     hr = IWidget_array(widget, in, out, in_out);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-todo_wine
     ok(!memcmp(&in, &test_array1, sizeof(array_t)), "Arrays didn't match.\n");
     ok(!memcmp(&out, &test_array5, sizeof(array_t)), "Arrays didn't match.\n");
     ok(!memcmp(&in_out, &test_array6, sizeof(array_t)), "Arrays didn't match.\n");
@@ -2365,7 +2335,6 @@ todo_wine
     memcpy(in_out, test_array3, sizeof(array_t));
     hr = IWidget_array_ptr(widget, &in, &out, &in_out);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-todo_wine
     ok(!memcmp(&in, &test_array1, sizeof(array_t)), "Arrays didn't match.\n");
     ok(!memcmp(&out, &test_array5, sizeof(array_t)), "Arrays didn't match.\n");
     ok(!memcmp(&in_out, &test_array6, sizeof(array_t)), "Arrays didn't match.\n");
@@ -2378,12 +2347,10 @@ todo_wine
     V_VT(&var_in_out[1]) = VT_I4; V_I4(&var_in_out[1]) = 6;
     hr = IWidget_variant_array(widget, var_in, var_out, var_in_out);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-todo_wine {
     ok(V_VT(&var_in[0]) == VT_I4, "Got wrong type %u.\n", V_VT(&var_in[0]));
     ok(V_I4(&var_in[0]) == 1, "Got wrong value %d.\n", V_I4(&var_in[0]));
     ok(V_VT(&var_in[1]) == VT_I4, "Got wrong type %u.\n", V_VT(&var_in[1]));
     ok(V_I4(&var_in[1]) == 2, "Got wrong value %d.\n", V_I4(&var_in[1]));
-}
     ok(V_VT(&var_out[0]) == VT_I1, "Got wrong type %u.\n", V_VT(&var_out[0]));
     ok(V_I1(&var_out[0]) == 9, "Got wrong value %u.\n", V_VT(&var_out[0]));
     ok(V_VT(&var_out[1]) == VT_I1, "Got wrong type %u.\n", V_VT(&var_out[1]));
