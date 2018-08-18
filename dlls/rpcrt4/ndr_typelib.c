@@ -666,7 +666,7 @@ static void write_proc_func_header(ITypeInfo *typeinfo, FUNCDESC *desc,
     WRITE_CHAR (proc, *proclen, desc->cParams + 1); /* incl. return value */
 }
 
-static HRESULT write_iface_fs(ITypeInfo *typeinfo, WORD funcs,
+static HRESULT write_iface_fs(ITypeInfo *typeinfo, WORD funcs, WORD parentfuncs,
     unsigned char *type, size_t *typelen, unsigned char *proc, size_t *proclen,
     unsigned short *offset)
 {
@@ -674,6 +674,12 @@ static HRESULT write_iface_fs(ITypeInfo *typeinfo, WORD funcs,
     WORD proc_idx, param_idx;
     FUNCDESC *desc;
     HRESULT hr;
+
+    for (proc_idx = 3; proc_idx < parentfuncs; proc_idx++)
+    {
+        if (offset)
+            offset[proc_idx - 3] = -1;
+    }
 
     for (proc_idx = 0; proc_idx < funcs; proc_idx++)
     {
@@ -683,9 +689,9 @@ static HRESULT write_iface_fs(ITypeInfo *typeinfo, WORD funcs,
         if (FAILED(hr)) return hr;
 
         if (offset)
-            offset[proc_idx] = *proclen;
+            offset[proc_idx + parentfuncs - 3] = *proclen;
 
-        write_proc_func_header(typeinfo, desc, proc_idx + 3, proc, proclen);
+        write_proc_func_header(typeinfo, desc, proc_idx + parentfuncs, proc, proclen);
 
         stack_offset = sizeof(void *);  /* This */
         for (param_idx = 0; param_idx < desc->cParams; param_idx++)
@@ -707,7 +713,7 @@ static HRESULT write_iface_fs(ITypeInfo *typeinfo, WORD funcs,
 }
 
 static HRESULT build_format_strings(ITypeInfo *typeinfo, WORD funcs,
-    const unsigned char **type_ret,
+    WORD parentfuncs, const unsigned char **type_ret,
     const unsigned char **proc_ret, unsigned short **offset_ret)
 {
     size_t typelen = oleaut_tfs_size, proclen = 0;
@@ -715,12 +721,12 @@ static HRESULT build_format_strings(ITypeInfo *typeinfo, WORD funcs,
     unsigned short *offset;
     HRESULT hr;
 
-    hr = write_iface_fs(typeinfo, funcs, NULL, &typelen, NULL, &proclen, NULL);
+    hr = write_iface_fs(typeinfo, funcs, parentfuncs, NULL, &typelen, NULL, &proclen, NULL);
     if (FAILED(hr)) return hr;
 
     type = heap_alloc(typelen);
     proc = heap_alloc(proclen);
-    offset = heap_alloc(funcs * sizeof(*offset));
+    offset = heap_alloc((parentfuncs + funcs - 3) * sizeof(*offset));
     if (!type || !proc || !offset)
     {
         ERR("Failed to allocate format strings.\n");
@@ -732,7 +738,7 @@ static HRESULT build_format_strings(ITypeInfo *typeinfo, WORD funcs,
     typelen = oleaut_tfs_size;
     proclen = 0;
 
-    hr = write_iface_fs(typeinfo, funcs, type, &typelen, proc, &proclen, offset);
+    hr = write_iface_fs(typeinfo, funcs, parentfuncs, type, &typelen, proc, &proclen, offset);
     if (SUCCEEDED(hr))
     {
         *type_ret = type;
@@ -749,9 +755,10 @@ err:
 }
 
 /* Common helper for Create{Proxy,Stub}FromTypeInfo(). */
-static HRESULT get_iface_info(ITypeInfo **typeinfo, WORD *funcs, WORD *parentfuncs)
+static HRESULT get_iface_info(ITypeInfo **typeinfo, WORD *funcs, WORD *parentfuncs,
+        GUID *parentiid)
 {
-    ITypeInfo *real_typeinfo;
+    ITypeInfo *real_typeinfo, *parentinfo;
     TYPEATTR *typeattr;
     ITypeLib *typelib;
     TLIBATTR *libattr;
@@ -803,7 +810,20 @@ static HRESULT get_iface_info(ITypeInfo **typeinfo, WORD *funcs, WORD *parentfun
     *parentfuncs = typeattr->cbSizeVft / (syskind == SYS_WIN64 ? 8 : 4) - *funcs;
     ITypeInfo_ReleaseTypeAttr(*typeinfo, typeattr);
 
-    return S_OK;
+    hr = ITypeInfo_GetRefTypeOfImplType(*typeinfo, 0, &reftype);
+    if (FAILED(hr))
+        return hr;
+    hr = ITypeInfo_GetRefTypeInfo(*typeinfo, reftype, &parentinfo);
+    if (FAILED(hr))
+        return hr;
+    hr = ITypeInfo_GetTypeAttr(parentinfo, &typeattr);
+    if (FAILED(hr))
+        return hr;
+    *parentiid = typeattr->guid;
+    ITypeInfo_ReleaseTypeAttr(parentinfo, typeattr);
+    ITypeInfo_Release(parentinfo);
+
+    return hr;
 }
 
 static void init_stub_desc(MIDL_STUB_DESC *desc)
@@ -836,6 +856,10 @@ static ULONG WINAPI typelib_proxy_Release(IRpcProxyBuffer *iface)
     {
         if (This->proxy.pChannel)
             IRpcProxyBuffer_Disconnect(&This->proxy.IRpcProxyBuffer_iface);
+        if (This->proxy.base_object)
+            IUnknown_Release(This->proxy.base_object);
+        if (This->proxy.base_proxy)
+            IRpcProxyBuffer_Release(This->proxy.base_proxy);
         heap_free((void *)This->stub_desc.pFormatTypes);
         heap_free((void *)This->proxy_info.ProcFormatString);
         heap_free(This->offset_table);
@@ -855,7 +879,7 @@ static const IRpcProxyBufferVtbl typelib_proxy_vtbl =
 };
 
 static HRESULT typelib_proxy_init(struct typelib_proxy *This, IUnknown *outer,
-    ULONG count, IRpcProxyBuffer **proxy, void **obj)
+    ULONG count, const GUID *parentiid, IRpcProxyBuffer **proxy, void **obj)
 {
     if (!fill_stubless_table((IUnknownVtbl *)This->proxy_vtbl->Vtbl, count))
         return E_OUTOFMEMORY;
@@ -867,6 +891,13 @@ static HRESULT typelib_proxy_init(struct typelib_proxy *This, IUnknown *outer,
     This->proxy.RefCount = 1;
     This->proxy.piid = This->proxy_vtbl->header.piid;
     This->proxy.pUnkOuter = outer;
+
+    if (!IsEqualGUID(parentiid, &IID_IUnknown))
+    {
+        HRESULT hr = create_proxy(parentiid, NULL, &This->proxy.base_proxy,
+            (void **)&This->proxy.base_object);
+        if (FAILED(hr)) return hr;
+    }
 
     *proxy = &This->proxy.IRpcProxyBuffer_iface;
     *obj = &This->proxy.PVtbl;
@@ -880,12 +911,13 @@ HRESULT WINAPI CreateProxyFromTypeInfo(ITypeInfo *typeinfo, IUnknown *outer,
 {
     struct typelib_proxy *This;
     WORD funcs, parentfuncs, i;
+    GUID parentiid;
     HRESULT hr;
 
     TRACE("typeinfo %p, outer %p, iid %s, proxy %p, obj %p.\n",
         typeinfo, outer, debugstr_guid(iid), proxy, obj);
 
-    hr = get_iface_info(&typeinfo, &funcs, &parentfuncs);
+    hr = get_iface_info(&typeinfo, &funcs, &parentfuncs, &parentiid);
     if (FAILED(hr))
         return hr;
 
@@ -908,11 +940,13 @@ HRESULT WINAPI CreateProxyFromTypeInfo(ITypeInfo *typeinfo, IUnknown *outer,
     This->proxy_vtbl->header.pStublessProxyInfo = &This->proxy_info;
     This->iid = *iid;
     This->proxy_vtbl->header.piid = &This->iid;
+    fill_delegated_proxy_table((IUnknownVtbl *)This->proxy_vtbl->Vtbl, parentfuncs);
     for (i = 0; i < funcs; i++)
-        This->proxy_vtbl->Vtbl[3 + i] = (void *)-1;
+        This->proxy_vtbl->Vtbl[parentfuncs + i] = (void *)-1;
 
-    hr = build_format_strings(typeinfo, funcs, &This->stub_desc.pFormatTypes,
-        &This->proxy_info.ProcFormatString, &This->offset_table);
+    hr = build_format_strings(typeinfo, funcs, parentfuncs,
+        &This->stub_desc.pFormatTypes, &This->proxy_info.ProcFormatString,
+        &This->offset_table);
     if (FAILED(hr))
     {
         heap_free(This->proxy_vtbl);
@@ -921,7 +955,7 @@ HRESULT WINAPI CreateProxyFromTypeInfo(ITypeInfo *typeinfo, IUnknown *outer,
     }
     This->proxy_info.FormatStringOffset = &This->offset_table[-3];
 
-    hr = typelib_proxy_init(This, outer, funcs + parentfuncs, proxy, obj);
+    hr = typelib_proxy_init(This, outer, funcs + parentfuncs, &parentiid, proxy, obj);
     if (FAILED(hr))
     {
         heap_free((void *)This->stub_desc.pFormatTypes);
@@ -936,18 +970,19 @@ HRESULT WINAPI CreateProxyFromTypeInfo(ITypeInfo *typeinfo, IUnknown *outer,
 
 struct typelib_stub
 {
-    CStdStubBuffer stub;
+    cstdstubbuffer_delegating_t stub;
     IID iid;
     MIDL_STUB_DESC stub_desc;
     MIDL_SERVER_INFO server_info;
     CInterfaceStubVtbl stub_vtbl;
     unsigned short *offset_table;
+    PRPC_STUB_FUNCTION *dispatch_table;
 };
 
 static ULONG WINAPI typelib_stub_Release(IRpcStubBuffer *iface)
 {
-    struct typelib_stub *This = CONTAINING_RECORD(iface, struct typelib_stub, stub);
-    ULONG refcount = InterlockedDecrement(&This->stub.RefCount);
+    struct typelib_stub *This = CONTAINING_RECORD(iface, struct typelib_stub, stub.stub_buffer);
+    ULONG refcount = InterlockedDecrement(&This->stub.stub_buffer.RefCount);
 
     TRACE("(%p) decreasing refs to %d\n", This, refcount);
 
@@ -956,6 +991,13 @@ static ULONG WINAPI typelib_stub_Release(IRpcStubBuffer *iface)
         /* test_Release shows that native doesn't call Disconnect here.
            We'll leave it in for the time being. */
         IRpcStubBuffer_Disconnect(iface);
+
+        if (This->stub.base_stub)
+        {
+            IRpcStubBuffer_Release(This->stub.base_stub);
+            release_delegating_vtbl(This->stub.base_obj);
+            heap_free(This->dispatch_table);
+        }
 
         heap_free((void *)This->stub_desc.pFormatTypes);
         heap_free((void *)This->server_info.ProcString);
@@ -967,38 +1009,51 @@ static ULONG WINAPI typelib_stub_Release(IRpcStubBuffer *iface)
 }
 
 static HRESULT typelib_stub_init(struct typelib_stub *This,
-    IUnknown *server, IRpcStubBuffer **stub)
+    IUnknown *server, const GUID *parentiid, IRpcStubBuffer **stub)
 {
     HRESULT hr;
 
     hr = IUnknown_QueryInterface(server, This->stub_vtbl.header.piid,
-        (void **)&This->stub.pvServerObject);
+        (void **)&This->stub.stub_buffer.pvServerObject);
     if (FAILED(hr))
     {
         WARN("Failed to get interface %s, hr %#x.\n",
             debugstr_guid(This->stub_vtbl.header.piid), hr);
-        This->stub.pvServerObject = server;
+        This->stub.stub_buffer.pvServerObject = server;
         IUnknown_AddRef(server);
     }
 
-    This->stub.lpVtbl = &This->stub_vtbl.Vtbl;
-    This->stub.RefCount = 1;
+    if (!IsEqualGUID(parentiid, &IID_IUnknown))
+    {
+        This->stub.base_obj = get_delegating_vtbl(This->stub_vtbl.header.DispatchTableCount);
+        hr = create_stub(parentiid, (IUnknown *)&This->stub.base_obj, &This->stub.base_stub);
+        if (FAILED(hr))
+        {
+            release_delegating_vtbl(This->stub.base_obj);
+            IUnknown_Release(This->stub.stub_buffer.pvServerObject);
+            return hr;
+        }
+    }
 
-    *stub = (IRpcStubBuffer *)&This->stub;
+    This->stub.stub_buffer.lpVtbl = &This->stub_vtbl.Vtbl;
+    This->stub.stub_buffer.RefCount = 1;
+
+    *stub = (IRpcStubBuffer *)&This->stub.stub_buffer;
     return S_OK;
 }
 
 HRESULT WINAPI CreateStubFromTypeInfo(ITypeInfo *typeinfo, REFIID iid,
     IUnknown *server, IRpcStubBuffer **stub)
 {
+    WORD funcs, parentfuncs, i;
     struct typelib_stub *This;
-    WORD funcs, parentfuncs;
+    GUID parentiid;
     HRESULT hr;
 
     TRACE("typeinfo %p, iid %s, server %p, stub %p.\n",
         typeinfo, debugstr_guid(iid), server, stub);
 
-    hr = get_iface_info(&typeinfo, &funcs, &parentfuncs);
+    hr = get_iface_info(&typeinfo, &funcs, &parentfuncs, &parentiid);
     if (FAILED(hr))
         return hr;
 
@@ -1011,8 +1066,9 @@ HRESULT WINAPI CreateStubFromTypeInfo(ITypeInfo *typeinfo, REFIID iid,
     init_stub_desc(&This->stub_desc);
     This->server_info.pStubDesc = &This->stub_desc;
 
-    hr = build_format_strings(typeinfo, funcs, &This->stub_desc.pFormatTypes,
-        &This->server_info.ProcString, &This->offset_table);
+    hr = build_format_strings(typeinfo, funcs, parentfuncs,
+        &This->stub_desc.pFormatTypes, &This->server_info.ProcString,
+        &This->offset_table);
     if (FAILED(hr))
     {
         heap_free(This);
@@ -1024,10 +1080,22 @@ HRESULT WINAPI CreateStubFromTypeInfo(ITypeInfo *typeinfo, REFIID iid,
     This->stub_vtbl.header.piid = &This->iid;
     This->stub_vtbl.header.pServerInfo = &This->server_info;
     This->stub_vtbl.header.DispatchTableCount = funcs + parentfuncs;
-    This->stub_vtbl.Vtbl = CStdStubBuffer_Vtbl;
+
+    if (!IsEqualGUID(&parentiid, &IID_IUnknown))
+    {
+        This->dispatch_table = heap_alloc((funcs + parentfuncs) * sizeof(void *));
+        for (i = 3; i < parentfuncs; i++)
+            This->dispatch_table[i - 3] = NdrStubForwardingFunction;
+        for (; i < funcs + parentfuncs; i++)
+            This->dispatch_table[i - 3] = (PRPC_STUB_FUNCTION)NdrStubCall2;
+        This->stub_vtbl.header.pDispatchTable = &This->dispatch_table[-3];
+        This->stub_vtbl.Vtbl = CStdStubBuffer_Delegating_Vtbl;
+    }
+    else
+        This->stub_vtbl.Vtbl = CStdStubBuffer_Vtbl;
     This->stub_vtbl.Vtbl.Release = typelib_stub_Release;
 
-    hr = typelib_stub_init(This, server, stub);
+    hr = typelib_stub_init(This, server, &parentiid, stub);
     if (FAILED(hr))
     {
         heap_free((void *)This->stub_desc.pFormatTypes);
