@@ -532,7 +532,7 @@ failed:
  */
 static BOOL create_icon_pixmaps( HDC hdc, const ICONINFO *icon, Pixmap *icon_ret, Pixmap *mask_ret )
 {
-    char buffer[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )];
+    char buffer[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )] = {0};
     BITMAPINFO *info = (BITMAPINFO *)buffer;
     XVisualInfo vis = default_visual;
     struct gdi_image_bits bits;
