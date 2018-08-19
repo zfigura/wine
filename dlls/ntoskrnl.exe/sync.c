@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include "config.h"
+#include "wine/port.h"
 #include <stdarg.h>
 
 #include "ntstatus.h"
@@ -124,4 +126,23 @@ void WINAPI KeInitializeEvent( PRKEVENT event, EVENT_TYPE type, BOOLEAN state )
     event->Header.SignalState = state;
     event->Header.WaitListHead.Blink = NULL;
     event->Header.WaitListHead.Flink = NULL;
+}
+
+/***********************************************************************
+ *           KeSetEvent   (NTOSKRNL.EXE.@)
+ */
+LONG WINAPI KeSetEvent( PRKEVENT event, KPRIORITY increment, BOOLEAN wait )
+{
+    HANDLE handle = event->Header.WaitListHead.Blink;
+    LONG ret;
+
+    TRACE("event %p, increment %d, wait %u.\n", event, increment, wait);
+
+    EnterCriticalSection( &sync_cs );
+    ret = interlocked_xchg( &event->Header.SignalState, TRUE );
+    if (handle)
+        SetEvent( handle );
+    LeaveCriticalSection( &sync_cs );
+
+    return ret;
 }

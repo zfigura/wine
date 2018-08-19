@@ -2248,16 +2248,6 @@ LONG WINAPI KeResetEvent( PRKEVENT Event )
 
 
 /***********************************************************************
- *           KeSetEvent   (NTOSKRNL.EXE.@)
- */
-LONG WINAPI KeSetEvent( PRKEVENT Event, KPRIORITY Increment, BOOLEAN Wait )
-{
-    FIXME("(%p, %d, %d): stub\n", Event, Increment, Wait);
-    return 0;
-}
-
-
-/***********************************************************************
  *           KeSetPriorityThread   (NTOSKRNL.EXE.@)
  */
 KPRIORITY WINAPI KeSetPriorityThread( PKTHREAD Thread, KPRIORITY Priority )
