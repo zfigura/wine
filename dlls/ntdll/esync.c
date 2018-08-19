@@ -640,6 +640,11 @@ NTSTATUS esync_pulse_event( HANDLE handle, LONG *prev )
      * used (and publicly deprecated). */
     if (write( obj->fd, &value, sizeof(value) ) == -1)
         return FILE_GetNtStatus();
+
+    /* Try to give other threads a chance to wake up. Hopefully erring on this
+     * side is the better thing to do... */
+    NtYieldExecution();
+
     read( obj->fd, &value, sizeof(value) );
 
     current = interlocked_xchg( &event->signaled, 0 );
