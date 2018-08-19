@@ -146,3 +146,22 @@ LONG WINAPI KeSetEvent( PRKEVENT event, KPRIORITY increment, BOOLEAN wait )
 
     return ret;
 }
+
+/***********************************************************************
+ *           KeResetEvent   (NTOSKRNL.EXE.@)
+ */
+LONG WINAPI KeResetEvent( PRKEVENT event )
+{
+    HANDLE handle = event->Header.WaitListHead.Blink;
+    LONG ret;
+
+    TRACE("event %p.\n", event);
+
+    EnterCriticalSection( &sync_cs );
+    ret = interlocked_xchg( &event->Header.SignalState, FALSE );
+    if (handle)
+        ResetEvent( handle );
+    LeaveCriticalSection( &sync_cs );
+
+    return ret;
+}
