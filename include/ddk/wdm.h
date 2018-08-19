@@ -1419,6 +1419,7 @@ NTSTATUS  WINAPI IoSetDeviceInterfaceState(UNICODE_STRING*,BOOLEAN);
 NTSTATUS  WINAPI IoWMIRegistrationControl(PDEVICE_OBJECT,ULONG);
 
 PKTHREAD  WINAPI KeGetCurrentThread(void);
+void      WINAPI KeInitializeEvent(PRKEVENT,EVENT_TYPE,BOOLEAN);
 void      WINAPI KeInitializeSemaphore(PRKSEMAPHORE,LONG,LONG);
 void      WINAPI KeInitializeTimerEx(PKTIMER,TIMER_TYPE);
 void      WINAPI KeQuerySystemTime(LARGE_INTEGER*);
