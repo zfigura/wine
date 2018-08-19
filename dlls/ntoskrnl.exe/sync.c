@@ -165,3 +165,11 @@ LONG WINAPI KeResetEvent( PRKEVENT event )
 
     return ret;
 }
+
+/***********************************************************************
+ *           KeClearEvent (NTOSKRNL.EXE.@)
+ */
+void WINAPI KeClearEvent( PRKEVENT event )
+{
+    KeResetEvent( event );
+}
