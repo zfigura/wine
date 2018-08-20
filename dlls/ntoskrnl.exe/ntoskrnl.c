@@ -2085,17 +2085,6 @@ PRKTHREAD WINAPI KeGetCurrentThread(void)
     return NULL;
 }
 
- /***********************************************************************
- *           KeWaitForMutexObject   (NTOSKRNL.EXE.@)
- */
-NTSTATUS WINAPI KeWaitForMutexObject(PRKMUTEX Mutex, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
-                                     BOOLEAN Alertable, PLARGE_INTEGER Timeout)
-{
-    FIXME( "stub: %p, %d, %d, %d, %p\n", Mutex, WaitReason, WaitMode, Alertable, Timeout );
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-
 /***********************************************************************
  *           KeInitializeSpinLock   (NTOSKRNL.EXE.@)
  */
