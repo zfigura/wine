@@ -38,6 +38,7 @@ enum object_type
 {
     TYPE_MANUAL_EVENT = 0,
     TYPE_AUTO_EVENT = 1,
+    TYPE_SEMAPHORE = 5,
 };
 
 static CRITICAL_SECTION sync_cs;
@@ -181,4 +182,18 @@ LONG WINAPI KeResetEvent( PRKEVENT event )
 void WINAPI KeClearEvent( PRKEVENT event )
 {
     KeResetEvent( event );
+}
+
+/***********************************************************************
+ *           KeInitializeSemaphore   (NTOSKRNL.EXE.@)
+ */
+void WINAPI KeInitializeSemaphore( PRKSEMAPHORE semaphore, LONG count, LONG limit )
+{
+    TRACE("semaphore %p, count %d, limit %d.\n", semaphore, count, limit);
+
+    semaphore->Header.Type = TYPE_SEMAPHORE;
+    semaphore->Header.SignalState = count;
+    semaphore->Header.WaitListHead.Blink = NULL;
+    semaphore->Header.WaitListHead.Flink = NULL;
+    semaphore->Limit = limit;
 }
