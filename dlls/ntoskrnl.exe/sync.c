@@ -83,6 +83,13 @@ NTSTATUS WINAPI KeWaitForMultipleObjects(ULONG count, void *pobjs[],
             case TYPE_AUTO_EVENT:
                 objs[i]->WaitListHead.Blink = CreateEventW( NULL, FALSE, objs[i]->SignalState, NULL );
                 break;
+            case TYPE_SEMAPHORE:
+            {
+                KSEMAPHORE *semaphore = CONTAINING_RECORD(objs[i], KSEMAPHORE, Header);
+                objs[i]->WaitListHead.Blink = CreateSemaphoreW( NULL,
+                    semaphore->Header.SignalState, semaphore->Limit, NULL );
+                break;
+            }
             }
         }
 
@@ -101,6 +108,9 @@ NTSTATUS WINAPI KeWaitForMultipleObjects(ULONG count, void *pobjs[],
             {
             case TYPE_AUTO_EVENT:
                 objs[i]->SignalState = FALSE;
+                break;
+            case TYPE_SEMAPHORE:
+                --objs[i]->SignalState;
                 break;
             }
         }
@@ -196,4 +206,25 @@ void WINAPI KeInitializeSemaphore( PRKSEMAPHORE semaphore, LONG count, LONG limi
     semaphore->Header.WaitListHead.Blink = NULL;
     semaphore->Header.WaitListHead.Flink = NULL;
     semaphore->Limit = limit;
+}
+
+/***********************************************************************
+ *           KeReleaseSemaphore   (NTOSKRNL.EXE.@)
+ */
+LONG WINAPI KeReleaseSemaphore( PRKSEMAPHORE semaphore, KPRIORITY increment,
+                                LONG count, BOOLEAN wait )
+{
+    HANDLE handle = semaphore->Header.WaitListHead.Blink;
+    LONG ret;
+
+    TRACE("semaphore %p, increment %d, count %d, wait %u.\n",
+        semaphore, increment, count, wait);
+
+    EnterCriticalSection( &sync_cs );
+    ret = interlocked_xchg_add( &semaphore->Header.SignalState, count );
+    if (handle)
+        ReleaseSemaphore( handle, count, NULL );
+    LeaveCriticalSection( &sync_cs );
+
+    return ret;
 }
