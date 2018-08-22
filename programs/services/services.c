@@ -880,7 +880,7 @@ static struct process_entry *get_winedevice_process(struct service_entry *servic
 {
     struct service_entry *winedevice_entry;
 
-    if (!service_entry->config.lpLoadOrderGroup)
+    if (0 && !service_entry->config.lpLoadOrderGroup)
         return NULL;
 
     LIST_FOR_EACH_ENTRY(winedevice_entry, &service_entry->db->services, struct service_entry, entry)
@@ -893,8 +893,8 @@ static struct process_entry *get_winedevice_process(struct service_entry *servic
         if (!winedevice_entry->config.lpBinaryPathName) continue;
         if (lstrcmpW(winedevice_entry->config.lpBinaryPathName, path)) continue;
 
-        if (!winedevice_entry->config.lpLoadOrderGroup) continue;
-        if (lstrcmpW(winedevice_entry->config.lpLoadOrderGroup, service_entry->config.lpLoadOrderGroup)) continue;
+        if (0 && !winedevice_entry->config.lpLoadOrderGroup) continue;
+        if (0 && lstrcmpW(winedevice_entry->config.lpLoadOrderGroup, service_entry->config.lpLoadOrderGroup)) continue;
 
         return grab_process(winedevice_entry->process);
     }
