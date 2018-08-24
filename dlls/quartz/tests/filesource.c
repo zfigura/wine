@@ -251,7 +251,7 @@ todo_wine
         mt.lSampleSize = 123;
         mt.formattype = FORMAT_VideoInfo;
         hr = IPin_QueryAccept(pin, &mt);
-todo_wine
+todo_wine_if(IsEqualGUID(tests[i].subtype, &GUID_NULL))
         ok(hr == S_OK, "Got hr %#x.\n", hr);
 
         mt.majortype = MEDIATYPE_Video;
@@ -344,7 +344,6 @@ todo_wine
     mt.lSampleSize = 456;
     mt.formattype = FORMAT_VideoInfo;
     hr = IPin_QueryAccept(pin, &mt);
-todo_wine
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     mt.majortype = MEDIATYPE_Stream;
