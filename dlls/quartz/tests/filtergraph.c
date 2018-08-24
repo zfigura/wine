@@ -26,6 +26,8 @@
 #include "wine/heap.h"
 #include "wine/test.h"
 
+#include "util.h"
+
 typedef struct TestFilterImpl
 {
     IBaseFilter IBaseFilter_iface;
@@ -39,10 +41,7 @@ typedef struct TestFilterImpl
     UINT nPins;
 } TestFilterImpl;
 
-static const WCHAR avifile[] = {'t','e','s','t','.','a','v','i',0};
-static const WCHAR mpegfile[] = {'t','e','s','t','.','m','p','g',0};
-
-static WCHAR *load_resource(const WCHAR *name)
+WCHAR *load_resource(const WCHAR *name)
 {
     static WCHAR pathW[MAX_PATH];
     DWORD written;
