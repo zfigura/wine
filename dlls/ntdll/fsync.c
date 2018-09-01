@@ -32,6 +32,9 @@
 #ifdef HAVE_SYS_STAT_H
 # include <sys/stat.h>
 #endif
+#ifdef HAVE_SYS_SYSCALL_H
+# include <sys/syscall.h>
+#endif
 #include <unistd.h>
 
 #include "ntstatus.h"
@@ -47,6 +50,11 @@
 #include "fsync.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(fsync);
+
+static inline int futex_wake( int *addr, int val )
+{
+    return syscall( __NR_futex, addr, 1, val, NULL, 0, 0 );
+}
 
 int do_fsync(void)
 {
@@ -258,4 +266,30 @@ NTSTATUS fsync_create_semaphore( HANDLE *handle, ACCESS_MASK access,
         attr ? debugstr_us(attr->ObjectName) : "<no name>", initial, max);
 
     return create_fsync( FSYNC_SEMAPHORE, handle, access, attr, initial, max );
+}
+
+NTSTATUS fsync_release_semaphore( HANDLE handle, ULONG count, ULONG *prev )
+{
+    struct fsync *obj;
+    struct semaphore *semaphore;
+    ULONG current;
+
+    TRACE("%p, %d, %p.\n", handle, count, prev);
+
+    if (!(obj = get_cached_object( handle ))) return STATUS_INVALID_HANDLE;
+    semaphore = obj->shm;
+
+    do
+    {
+        current = semaphore->count;
+        if (count + current > semaphore->max)
+            return STATUS_SEMAPHORE_LIMIT_EXCEEDED;
+    } while (__sync_val_compare_and_swap( &semaphore->count, current, count + current ) != current);
+
+    if (prev) *prev = current;
+
+    if (!current)
+        futex_wake( &semaphore->count, count );
+
+    return STATUS_SUCCESS;
 }

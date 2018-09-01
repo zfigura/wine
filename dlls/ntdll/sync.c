@@ -333,6 +333,10 @@ NTSTATUS WINAPI NtQuerySemaphore( HANDLE handle, SEMAPHORE_INFORMATION_CLASS cla
 NTSTATUS WINAPI NtReleaseSemaphore( HANDLE handle, ULONG count, PULONG previous )
 {
     NTSTATUS ret;
+
+    if (do_fsync())
+        return fsync_release_semaphore( handle, count, previous );
+
     SERVER_START_REQ( release_semaphore )
     {
         req->handle = wine_server_obj_handle( handle );
