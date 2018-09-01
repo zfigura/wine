@@ -5768,7 +5768,6 @@ struct terminate_job_reply
 };
 
 
-
 struct suspend_process_request
 {
     struct request_header __header;
@@ -5789,6 +5788,22 @@ struct resume_process_request
 struct resume_process_reply
 {
     struct reply_header __header;
+};
+
+
+struct create_fsync_request
+{
+    struct request_header __header;
+    unsigned int access;
+    int low;
+    int high;
+    /* VARARG(objattr,object_attributes); */
+};
+struct create_fsync_reply
+{
+    struct reply_header __header;
+    obj_handle_t handle;
+    unsigned int shm_idx;
 };
 
 
@@ -6092,6 +6107,7 @@ enum request
     REQ_terminate_job,
     REQ_suspend_process,
     REQ_resume_process,
+    REQ_create_fsync,
     REQ_NB_REQUESTS
 };
 
@@ -6397,6 +6413,7 @@ union generic_request
     struct terminate_job_request terminate_job_request;
     struct suspend_process_request suspend_process_request;
     struct resume_process_request resume_process_request;
+    struct create_fsync_request create_fsync_request;
 };
 union generic_reply
 {
@@ -6700,8 +6717,9 @@ union generic_reply
     struct terminate_job_reply terminate_job_reply;
     struct suspend_process_reply suspend_process_reply;
     struct resume_process_reply resume_process_reply;
+    struct create_fsync_reply create_fsync_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 585
+#define SERVER_PROTOCOL_VERSION 586
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
