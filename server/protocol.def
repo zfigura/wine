@@ -3946,6 +3946,14 @@ struct handle_info
     obj_handle_t handle;       /* process handle */
 @END
 
+enum fsync_type
+{
+    FSYNC_SEMAPHORE = 1,
+    FSYNC_AUTO_EVENT,
+    FSYNC_MANUAL_EVENT,
+    FSYNC_MANUAL_SERVER,
+};
+
 /* Create a new futex-based synchronization object */
 @REQ(create_fsync)
     unsigned int access;        /* wanted access rights */
@@ -3955,4 +3963,12 @@ struct handle_info
 @REPLY
     obj_handle_t handle;        /* handle to the object */
     unsigned int shm_idx;       /* this object's index into the shm section */
+@END
+
+/* Retrieve the shm index for an object. */
+@REQ(get_fsync_idx)
+    obj_handle_t handle;        /* handle to the object */
+@REPLY
+    int          type;
+    unsigned int shm_idx;
 @END

@@ -69,7 +69,7 @@ struct object_ops
     /* is object signaled? */
     int  (*signaled)(struct object *,struct wait_queue_entry *);
     /* return the fsync shm index for this object */
-    unsigned int (*get_fsync_idx)(struct object *);
+    unsigned int (*get_fsync_idx)(struct object *, enum fsync_type *type);
     /* wait satisfied */
     void (*satisfied)(struct object *,struct wait_queue_entry *);
     /* signal an object */
