@@ -17,6 +17,7 @@ C_SRCS = \
 	error.c \
 	exception.c \
 	file.c \
+	fsync.c \
 	handletable.c \
 	heap.c \
 	large_int.c \
