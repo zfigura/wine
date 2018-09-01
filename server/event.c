@@ -35,6 +35,7 @@
 #include "thread.h"
 #include "request.h"
 #include "security.h"
+#include "fsync.h"
 
 struct event
 {
@@ -42,11 +43,13 @@ struct event
     struct list    kernel_object;   /* list of kernel object pointers */
     int            manual_reset;    /* is it a manual reset event? */
     int            signaled;        /* event has been signaled */
+    unsigned int   fsync_idx;
 };
 
 static void event_dump( struct object *obj, int verbose );
 static struct object_type *event_get_type( struct object *obj );
 static int event_signaled( struct object *obj, struct wait_queue_entry *entry );
+static unsigned int event_get_fsync_idx( struct object *obj, enum fsync_type *type );
 static void event_satisfied( struct object *obj, struct wait_queue_entry *entry );
 static unsigned int event_map_access( struct object *obj, unsigned int access );
 static int event_signal( struct object *obj, unsigned int access);
@@ -60,7 +63,7 @@ static const struct object_ops event_ops =
     add_queue,                 /* add_queue */
     remove_queue,              /* remove_queue */
     event_signaled,            /* signaled */
-    NULL,                      /* get_fsync_idx */
+    event_get_fsync_idx,       /* get_fsync_idx */
     event_satisfied,           /* satisfied */
     event_signal,              /* signal */
     no_get_fd,                 /* get_fd */
@@ -126,6 +129,9 @@ struct event *create_event( struct object *root, const struct unicode_str *name,
             list_init( &event->kernel_object );
             event->manual_reset = manual_reset;
             event->signaled     = initial_state;
+
+            if (do_fsync())
+                event->fsync_idx = fsync_alloc_shm( initial_state, 0 );
         }
     }
     return event;
@@ -154,6 +160,9 @@ void set_event( struct event *event )
 void reset_event( struct event *event )
 {
     event->signaled = 0;
+
+    if (do_fsync())
+        fsync_clear( &event->obj );
 }
 
 static void event_dump( struct object *obj, int verbose )
@@ -176,6 +185,13 @@ static int event_signaled( struct object *obj, struct wait_queue_entry *entry )
     struct event *event = (struct event *)obj;
     assert( obj->ops == &event_ops );
     return event->signaled;
+}
+
+static unsigned int event_get_fsync_idx( struct object *obj, enum fsync_type *type )
+{
+    struct event *event = (struct event *)obj;
+    *type = FSYNC_MANUAL_SERVER;
+    return event->fsync_idx;
 }
 
 static void event_satisfied( struct object *obj, struct wait_queue_entry *entry )
