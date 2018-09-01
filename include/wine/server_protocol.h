@@ -5796,6 +5796,7 @@ enum fsync_type
     FSYNC_AUTO_EVENT,
     FSYNC_MANUAL_EVENT,
     FSYNC_MANUAL_SERVER,
+    FSYNC_QUEUE,
 };
 
 
