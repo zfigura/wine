@@ -22,6 +22,7 @@
 #include "wine/port.h"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdarg.h>
 #ifdef HAVE_SYS_MMAN_H
@@ -29,6 +30,9 @@
 #endif
 #ifdef HAVE_SYS_STAT_H
 # include <sys/stat.h>
+#endif
+#ifdef HAVE_SYS_SYSCALL_H
+# include <sys/syscall.h>
 #endif
 #include <unistd.h>
 
@@ -238,6 +242,32 @@ struct fsync *create_fsync( struct object *root, const struct unicode_str *name,
     set_error( STATUS_NOT_IMPLEMENTED );
     return NULL;
 #endif
+}
+
+static inline int futex_wake( int *addr, int val )
+{
+    return syscall( __NR_futex, addr, 1, val, NULL, 0, 0 );
+}
+
+/* shm layout for events or event-like objects. */
+struct fsync_event
+{
+    int signaled;
+    int unused;
+};
+
+void fsync_wake_up( struct object *obj )
+{
+    struct fsync_event *event;
+    enum fsync_type type;
+
+    if (obj->ops->get_fsync_idx)
+    {
+        event = get_shm( obj->ops->get_fsync_idx( obj, &type ) );
+
+        if (!__atomic_exchange_n( &event->signaled, 1, __ATOMIC_SEQ_CST ))
+            futex_wake( &event->signaled, INT_MAX );
+    }
 }
 
 DECL_HANDLER(create_fsync)
