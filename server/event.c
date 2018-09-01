@@ -139,6 +139,10 @@ struct event *create_event( struct object *root, const struct unicode_str *name,
 
 struct event *get_event_obj( struct process *process, obj_handle_t handle, unsigned int access )
 {
+    struct object *obj;
+    if (do_fsync() && (obj = get_handle_obj( process, handle, access, &fsync_ops)))
+        return (struct event *)obj; /* even though it's not an event */
+
     return (struct event *)get_handle_obj( process, handle, access, &event_ops );
 }
 
@@ -152,6 +156,12 @@ void pulse_event( struct event *event )
 
 void set_event( struct event *event )
 {
+    if (do_fsync() && event->obj.ops == &fsync_ops)
+    {
+        fsync_set_event( (struct fsync *)event );
+        return;
+    }
+
     event->signaled = 1;
     /* wake up all waiters if manual reset, a single one otherwise */
     wake_up( &event->obj, !event->manual_reset );
@@ -159,6 +169,12 @@ void set_event( struct event *event )
 
 void reset_event( struct event *event )
 {
+    if (do_fsync() && event->obj.ops == &fsync_ops)
+    {
+        fsync_reset_event( (struct fsync *)event );
+        return;
+    }
+
     event->signaled = 0;
 
     if (do_fsync())
