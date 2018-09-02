@@ -91,6 +91,7 @@ struct thread
     struct token          *token;         /* security token associated with this thread */
     struct list            kernel_object; /* list of kernel object pointers */
     unsigned int           fsync_idx;
+    unsigned int           fsync_apc_idx;
 };
 
 struct thread_snapshot

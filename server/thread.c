@@ -294,7 +294,10 @@ struct thread *create_thread( int fd, struct process *process, const struct secu
     }
 
     if (do_fsync())
+    {
         thread->fsync_idx = fsync_alloc_shm( 0, 0 );
+        thread->fsync_apc_idx = fsync_alloc_shm( 0, 0 );
+    }
 
     set_fd_events( thread->request_fd, POLLIN );  /* start listening to events */
     add_process_thread( thread->process, thread );
@@ -1037,7 +1040,12 @@ static int queue_apc( struct process *process, struct thread *thread, struct thr
     grab_object( apc );
     list_add_tail( queue, &apc->entry );
     if (!list_prev( queue, &apc->entry ))  /* first one */
+    {
         wake_thread( thread );
+
+        if (do_fsync())
+            fsync_wake_futex( thread->fsync_apc_idx );
+    }
 
     return 1;
 }
@@ -1085,6 +1093,10 @@ static struct thread_apc *thread_dequeue_apc( struct thread *thread, int system_
         apc = LIST_ENTRY( ptr, struct thread_apc, entry );
         list_remove( ptr );
     }
+
+    if (do_fsync() && list_empty( &thread->system_apc ) && list_empty( &thread->user_apc ))
+        fsync_clear_futex( thread->fsync_apc_idx );
+
     return apc;
 }
 

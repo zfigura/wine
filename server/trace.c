@@ -4648,6 +4648,15 @@ static void dump_fsync_msgwait_request( const struct fsync_msgwait_request *req 
     fprintf( stderr, " in_msgwait=%d", req->in_msgwait );
 }
 
+static void dump_get_fsync_apc_idx_request( const struct get_fsync_apc_idx_request *req )
+{
+}
+
+static void dump_get_fsync_apc_idx_reply( const struct get_fsync_apc_idx_reply *req )
+{
+    fprintf( stderr, " shm_idx=%08x", req->shm_idx );
+}
+
 static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
     (dump_func)dump_new_process_request,
     (dump_func)dump_exec_process_request,
@@ -4951,6 +4960,7 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
     (dump_func)dump_open_fsync_request,
     (dump_func)dump_get_fsync_idx_request,
     (dump_func)dump_fsync_msgwait_request,
+    (dump_func)dump_get_fsync_apc_idx_request,
 };
 
 static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
@@ -5256,6 +5266,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
     (dump_func)dump_open_fsync_reply,
     (dump_func)dump_get_fsync_idx_reply,
     NULL,
+    (dump_func)dump_get_fsync_apc_idx_reply,
 };
 
 static const char * const req_names[REQ_NB_REQUESTS] = {
@@ -5561,6 +5572,7 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
     "open_fsync",
     "get_fsync_idx",
     "fsync_msgwait",
+    "get_fsync_apc_idx",
 };
 
 static const struct
