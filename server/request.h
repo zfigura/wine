@@ -412,6 +412,7 @@ DECL_HANDLER(suspend_process);
 DECL_HANDLER(resume_process);
 DECL_HANDLER(create_fsync);
 DECL_HANDLER(get_fsync_idx);
+DECL_HANDLER(fsync_msgwait);
 
 #ifdef WANT_REQUEST_HANDLERS
 
@@ -718,6 +719,7 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
     (req_handler)req_resume_process,
     (req_handler)req_create_fsync,
     (req_handler)req_get_fsync_idx,
+    (req_handler)req_fsync_msgwait,
 };
 
 C_ASSERT( sizeof(affinity_t) == 8 );
@@ -2459,6 +2461,8 @@ C_ASSERT( sizeof(struct get_fsync_idx_request) == 16 );
 C_ASSERT( FIELD_OFFSET(struct get_fsync_idx_reply, type) == 8 );
 C_ASSERT( FIELD_OFFSET(struct get_fsync_idx_reply, shm_idx) == 12 );
 C_ASSERT( sizeof(struct get_fsync_idx_reply) == 16 );
+C_ASSERT( FIELD_OFFSET(struct fsync_msgwait_request, in_msgwait) == 12 );
+C_ASSERT( sizeof(struct fsync_msgwait_request) == 16 );
 
 #endif  /* WANT_REQUEST_HANDLERS */
 
