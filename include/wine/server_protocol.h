@@ -5807,13 +5807,17 @@ struct create_fsync_request
     unsigned int access;
     int low;
     int high;
+    int type;
     /* VARARG(objattr,object_attributes); */
+    char __pad_28[4];
 };
 struct create_fsync_reply
 {
     struct reply_header __header;
     obj_handle_t handle;
+    int type;
     unsigned int shm_idx;
+    char __pad_20[4];
 };
 
 
@@ -6759,6 +6763,6 @@ union generic_reply
     struct fsync_msgwait_reply fsync_msgwait_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 588
+#define SERVER_PROTOCOL_VERSION 589
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
