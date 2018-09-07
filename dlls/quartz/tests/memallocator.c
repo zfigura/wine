@@ -31,6 +31,66 @@ static IMemAllocator *create_allocator(void)
     return allocator;
 }
 
+static void test_properties(void)
+{
+    static const ALLOCATOR_PROPERTIES test_props[] =
+    {
+        {0, 0, 1, 0},
+        {1, 0, 1, 0},
+        {1, 1, 1, 0},
+        {1, 1, 4, 0},
+        {2, 1, 1, 0},
+        {1, 2, 4, 0},
+        {1, 1, 10, 0},
+        {1, 10, 10, 0},
+        {1, 11, 10, 0},
+        {1, 20, 10, 0},
+        {1, 1, 10, 1},
+        {1, 9, 10, 1},
+        {1, 10, 10, 1},
+        {1, 11, 10, 1},
+        {1, 0, 10, 10},
+        {1, 1, 10, 10},
+        {1, 10, 10, 10},
+    };
+    ALLOCATOR_PROPERTIES req_props = {0}, ret_props;
+    IMemAllocator *allocator = create_allocator();
+    HRESULT hr;
+    int i;
+
+    memset(&ret_props, 0xcc, sizeof(ret_props));
+    hr = IMemAllocator_GetProperties(allocator, &ret_props);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!ret_props.cBuffers, "Got %d buffers.\n", ret_props.cBuffers);
+    ok(!ret_props.cbBuffer, "Got size %d.\n", ret_props.cbBuffer);
+    ok(!ret_props.cbAlign, "Got align %d.\n", ret_props.cbAlign);
+    ok(!ret_props.cbPrefix, "Got prefix %d.\n", ret_props.cbPrefix);
+
+    hr = IMemAllocator_SetProperties(allocator, &req_props, &ret_props);
+    ok(hr == VFW_E_BADALIGN, "Got hr %#x.\n", hr);
+
+    for (i = 0; i < ARRAY_SIZE(test_props); i++)
+    {
+        req_props = test_props[i];
+        hr = IMemAllocator_SetProperties(allocator, &req_props, &ret_props);
+        ok(hr == S_OK, "Got hr %#x.\n", hr);
+        ok(!memcmp(&req_props, &test_props[i], sizeof(req_props)), "Requested props should not be changed.\n");
+        ok(ret_props.cBuffers == req_props.cBuffers, "Got %d buffers for test %d.\n", ret_props.cBuffers, i);
+        ok(ret_props.cbBuffer >= req_props.cbBuffer, "Got size %d for test %d.\n", ret_props.cbBuffer, i);
+        ok(ret_props.cbAlign == req_props.cbAlign, "Got alignment %d for test %d.\n", ret_props.cbAlign, i);
+        ok(ret_props.cbPrefix == req_props.cbPrefix, "Got prefix %d for test %d.\n", ret_props.cbPrefix, i);
+
+        hr = IMemAllocator_GetProperties(allocator, &ret_props);
+        ok(hr == S_OK, "Got hr %#x.\n", hr);
+        ok(ret_props.cBuffers == req_props.cBuffers, "Got %d buffers for test %d.\n", ret_props.cBuffers, i);
+        ok(ret_props.cbBuffer >= req_props.cbBuffer, "Got size %d for test %d.\n", ret_props.cbBuffer, i);
+        ok(ret_props.cbAlign == req_props.cbAlign, "Got alignment %d for test %d.\n", ret_props.cbAlign, i);
+        ok(ret_props.cbPrefix == req_props.cbPrefix, "Got prefix %d for test %d.\n", ret_props.cbPrefix, i);
+    }
+
+    IMemAllocator_Release(allocator);
+}
+
 static void test_commit(void)
 {
     ALLOCATOR_PROPERTIES req_props = {2, 65536, 1, 0}, ret_props;
@@ -85,6 +145,7 @@ START_TEST(memallocator)
 {
     CoInitialize(NULL);
 
+    test_properties();
     test_commit();
 
     CoUninitialize();
