@@ -1,7 +1,25 @@
+#include "wine/heap.h"
+
 static const WCHAR avifile[] = {'t','e','s','t','.','a','v','i',0};
 static const WCHAR mpegfile[] = {'t','e','s','t','.','m','p','g',0};
 
 WCHAR *load_resource(const WCHAR *name);
+
+static inline void copy_media_type(AM_MEDIA_TYPE *dest, const AM_MEDIA_TYPE *src)
+{
+    *dest = *src;
+    if (src->cbFormat)
+    {
+        dest->pbFormat = heap_alloc(src->cbFormat);
+        memcpy(dest->pbFormat, src->pbFormat, src->cbFormat);
+    }
+}
+
+static inline BOOL compare_media_types(const AM_MEDIA_TYPE *a, const AM_MEDIA_TYPE *b)
+{
+    return !memcmp(a, b, offsetof(AM_MEDIA_TYPE, pbFormat))
+        && !memcmp(a->pbFormat, b->pbFormat, a->cbFormat);
+}
 
 struct testpin
 {
@@ -24,6 +42,8 @@ struct testpin
     HRESULT QueryInternalConnections_hr;
 
     IAsyncReader *reader;
+    IAsyncReader IAsyncReader_iface;
+    IMemInputPin IMemInputPin_iface;
 };
 
 static inline struct testpin *impl_from_IPin(IPin *iface)
@@ -34,6 +54,7 @@ static inline struct testpin *impl_from_IPin(IPin *iface)
 HRESULT WINAPI testpin_QueryInterface(IPin *iface, REFIID iid, void **out);
 ULONG WINAPI testpin_AddRef(IPin *iface);
 ULONG WINAPI testpin_Release(IPin *iface);
+HRESULT WINAPI testpin_Disconnect(IPin *iface);
 HRESULT WINAPI testpin_ConnectedTo(IPin *iface, IPin **peer);
 HRESULT WINAPI testpin_ConnectionMediaType(IPin *iface, AM_MEDIA_TYPE *mt);
 HRESULT WINAPI testpin_QueryPinInfo(IPin *iface, PIN_INFO *info);
@@ -48,6 +69,10 @@ HRESULT WINAPI testpin_EndFlush(IPin *iface);
 HRESULT WINAPI testpin_NewSegment(IPin *iface, REFERENCE_TIME start, REFERENCE_TIME stop, double rate);
 
 HRESULT WINAPI no_Connect(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt);
+HRESULT WINAPI no_ReceiveConnection(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt);
+
+const IAsyncReaderVtbl testreader_vtbl;
+const IMemInputPinVtbl testmeminput_vtbl;
 
 void testpin_init(struct testpin *pin, const IPinVtbl *vtbl, PIN_DIRECTION dir);
 

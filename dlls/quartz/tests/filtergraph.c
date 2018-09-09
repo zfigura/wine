@@ -795,7 +795,7 @@ static HRESULT WINAPI testenummt_Next(IEnumMediaTypes *iface, ULONG count, AM_ME
             break;
 
         out[i] = CoTaskMemAlloc(sizeof(*out[i]));
-        *out[i] = pin->types[pin->enum_idx + i];
+        copy_media_type(out[i], &pin->types[pin->enum_idx + i]);
     }
 
     if (fetched)
@@ -844,6 +844,18 @@ HRESULT WINAPI testpin_QueryInterface(IPin *iface, REFIID iid, void **out)
     {
         *out = &pin->IPin_iface;
         IPin_AddRef(*out);
+        return S_OK;
+    }
+    else if (IsEqualGUID(iid, &IID_IMemInputPin) && pin->IMemInputPin_iface.lpVtbl)
+    {
+        *out = &pin->IMemInputPin_iface.lpVtbl;
+        IMemInputPin_AddRef(*out);
+        return S_OK;
+    }
+    else if (IsEqualGUID(iid, &IID_IAsyncReader) && pin->IAsyncReader_iface.lpVtbl)
+    {
+        *out = &pin->IAsyncReader_iface.lpVtbl;
+        IAsyncReader_AddRef(*out);
         return S_OK;
     }
 
@@ -980,13 +992,183 @@ HRESULT WINAPI testpin_EndOfStream(IPin *iface)
     return E_NOTIMPL;
 }
 
+static struct testpin *impl_from_IMemInputPin(IMemInputPin *iface)
+{
+    return CONTAINING_RECORD(iface, struct testpin, IMemInputPin_iface);
+}
+
+static HRESULT WINAPI testmeminput_QueryInterface(IMemInputPin *iface, REFIID iid, void **out)
+{
+    struct testpin *pin = impl_from_IMemInputPin(iface);
+    return IPin_QueryInterface(&pin->IPin_iface, iid, out);
+}
+
+static ULONG WINAPI testmeminput_AddRef(IMemInputPin *iface)
+{
+    struct testpin *pin = impl_from_IMemInputPin(iface);
+    return InterlockedIncrement(&pin->ref);
+}
+
+static ULONG WINAPI testmeminput_Release(IMemInputPin *iface)
+{
+    struct testpin *pin = impl_from_IMemInputPin(iface);
+    return InterlockedDecrement(&pin->ref);
+}
+
+static HRESULT WINAPI testmeminput_GetAllocator(IMemInputPin *iface, IMemAllocator **allocator)
+{
+    if (winetest_debug > 1) trace("GetAllocator()\n");
+    return VFW_E_NO_ALLOCATOR;
+}
+
+static HRESULT WINAPI testmeminput_NotifyAllocator(IMemInputPin *iface, IMemAllocator *allocator, BOOL readonly)
+{
+    if (winetest_debug > 1) trace("NotifyAllocator()\n");
+    return S_OK;
+}
+
+static HRESULT WINAPI testmeminput_GetAllocatorRequirements(IMemInputPin *iface, ALLOCATOR_PROPERTIES *props)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI testmeminput_Receive(IMemInputPin *iface, IMediaSample *sample)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI testmeminput_ReceiveMultiple(IMemInputPin *iface, IMediaSample **samples, LONG count, LONG *processed)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI testmeminput_ReceiveCanBlock(IMemInputPin *iface)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+const IMemInputPinVtbl testmeminput_vtbl =
+{
+    testmeminput_QueryInterface,
+    testmeminput_AddRef,
+    testmeminput_Release,
+    testmeminput_GetAllocator,
+    testmeminput_NotifyAllocator,
+    testmeminput_GetAllocatorRequirements,
+    testmeminput_Receive,
+    testmeminput_ReceiveMultiple,
+    testmeminput_ReceiveCanBlock,
+};
+
+static struct testpin *impl_from_IAsyncReader(IAsyncReader *iface)
+{
+    return CONTAINING_RECORD(iface, struct testpin, IAsyncReader_iface);
+}
+
+static HRESULT WINAPI testreader_QueryInterface(IAsyncReader *iface, REFIID iid, void **out)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    return IPin_QueryInterface(&pin->IPin_iface, iid, out);
+}
+
+static ULONG WINAPI testreader_AddRef(IAsyncReader *iface)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    return InterlockedIncrement(&pin->ref);
+}
+
+static ULONG WINAPI testreader_Release(IAsyncReader *iface)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    return InterlockedDecrement(&pin->ref);
+}
+
+static HRESULT WINAPI testreader_RequestAllocator(IAsyncReader *iface, IMemAllocator *preferred,
+        ALLOCATOR_PROPERTIES *props, IMemAllocator **allocator)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    if (winetest_debug > 1) trace("%p->RequestAllocator()\n", pin);
+
+    ok(!!preferred, "Got NULL preferred allocator.\n");
+    return IAsyncReader_RequestAllocator(pin->reader, preferred, props, allocator);
+}
+
+static HRESULT WINAPI testreader_Request(IAsyncReader *iface, IMediaSample *sample, DWORD_PTR cookie)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    if (winetest_debug > 1) trace("%p->Request(%lu)\n", pin, cookie);
+    return IAsyncReader_Request(pin->reader, sample, cookie);
+}
+
+static HRESULT WINAPI testreader_WaitForNext(IAsyncReader *iface, DWORD timeout,
+        IMediaSample **sample, DWORD_PTR *cookie)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    if (winetest_debug > 1) trace("%p->WaitForNext(%u)\n", pin, timeout);
+    return IAsyncReader_WaitForNext(pin->reader, timeout, sample, cookie);
+}
+
+static HRESULT WINAPI testreader_SyncReadAligned(IAsyncReader *iface, IMediaSample *sample)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    if (winetest_debug > 1) trace("%p->Request()\n", pin);
+    return IAsyncReader_SyncReadAligned(pin->reader, sample);
+}
+
+static HRESULT WINAPI testreader_SyncRead(IAsyncReader *iface, LONGLONG offset, LONG length, BYTE *buffer)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    if (winetest_debug > 1) trace("%p->SyncRead(%s, %d)\n", pin, wine_dbgstr_longlong(offset), length);
+    return IAsyncReader_SyncRead(pin->reader, offset, length, buffer);
+}
+
+static HRESULT WINAPI testreader_Length(IAsyncReader *iface, LONGLONG *length, LONGLONG *available)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    if (winetest_debug > 1) trace("%p->Length()\n", pin);
+    return IAsyncReader_Length(pin->reader, length, available);
+}
+
+static HRESULT WINAPI testreader_BeginFlush(IAsyncReader *iface)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    if (winetest_debug > 1) trace("%p->BeginFlush()\n", pin);
+    return IAsyncReader_BeginFlush(pin->reader);
+}
+
+static HRESULT WINAPI testreader_EndFlush(IAsyncReader *iface)
+{
+    struct testpin *pin = impl_from_IAsyncReader(iface);
+    if (winetest_debug > 1) trace("%p->EndFlush()\n", pin);
+    return IAsyncReader_EndFlush(pin->reader);
+}
+
+const IAsyncReaderVtbl testreader_vtbl =
+{
+    testreader_QueryInterface,
+    testreader_AddRef,
+    testreader_Release,
+    testreader_RequestAllocator,
+    testreader_Request,
+    testreader_WaitForNext,
+    testreader_SyncReadAligned,
+    testreader_SyncRead,
+    testreader_Length,
+    testreader_BeginFlush,
+    testreader_EndFlush,
+};
+
 HRESULT WINAPI no_Connect(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI no_ReceiveConnection(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt)
+HRESULT WINAPI no_ReceiveConnection(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
