@@ -21,6 +21,8 @@
 
 #define COBJMACROS
 #include "dshow.h"
+#include "initguid.h"
+#include "wmcodecdsp.h"
 #include "wine/test.h"
 
 #include "util.h"
@@ -342,6 +344,133 @@ static void test_pin_info(void)
     ok(ret, "Failed to delete file, error %u.\n", GetLastError());
 }
 
+static void test_media_types(void)
+{
+    static const BITMAPINFOHEADER expect_hdr =
+        { sizeof(expect_hdr), 32, 24, 1, 12, mmioFOURCC('I','4','2','0'), 32*24*12/8 };
+    static const RECT empty_rect = {0};
+
+    const WCHAR *filename = load_resource(avifile);
+    IBaseFilter *filter = create_avi_splitter();
+    AM_MEDIA_TYPE mt = {0}, *pmt;
+    VIDEOINFOHEADER *videoinfo;
+    IEnumMediaTypes *enummt;
+    IFilterGraph2 *graph;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+    BOOL ret;
+
+    IBaseFilter_FindPin(filter, sink_name, &pin);
+
+    hr = IPin_EnumMediaTypes(pin, &enummt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumMediaTypes_Next(enummt, 1, &pmt, NULL);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    IEnumMediaTypes_Release(enummt);
+
+    mt.majortype = MEDIATYPE_Stream;
+    mt.subtype = MEDIASUBTYPE_Avi;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    mt.bFixedSizeSamples = TRUE;
+    mt.bTemporalCompression = TRUE;
+    mt.lSampleSize = 123;
+    mt.formattype = FORMAT_VideoInfo;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    mt.majortype = MEDIATYPE_Video;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    mt.majortype = MEDIATYPE_Stream;
+
+    mt.subtype = GUID_NULL;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    mt.subtype = MEDIASUBTYPE_Avi;
+
+    graph = connect_input(filter, filename);
+
+    hr = IPin_EnumMediaTypes(pin, &enummt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumMediaTypes_Next(enummt, 1, &pmt, NULL);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    IEnumMediaTypes_Release(enummt);
+
+    IPin_Release(pin);
+    IBaseFilter_FindPin(filter, source0_name, &pin);
+
+    hr = IPin_EnumMediaTypes(pin, &enummt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumMediaTypes_Next(enummt, 1, &pmt, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(IsEqualGUID(&pmt->majortype, &MEDIATYPE_Video), "Got major type %s\n",
+            wine_dbgstr_guid(&pmt->majortype));
+    ok(IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_I420), "Got subtype %s\n",
+            wine_dbgstr_guid(&pmt->subtype));
+    ok(!pmt->bFixedSizeSamples, "Got fixed size %d.\n", pmt->bFixedSizeSamples);
+todo_wine
+    ok(!pmt->bTemporalCompression, "Got temporal compression %d.\n", pmt->bTemporalCompression);
+    ok(pmt->lSampleSize == 1, "Got sample size %u.\n", pmt->lSampleSize);
+    ok(IsEqualGUID(&pmt->formattype, &FORMAT_VideoInfo), "Got format type %s.\n",
+            wine_dbgstr_guid(&pmt->formattype));
+    ok(!pmt->pUnk, "Got pUnk %p.\n", pmt->pUnk);
+    ok(pmt->cbFormat == sizeof(*videoinfo), "Got format size %u.\n", pmt->cbFormat);
+    videoinfo = (VIDEOINFOHEADER *)pmt->pbFormat;
+    ok(EqualRect(&videoinfo->rcSource, &empty_rect), "Got source rect %s.\n",
+            wine_dbgstr_rect(&videoinfo->rcSource));
+    ok(EqualRect(&videoinfo->rcTarget, &empty_rect), "Got target rect %s.\n",
+            wine_dbgstr_rect(&videoinfo->rcTarget));
+    ok(!videoinfo->dwBitRate, "Got bitrate %d.\n", videoinfo->dwBitRate);
+    ok(!videoinfo->dwBitErrorRate, "Got error rate %d.\n", videoinfo->dwBitErrorRate);
+    ok(videoinfo->AvgTimePerFrame == 1000 * 10000, "Got frame time %s.\n",
+        wine_dbgstr_longlong(videoinfo->AvgTimePerFrame));
+    ok(!memcmp(&videoinfo->bmiHeader, &expect_hdr, sizeof(expect_hdr)), "Bitmap headers didn't match.\n");
+
+    hr = IPin_QueryAccept(pin, pmt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    pmt->bFixedSizeSamples = TRUE;
+    pmt->bTemporalCompression = TRUE;
+    pmt->lSampleSize = 123;
+    hr = IPin_QueryAccept(pin, pmt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    pmt->subtype = GUID_NULL;
+    hr = IPin_QueryAccept(pin, pmt);
+todo_wine
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    pmt->subtype = MEDIASUBTYPE_I420;
+
+    pmt->formattype = GUID_NULL;
+    hr = IPin_QueryAccept(pin, pmt);
+todo_wine
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    pmt->formattype = FORMAT_VideoInfo;
+
+    CoTaskMemFree(pmt->pbFormat);
+    CoTaskMemFree(pmt);
+
+    hr = IEnumMediaTypes_Next(enummt, 1, &pmt, NULL);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    IEnumMediaTypes_Release(enummt);
+    IPin_Release(pin);
+
+    IFilterGraph2_Release(graph);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+    ret = DeleteFileW(filename);
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+}
+
 static void test_filter_graph(void)
 {
     IFileSourceFilter *pfile = NULL;
@@ -592,6 +721,7 @@ START_TEST(avisplit)
     test_enum_pins();
     test_find_pin();
     test_pin_info();
+    test_media_types();
     test_filter_graph();
 
     CoUninitialize();
