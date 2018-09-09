@@ -982,14 +982,15 @@ HRESULT WINAPI testpin_EndFlush(IPin * iface)
 
 HRESULT WINAPI testpin_NewSegment(IPin *iface, REFERENCE_TIME start, REFERENCE_TIME stop, double rate)
 {
-    ok(0, "Unexpected call.\n");
-    return E_NOTIMPL;
+    if (winetest_debug > 1) trace("%p->NewSegment(%s, %s, %f)\n", iface,
+            wine_dbgstr_longlong(start), wine_dbgstr_longlong(stop), rate);
+    return S_OK;
 }
 
 HRESULT WINAPI testpin_EndOfStream(IPin *iface)
 {
-    ok(0, "Unexpected call.\n");
-    return E_NOTIMPL;
+    if (winetest_debug > 1) trace("%p->EndOfStream()\n", iface);
+    return S_OK;
 }
 
 static struct testpin *impl_from_IMemInputPin(IMemInputPin *iface)
@@ -1035,8 +1036,8 @@ static HRESULT WINAPI testmeminput_GetAllocatorRequirements(IMemInputPin *iface,
 
 static HRESULT WINAPI testmeminput_Receive(IMemInputPin *iface, IMediaSample *sample)
 {
-    ok(0, "unexpected call\n");
-    return E_NOTIMPL;
+    if (winetest_debug > 1) trace("%p->Receive()\n", iface);
+    return S_OK;
 }
 
 static HRESULT WINAPI testmeminput_ReceiveMultiple(IMemInputPin *iface, IMediaSample **samples, LONG count, LONG *processed)
