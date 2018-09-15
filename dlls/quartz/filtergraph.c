@@ -285,6 +285,8 @@ static HRESULT WINAPI EnumFilters_Next(IEnumFilters *iface, ULONG count,
     if (!filters)
         return E_POINTER;
 
+    EnterCriticalSection(&enum_filters->graph->cs);
+
     for (i = 0; i < count; ++i)
     {
         struct filter *filter = LIST_ENTRY(enum_filters->cursor, struct filter, entry);
@@ -296,6 +298,8 @@ static HRESULT WINAPI EnumFilters_Next(IEnumFilters *iface, ULONG count,
         enum_filters->cursor = list_next(&enum_filters->graph->filters, enum_filters->cursor);
     }
 
+    LeaveCriticalSection(&enum_filters->graph->cs);
+
     if (fetched)
         *fetched = i;
 
@@ -305,19 +309,27 @@ static HRESULT WINAPI EnumFilters_Next(IEnumFilters *iface, ULONG count,
 static HRESULT WINAPI EnumFilters_Skip(IEnumFilters *iface, ULONG count)
 {
     struct enum_filters *enum_filters = impl_from_IEnumFilters(iface);
+    HRESULT hr = S_OK;
 
     TRACE("enum_filters %p, count %u.\n", enum_filters, count);
 
     if (!enum_filters->cursor)
         return S_FALSE;
 
+    EnterCriticalSection(&enum_filters->graph->cs);
+
     while (count--)
     {
         if (!(enum_filters->cursor = list_next(&enum_filters->graph->filters, enum_filters->cursor)))
-            return S_FALSE;
+        {
+            hr = S_FALSE;
+            break;
+        }
     }
 
-    return S_OK;
+    LeaveCriticalSection(&enum_filters->graph->cs);
+
+    return hr;
 }
 
 static HRESULT WINAPI EnumFilters_Reset(IEnumFilters *iface)
@@ -326,8 +338,12 @@ static HRESULT WINAPI EnumFilters_Reset(IEnumFilters *iface)
 
     TRACE("enum_filters %p.\n", enum_filters);
 
+    EnterCriticalSection(&enum_filters->graph->cs);
+
     enum_filters->cursor = list_head(&enum_filters->graph->filters);
     enum_filters->version = enum_filters->graph->version;
+
+    LeaveCriticalSection(&enum_filters->graph->cs);
     return S_OK;
 }
 
@@ -358,12 +374,16 @@ static HRESULT create_enum_filters(IFilterGraphImpl *graph, struct list *cursor,
     if (!(enum_filters = heap_alloc(sizeof(*enum_filters))))
         return E_OUTOFMEMORY;
 
+    EnterCriticalSection(&graph->cs);
+
     enum_filters->IEnumFilters_iface.lpVtbl = &EnumFilters_vtbl;
     enum_filters->ref = 1;
     enum_filters->cursor = cursor;
     enum_filters->graph = graph;
     IUnknown_AddRef(graph->outer_unk);
     enum_filters->version = graph->version;
+
+    LeaveCriticalSection(&graph->cs);
 
     *out = &enum_filters->IEnumFilters_iface;
     return S_OK;
@@ -560,6 +580,8 @@ static HRESULT WINAPI FilterGraph2_AddFilter(IFilterGraph2 *iface, IBaseFilter *
 
     wszFilterName = CoTaskMemAlloc( (pName ? strlenW(pName) + 6 : 5) * sizeof(WCHAR) );
 
+    EnterCriticalSection(&This->cs);
+
     if (pName && find_filter_by_name(This, pName))
         duplicate_name = TRUE;
 
@@ -588,6 +610,7 @@ static HRESULT WINAPI FilterGraph2_AddFilter(IFilterGraph2 *iface, IBaseFilter *
 	if (j == 10000)
 	{
 	    CoTaskMemFree(wszFilterName);
+            LeaveCriticalSection(&This->cs);
 	    return VFW_E_DUPLICATE_NAME;
 	}
     }
@@ -598,12 +621,14 @@ static HRESULT WINAPI FilterGraph2_AddFilter(IFilterGraph2 *iface, IBaseFilter *
     if (FAILED(hr))
     {
         CoTaskMemFree(wszFilterName);
+        LeaveCriticalSection(&This->cs);
         return hr;
     }
 
     if (!(entry = heap_alloc(sizeof(*entry))))
     {
         CoTaskMemFree(wszFilterName);
+        LeaveCriticalSection(&This->cs);
         return E_OUTOFMEMORY;
     }
 
@@ -611,6 +636,8 @@ static HRESULT WINAPI FilterGraph2_AddFilter(IFilterGraph2 *iface, IBaseFilter *
     entry->name = wszFilterName;
     list_add_head(&This->filters, &entry->entry);
     This->version++;
+
+    LeaveCriticalSection(&This->cs);
 
     return duplicate_name ? VFW_S_DUPLICATE_NAME : hr;
 }
@@ -625,6 +652,8 @@ static HRESULT WINAPI FilterGraph2_RemoveFilter(IFilterGraph2 *iface, IBaseFilte
     TRACE("(%p/%p)->(%p)\n", This, iface, pFilter);
 
     /* FIXME: check graph is stopped */
+
+    EnterCriticalSection(&This->cs);
 
     LIST_FOR_EACH_ENTRY(entry, &This->filters, struct filter, entry)
     {
@@ -697,11 +726,16 @@ static HRESULT WINAPI FilterGraph2_RemoveFilter(IFilterGraph2 *iface, IBaseFilte
                         This->ItfCacheEntries[i].iface = NULL;
                         This->ItfCacheEntries[i].filter = NULL;
                     }
+
+                LeaveCriticalSection(&This->cs);
+
                 return S_OK;
             }
             break;
         }
     }
+
+    LeaveCriticalSection(&This->cs);
 
     return hr; /* FIXME: check this error code */
 }
