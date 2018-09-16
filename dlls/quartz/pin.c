@@ -824,6 +824,10 @@ HRESULT WINAPI PullPin_Disconnect(IPin *iface)
     CloseHandle(This->hThread);
     This->hThread = NULL;
 
+    IAsyncReader_Release(This->pReader);
+    This->pReader = NULL;
+    IMemAllocator_Release(This->pAlloc);
+    This->pAlloc = NULL;
     return hr;
 }
 
