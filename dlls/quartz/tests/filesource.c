@@ -818,7 +818,6 @@ todo_wine
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = IAsyncReader_SyncReadAligned(reader, sample);
-todo_wine
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     len = IMediaSample_GetActualDataLength(sample);
