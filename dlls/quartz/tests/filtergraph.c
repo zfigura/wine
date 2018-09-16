@@ -758,27 +758,6 @@ static void test_render_with_multithread(void)
     CoUninitialize();
 }
 
-struct testpin
-{
-    IPin IPin_iface;
-    LONG ref;
-    PIN_DIRECTION dir;
-    IBaseFilter *filter;
-    IPin *peer;
-    AM_MEDIA_TYPE *mt;
-    WCHAR name[10];
-    WCHAR id[10];
-
-    IEnumMediaTypes IEnumMediaTypes_iface;
-    const AM_MEDIA_TYPE *types;
-    unsigned int type_count, enum_idx;
-    AM_MEDIA_TYPE *request_mt, *accept_mt;
-
-    HRESULT Connect_hr;
-    HRESULT EnumMediaTypes_hr;
-    HRESULT QueryInternalConnections_hr;
-};
-
 static inline struct testpin *impl_from_IEnumMediaTypes(IEnumMediaTypes *iface)
 {
     return CONTAINING_RECORD(iface, struct testpin, IEnumMediaTypes_iface);
@@ -856,12 +835,7 @@ static const IEnumMediaTypesVtbl testenummt_vtbl =
     testenummt_Clone,
 };
 
-static inline struct testpin *impl_from_IPin(IPin *iface)
-{
-    return CONTAINING_RECORD(iface, struct testpin, IPin_iface);
-}
-
-static HRESULT WINAPI testpin_QueryInterface(IPin *iface, REFIID iid, void **out)
+HRESULT WINAPI testpin_QueryInterface(IPin *iface, REFIID iid, void **out)
 {
     struct testpin *pin = impl_from_IPin(iface);
     if (winetest_debug > 1) trace("%p->QueryInterface(%s)\n", pin, wine_dbgstr_guid(iid));
@@ -889,7 +863,7 @@ static ULONG WINAPI testpin_Release(IPin *iface)
     return InterlockedDecrement(&pin->ref);
 }
 
-static HRESULT WINAPI testpin_Disconnect(IPin *iface)
+HRESULT WINAPI testpin_Disconnect(IPin *iface)
 {
     struct testpin *pin = impl_from_IPin(iface);
     if (winetest_debug > 1) trace("%p->Disconnect()\n", pin);
@@ -902,7 +876,7 @@ static HRESULT WINAPI testpin_Disconnect(IPin *iface)
     return S_OK;
 }
 
-static HRESULT WINAPI testpin_ConnectedTo(IPin *iface, IPin **peer)
+HRESULT WINAPI testpin_ConnectedTo(IPin *iface, IPin **peer)
 {
     struct testpin *pin = impl_from_IPin(iface);
     if (winetest_debug > 1) trace("%p->ConnectedTo()\n", pin);
@@ -916,13 +890,13 @@ static HRESULT WINAPI testpin_ConnectedTo(IPin *iface, IPin **peer)
     return VFW_E_NOT_CONNECTED;
 }
 
-static HRESULT WINAPI testpin_ConnectionMediaType(IPin *iface, AM_MEDIA_TYPE *mt)
+HRESULT WINAPI testpin_ConnectionMediaType(IPin *iface, AM_MEDIA_TYPE *mt)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI testpin_QueryPinInfo(IPin *iface, PIN_INFO *info)
+HRESULT WINAPI testpin_QueryPinInfo(IPin *iface, PIN_INFO *info)
 {
     struct testpin *pin = impl_from_IPin(iface);
     if (winetest_debug > 1) trace("%p->QueryPinInfo()\n", pin);
@@ -935,7 +909,7 @@ static HRESULT WINAPI testpin_QueryPinInfo(IPin *iface, PIN_INFO *info)
 }
 
 
-static HRESULT WINAPI testpin_QueryDirection(IPin *iface, PIN_DIRECTION *dir)
+HRESULT WINAPI testpin_QueryDirection(IPin *iface, PIN_DIRECTION *dir)
 {
     struct testpin *pin = impl_from_IPin(iface);
     if (winetest_debug > 1) trace("%p->QueryDirection()\n", pin);
@@ -944,7 +918,7 @@ static HRESULT WINAPI testpin_QueryDirection(IPin *iface, PIN_DIRECTION *dir)
     return S_OK;
 }
 
-static HRESULT WINAPI testpin_QueryId(IPin *iface, WCHAR **id)
+HRESULT WINAPI testpin_QueryId(IPin *iface, WCHAR **id)
 {
     struct testpin *pin = impl_from_IPin(iface);
     if (winetest_debug > 1) trace("%p->QueryId()\n", iface);
@@ -953,13 +927,13 @@ static HRESULT WINAPI testpin_QueryId(IPin *iface, WCHAR **id)
     return S_OK;
 }
 
-static HRESULT WINAPI testpin_QueryAccept(IPin *iface, const AM_MEDIA_TYPE *mt)
+HRESULT WINAPI testpin_QueryAccept(IPin *iface, const AM_MEDIA_TYPE *mt)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI testpin_EnumMediaTypes(IPin *iface, IEnumMediaTypes **out)
+HRESULT WINAPI testpin_EnumMediaTypes(IPin *iface, IEnumMediaTypes **out)
 {
     struct testpin *pin = impl_from_IPin(iface);
     if (winetest_debug > 1) trace("%p->EnumMediaTypes()\n", pin);
@@ -973,7 +947,7 @@ static HRESULT WINAPI testpin_EnumMediaTypes(IPin *iface, IEnumMediaTypes **out)
     return S_OK;
 }
 
-static HRESULT WINAPI testpin_QueryInternalConnections(IPin *iface, IPin **out, ULONG *count)
+HRESULT WINAPI testpin_QueryInternalConnections(IPin *iface, IPin **out, ULONG *count)
 {
     struct testpin *pin = impl_from_IPin(iface);
     if (winetest_debug > 1) trace("%p->QueryInternalConnections()\n", pin);
@@ -982,31 +956,31 @@ static HRESULT WINAPI testpin_QueryInternalConnections(IPin *iface, IPin **out, 
     return pin->QueryInternalConnections_hr;
 }
 
-static HRESULT WINAPI testpin_BeginFlush(IPin *iface)
+HRESULT WINAPI testpin_BeginFlush(IPin *iface)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI testpin_EndFlush(IPin * iface)
+HRESULT WINAPI testpin_EndFlush(IPin * iface)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI testpin_NewSegment(IPin *iface, REFERENCE_TIME start, REFERENCE_TIME stop, double rate)
+HRESULT WINAPI testpin_NewSegment(IPin *iface, REFERENCE_TIME start, REFERENCE_TIME stop, double rate)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI testpin_EndOfStream(IPin *iface)
+HRESULT WINAPI testpin_EndOfStream(IPin *iface)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI no_Connect(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt)
+HRESULT WINAPI no_Connect(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt)
 {
     ok(0, "Unexpected call.\n");
     return E_NOTIMPL;
@@ -1059,7 +1033,7 @@ static const IPinVtbl testsink_vtbl =
     testpin_NewSegment
 };
 
-static void testpin_init(struct testpin *pin, const IPinVtbl *vtbl, PIN_DIRECTION dir)
+void testpin_init(struct testpin *pin, const IPinVtbl *vtbl, PIN_DIRECTION dir)
 {
     memset(pin, 0, sizeof(*pin));
     pin->IPin_iface.lpVtbl = vtbl;
@@ -1124,26 +1098,6 @@ static void testsource_init(struct testpin *pin, const AM_MEDIA_TYPE *types, int
     pin->types = types;
     pin->type_count = type_count;
 }
-
-struct testfilter
-{
-    IBaseFilter IBaseFilter_iface;
-    LONG ref;
-    IFilterGraph *graph;
-    WCHAR *name;
-    IReferenceClock *clock;
-    FILTER_STATE state;
-    REFERENCE_TIME start_time;
-
-    IEnumPins IEnumPins_iface;
-    struct testpin *pins;
-    unsigned int pin_count, enum_idx;
-
-    IAMFilterMiscFlags IAMFilterMiscFlags_iface;
-    ULONG misc_flags;
-
-    IMediaSeeking IMediaSeeking_iface;
-};
 
 static inline struct testfilter *impl_from_IEnumPins(IEnumPins *iface)
 {
@@ -1630,7 +1584,7 @@ struct testfilter_cf
     struct testfilter *filter;
 };
 
-static void testfilter_init(struct testfilter *filter, struct testpin *pins, int pin_count)
+void testfilter_init(struct testfilter *filter, struct testpin *pins, int pin_count)
 {
     unsigned int i;
 

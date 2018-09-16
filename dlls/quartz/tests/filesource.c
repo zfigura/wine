@@ -21,6 +21,7 @@
 
 #define COBJMACROS
 #include "dshow.h"
+#include "wine/heap.h"
 #include "wine/test.h"
 
 #include "util.h"
@@ -526,6 +527,185 @@ static void test_pin_info(void)
     ok(ret, "Failed to delete file, error %u.\n", GetLastError());
 }
 
+static HRESULT WINAPI testsink_ReceiveConnection(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt)
+{
+    struct testpin *pin = impl_from_IPin(iface);
+    HRESULT hr;
+    if (winetest_debug > 1) trace("%p->ReceiveConnection()\n", pin);
+
+    if (pin->accept_mt && memcmp(pin->accept_mt, mt, sizeof(*mt)))
+        return VFW_E_TYPE_NOT_ACCEPTED;
+
+    hr = IPin_QueryInterface(peer, &IID_IAsyncReader, (void **)&pin->reader);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!!mt, "Expected non-NULL media type.\n");
+    heap_free(pin->mt);
+    pin->mt = heap_alloc(sizeof(*mt));
+    memcpy(pin->mt, mt, sizeof(*mt));
+    pin->peer = peer;
+    IPin_AddRef(peer);
+    return S_OK;
+}
+
+static HRESULT WINAPI testsink_Disconnect(IPin *iface)
+{
+    struct testpin *pin = impl_from_IPin(iface);
+    if (winetest_debug > 1) trace("%p->Disconnect()\n", pin);
+
+    if (pin->peer)
+    {
+        IPin_Release(pin->peer);
+        IAsyncReader_Release(pin->reader);
+    }
+    pin->peer = NULL;
+    return S_OK;
+}
+
+static const IPinVtbl testpin_vtbl =
+{
+    testpin_QueryInterface,
+    testpin_AddRef,
+    testpin_Release,
+    no_Connect,
+    testsink_ReceiveConnection,
+    testsink_Disconnect,
+    testpin_ConnectedTo,
+    testpin_ConnectionMediaType,
+    testpin_QueryPinInfo,
+    testpin_QueryDirection,
+    testpin_QueryId,
+    testpin_QueryAccept,
+    testpin_EnumMediaTypes,
+    testpin_QueryInternalConnections,
+    testpin_EndOfStream,
+    testpin_BeginFlush,
+    testpin_EndFlush,
+    testpin_NewSegment,
+};
+
+static void testsink_init(struct testpin *pin, AM_MEDIA_TYPE *types, ULONG type_count)
+{
+    testpin_init(pin, &testpin_vtbl, PINDIR_INPUT);
+    pin->types = types;
+    pin->type_count = type_count;
+}
+
+static void test_connect_pin(void)
+{
+    AM_MEDIA_TYPE sink_mt = {0};
+    struct testpin sink_pin;
+    struct testfilter sink;
+
+    const WCHAR *filename = load_resource(avifile);
+    IBaseFilter *filter = create_file_source();
+    AM_MEDIA_TYPE *expect_mt, req_mt = {0}, mt;
+    IFileSourceFilter *filesource;
+    IEnumMediaTypes *enum_mt;
+    IPin *pin, *peer;
+    HRESULT hr;
+    ULONG ref;
+    BOOL ret;
+
+    sink_mt.majortype = MEDIATYPE_Stream;
+    sink_mt.subtype = MEDIASUBTYPE_Avi;
+    sink_mt.lSampleSize = 123;
+    testsink_init(&sink_pin, &sink_mt, 1);
+    testfilter_init(&sink, &sink_pin, 1);
+
+    IBaseFilter_QueryInterface(filter, &IID_IFileSourceFilter, (void **)&filesource);
+    IFileSourceFilter_Load(filesource, filename, NULL);
+    IBaseFilter_FindPin(filter, source_name, &pin);
+
+    hr = IPin_ConnectedTo(pin, &peer);
+    ok(hr == VFW_E_NOT_CONNECTED, "Got hr %#x.\n", hr);
+    ok(!peer, "Got peer %p.\n", peer);
+
+    hr = IPin_ConnectionMediaType(pin, &mt);
+    ok(hr == VFW_E_NOT_CONNECTED, "Got hr %#x.\n", hr);
+
+    hr = IPin_EnumMediaTypes(pin, &enum_mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IEnumMediaTypes_Next(enum_mt, 1, &expect_mt, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    IEnumMediaTypes_Release(enum_mt);
+
+    hr = IPin_Connect(pin, &sink_pin.IPin_iface, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(sink_pin.peer == pin, "Got pin %p.\n", sink_pin.peer);
+    ok(!memcmp(sink_pin.mt, expect_mt, sizeof(AM_MEDIA_TYPE)), "Media types didn't match.\n");
+
+    hr = IPin_ConnectedTo(pin, &peer);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(peer == &sink_pin.IPin_iface, "Got peer %p.\n", peer);
+    IPin_Release(peer);
+
+    hr = IPin_ConnectionMediaType(pin, &mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!memcmp(&mt, expect_mt, sizeof(AM_MEDIA_TYPE)), "Media types didn't match.\n");
+
+    hr = IPin_Disconnect(pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(sink_pin.peer == pin, "Got peer %p.\n", sink_pin.peer);
+    IPin_Disconnect(&sink_pin.IPin_iface);
+
+    hr = IPin_ConnectedTo(pin, &peer);
+    ok(hr == VFW_E_NOT_CONNECTED, "Got hr %#x.\n", hr);
+    ok(!peer, "Got peer %p.\n", peer);
+
+    hr = IPin_ConnectionMediaType(pin, &mt);
+    ok(hr == VFW_E_NOT_CONNECTED, "Got hr %#x.\n", hr);
+
+    req_mt.majortype = MEDIATYPE_Stream;
+    req_mt.subtype = MEDIASUBTYPE_RGB8;
+    hr = IPin_Connect(pin, &sink_pin.IPin_iface, &req_mt);
+todo_wine {
+    ok(hr == VFW_E_NO_ACCEPTABLE_TYPES, "Got hr %#x.\n", hr);
+    ok(!sink_pin.peer, "Got peer %p.\n", sink_pin.peer);
+    IPin_Disconnect(pin);
+    IPin_Disconnect(&sink_pin.IPin_iface);
+}
+
+    /* Test wildcard values. */
+    req_mt.majortype = MEDIATYPE_NULL;
+    req_mt.subtype = MEDIASUBTYPE_NULL;
+    hr = IPin_Connect(pin, &sink_pin.IPin_iface, &req_mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(sink_pin.peer == pin, "Got peer %p.\n", sink_pin.peer);
+    ok(!memcmp(sink_pin.mt, expect_mt, sizeof(AM_MEDIA_TYPE)), "Media types didn't match.\n");
+
+    hr = IPin_ConnectionMediaType(pin, &mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!memcmp(&mt, expect_mt, sizeof(AM_MEDIA_TYPE)), "Media types didn't match.\n");
+
+    hr = IPin_Disconnect(pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    IPin_Disconnect(&sink_pin.IPin_iface);
+
+    /* Our media types are tried if the file source filter's don't work. */
+    sink_pin.accept_mt = &sink_mt;
+
+    hr = IPin_Connect(pin, &sink_pin.IPin_iface, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(sink_pin.peer == pin, "Got peer %p.\n", sink_pin.peer);
+    ok(!memcmp(sink_pin.mt, &sink_mt, sizeof(AM_MEDIA_TYPE)), "Media types didn't match.\n");
+
+    hr = IPin_ConnectionMediaType(pin, &mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!memcmp(&mt, &sink_mt, sizeof(AM_MEDIA_TYPE)), "Media types didn't match.\n");
+
+    hr = IPin_Disconnect(pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    IPin_Disconnect(&sink_pin.IPin_iface);
+    IPin_Release(pin);
+    IFileSourceFilter_Release(filesource);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+    ret = DeleteFileW(filename);
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+    ok(sink_pin.ref == 1, "Got outstanding refcount %d\n", sink_pin.ref);
+    ok(sink.ref == 1, "Got outstanding refcount %d\n", sink.ref);
+}
+
 START_TEST(filesource)
 {
     CoInitialize(NULL);
@@ -534,6 +714,7 @@ START_TEST(filesource)
     test_enum_pins();
     test_find_pin();
     test_pin_info();
+    test_connect_pin();
     test_file_source_filter();
 
     CoUninitialize();
