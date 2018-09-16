@@ -65,7 +65,9 @@ static void check_interface_(unsigned int line, void *iface_ptr, REFIID iid, BOO
 
 static void test_interfaces(void)
 {
+    const WCHAR *filename = load_resource(avifile);
     IBaseFilter *filter = create_file_source();
+    IPin *pin;
 
     check_interface(filter, &IID_IBaseFilter, TRUE);
     check_interface(filter, &IID_IFileSourceFilter, TRUE);
@@ -83,6 +85,15 @@ static void test_interfaces(void)
     check_interface(filter, &IID_IReferenceClock, FALSE);
     check_interface(filter, &IID_IVideoWindow, FALSE);
 
+    load_file(filter, filename);
+    IBaseFilter_FindPin(filter, source_name, &pin);
+
+    check_interface(pin, &IID_IAsyncReader, TRUE);
+    check_interface(pin, &IID_IPin, TRUE);
+
+    check_interface(pin, &IID_IMediaSeeking, FALSE);
+
+    IPin_Release(pin);
     IBaseFilter_Release(filter);
 }
 
