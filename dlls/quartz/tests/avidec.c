@@ -54,6 +54,7 @@ static void check_interface_(unsigned int line, void *iface_ptr, REFIID iid, BOO
 static void test_interfaces(void)
 {
     IBaseFilter *filter = create_avi_dec();
+    IPin *pin;
 
     check_interface(filter, &IID_IBaseFilter, TRUE);
 
@@ -72,6 +73,26 @@ todo_wine
     check_interface(filter, &IID_IQualProp, FALSE);
     check_interface(filter, &IID_IReferenceClock, FALSE);
     check_interface(filter, &IID_IVideoWindow, FALSE);
+
+    IBaseFilter_FindPin(filter, sink_id, &pin);
+
+    check_interface(pin, &IID_IMemInputPin, TRUE);
+    check_interface(pin, &IID_IPin, TRUE);
+
+    check_interface(pin, &IID_IMediaPosition, FALSE);
+todo_wine
+    check_interface(pin, &IID_IMediaSeeking, FALSE);
+
+    IPin_Release(pin);
+
+    IBaseFilter_FindPin(filter, source_id, &pin);
+
+    check_interface(pin, &IID_IPin, TRUE);
+    check_interface(pin, &IID_IMediaSeeking, TRUE);
+
+    check_interface(pin, &IID_IAsyncReader, FALSE);
+
+    IPin_Release(pin);
 
     IBaseFilter_Release(filter);
 }
