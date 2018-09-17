@@ -144,11 +144,9 @@ static void test_enum_pins(void)
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = IEnumPins_Skip(enum1, 3);
-todo_wine
     ok(hr == S_FALSE, "Got hr %#x.\n", hr);
 
     hr = IEnumPins_Skip(enum1, 2);
-todo_wine
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = IEnumPins_Skip(enum1, 1);
