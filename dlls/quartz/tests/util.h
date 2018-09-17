@@ -3,6 +3,7 @@
 static const WCHAR avifile[] = {'t','e','s','t','.','a','v','i',0};
 static const WCHAR mpegfile[] = {'t','e','s','t','.','m','p','g',0};
 static const WCHAR mp3file[] = {'t','e','s','t','.','m','p','3',0};
+static const WCHAR wavefile[] = {'t','e','s','t','.','w','a','v',0};
 
 WCHAR *load_resource(const WCHAR *name);
 IFilterGraph2 *connect_input(IBaseFilter *splitter, const WCHAR *filename);

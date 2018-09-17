@@ -3353,6 +3353,7 @@ START_TEST(filtergraph)
     test_render_run(avifile, FALSE, TRUE);
     test_render_run(mpegfile, TRUE, TRUE);
     test_render_run(mp3file, TRUE, FALSE);
+    test_render_run(wavefile, TRUE, FALSE);
     test_enum_filters();
     test_graph_builder_render();
     test_graph_builder_connect();
