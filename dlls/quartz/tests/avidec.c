@@ -210,6 +210,69 @@ static void test_find_pin(void)
     ok(!ref, "Got outstanding refcount %d.\n", ref);
 }
 
+static void test_pin_info(void)
+{
+    static const WCHAR sink_name[] = {'X','F','o','r','m',' ','I','n',0};
+    static const WCHAR source_name[] = {'X','F','o','r','m',' ','O','u','t',0};
+    IBaseFilter *filter = create_avi_dec();
+    PIN_DIRECTION dir;
+    PIN_INFO info;
+    HRESULT hr;
+    WCHAR *id;
+    ULONG ref;
+    IPin *pin;
+
+    hr = IBaseFilter_FindPin(filter, sink_id, &pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IPin_QueryPinInfo(pin, &info);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(info.pFilter == filter, "Expected filter %p, got %p.\n", filter, info.pFilter);
+    ok(info.dir == PINDIR_INPUT, "Got direction %d.\n", info.dir);
+todo_wine
+    ok(!lstrcmpW(info.achName, sink_name), "Got name %s.\n", wine_dbgstr_w(info.achName));
+    IBaseFilter_Release(info.pFilter);
+
+    hr = IPin_QueryDirection(pin, &dir);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(dir == PINDIR_INPUT, "Got direction %d.\n", dir);
+
+    hr = IPin_QueryId(pin, &id);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!lstrcmpW(id, sink_id), "Got id %s.\n", wine_dbgstr_w(id));
+    CoTaskMemFree(id);
+
+    IPin_Release(pin);
+
+    hr = IBaseFilter_FindPin(filter, source_id, &pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    check_interface(pin, &IID_IPin, TRUE);
+    check_interface(pin, &IID_IMediaSeeking, TRUE);
+
+    hr = IPin_QueryPinInfo(pin, &info);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(info.pFilter == filter, "Expected filter %p, got %p.\n", filter, info.pFilter);
+    ok(info.dir == PINDIR_OUTPUT, "Got direction %d.\n", info.dir);
+todo_wine
+    ok(!lstrcmpW(info.achName, source_name), "Got name %s.\n", wine_dbgstr_w(info.achName));
+    IBaseFilter_Release(info.pFilter);
+
+    hr = IPin_QueryDirection(pin, &dir);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(dir == PINDIR_OUTPUT, "Got direction %d.\n", dir);
+
+    hr = IPin_QueryId(pin, &id);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!lstrcmpW(id, source_id), "Got id %s.\n", wine_dbgstr_w(id));
+    CoTaskMemFree(id);
+
+    IPin_Release(pin);
+
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+}
+
 START_TEST(avidec)
 {
     CoInitialize(NULL);
@@ -217,6 +280,7 @@ START_TEST(avidec)
     test_interfaces();
     test_enum_pins();
     test_find_pin();
+    test_pin_info();
 
     CoUninitialize();
 }
