@@ -1056,14 +1056,15 @@ static HRESULT WINAPI testmeminput_Receive(IMemInputPin *iface, IMediaSample *sa
 
 static HRESULT WINAPI testmeminput_ReceiveMultiple(IMemInputPin *iface, IMediaSample **samples, LONG count, LONG *processed)
 {
-    ok(0, "unexpected call\n");
-    return E_NOTIMPL;
+    if (winetest_debug > 1) trace("%p->ReceiveMultiple(%d)\n", iface, count);
+    *processed = count;
+    return S_OK;
 }
 
 static HRESULT WINAPI testmeminput_ReceiveCanBlock(IMemInputPin *iface)
 {
-    ok(0, "unexpected call\n");
-    return E_NOTIMPL;
+    if (winetest_debug > 1) trace("%p->ReceiveCanBlock()\n", iface);
+    return S_FALSE;
 }
 
 const IMemInputPinVtbl testmeminput_vtbl =

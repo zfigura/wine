@@ -579,6 +579,86 @@ todo_wine {
     ok(sink_pin.ref == 1, "Got outstanding refcount %d.\n", sink_pin.ref);
 }
 
+static void test_filter_state(void)
+{
+    struct testpin sink_pin;
+    struct testfilter sink;
+
+    const WCHAR *filename = load_resource(mp3file);
+    IBaseFilter *splitter = create_mpeg_splitter();
+    IMediaControl *control;
+    IFilterGraph2 *graph;
+    FILTER_STATE state;
+    IPin *source;
+    HRESULT hr;
+    ULONG ref;
+    BOOL ret;
+
+    testsink_init(&sink_pin, NULL, 0);
+    testfilter_init(&sink, &sink_pin, 1);
+
+    graph = connect_input(splitter, filename);
+    IFilterGraph2_AddFilter(graph, &sink.IBaseFilter_iface, NULL);
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+
+    IBaseFilter_FindPin(splitter, audioW, &source);
+    IFilterGraph2_ConnectDirect(graph, source, &sink_pin.IPin_iface, NULL);
+    IPin_Release(source);
+
+    hr = IBaseFilter_GetState(splitter, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Stopped, "Got state %d.\n", state);
+
+    hr = IMediaControl_Run(control);
+todo_wine
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(splitter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Running, "Got state %d.\n", state);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(splitter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Stopped, "Got state %d.\n", state);
+
+    hr = IMediaControl_Pause(control);
+todo_wine
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(splitter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Paused, "Got state %d.\n", state);
+
+    hr = IMediaControl_Run(control);
+todo_wine
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(splitter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Running, "Got state %d.\n", state);
+
+    hr = IMediaControl_Pause(control);
+todo_wine
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(splitter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Paused, "Got state %d.\n", state);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(splitter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Stopped, "Got state %d.\n", state);
+
+    IMediaControl_Release(control);
+    IFilterGraph2_Release(graph);
+    ref = IBaseFilter_Release(splitter);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+    ret = DeleteFileW(filename);
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+    ok(sink.ref == 1, "got %d outstanding refs\n", sink.ref);
+    ok(sink_pin.ref == 1, "got %d outstanding refs\n", sink_pin.ref);
+}
+
 START_TEST(mpegsplit)
 {
     CoInitialize(NULL);
@@ -588,6 +668,7 @@ START_TEST(mpegsplit)
     test_find_pin();
     test_pin_info();
     test_connect_pin();
+    test_filter_state();
 
     CoUninitialize();
 }
