@@ -5,6 +5,7 @@ static const WCHAR mpegfile[] = {'t','e','s','t','.','m','p','g',0};
 static const WCHAR mp3file[] = {'t','e','s','t','.','m','p','3',0};
 
 WCHAR *load_resource(const WCHAR *name);
+IFilterGraph2 *connect_input(IBaseFilter *splitter, const WCHAR *filename);
 
 static inline void copy_media_type(AM_MEDIA_TYPE *dest, const AM_MEDIA_TYPE *src)
 {

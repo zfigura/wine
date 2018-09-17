@@ -22,6 +22,10 @@
 #include "dshow.h"
 #include "wine/test.h"
 
+#include "util.h"
+
+static const WCHAR inputW[] = {'I','n','p','u','t',0};
+
 static IBaseFilter *create_mpeg_splitter(void)
 {
     IBaseFilter *filter = NULL;
@@ -69,11 +73,126 @@ static void test_interfaces(void)
     IBaseFilter_Release(filter);
 }
 
+static void test_enum_pins(void)
+{
+    const WCHAR *filename = load_resource(mp3file);
+    IBaseFilter *filter = create_mpeg_splitter();
+    IEnumPins *enum1, *enum2;
+    IFilterGraph2 *graph;
+    ULONG count, ref;
+    IPin *pins[3];
+    HRESULT hr;
+    BOOL ret;
+
+    hr = IBaseFilter_EnumPins(filter, &enum1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum1, 1, pins, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    IPin_Release(pins[0]);
+
+    hr = IEnumPins_Next(enum1, 1, pins, NULL);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Reset(enum1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum1, 1, pins, &count);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(count == 1, "Got count %u.\n", count);
+    IPin_Release(pins[0]);
+
+    hr = IEnumPins_Next(enum1, 1, pins, &count);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    ok(!count, "Got count %u.\n", count);
+
+    hr = IEnumPins_Reset(enum1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum1, 2, pins, NULL);
+    ok(hr == E_INVALIDARG, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum1, 2, pins, &count);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    ok(count == 1, "Got count %u.\n", count);
+    IPin_Release(pins[0]);
+
+    hr = IEnumPins_Reset(enum1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Clone(enum1, &enum2);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Skip(enum1, 2);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Skip(enum1, 1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Skip(enum1, 1);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum1, 1, pins, NULL);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum2, 1, pins, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    IPin_Release(pins[0]);
+
+    IEnumPins_Release(enum2);
+
+    graph = connect_input(filter, filename);
+
+    hr = IEnumPins_Next(enum1, 1, pins, NULL);
+todo_wine
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Reset(enum1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum1, 1, pins, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    IPin_Release(pins[0]);
+
+    hr = IEnumPins_Next(enum1, 1, pins, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    IPin_Release(pins[0]);
+
+    hr = IEnumPins_Next(enum1, 1, pins, NULL);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Reset(enum1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum1, 2, pins, &count);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(count == 2, "Got count %u.\n", count);
+    IPin_Release(pins[0]);
+    IPin_Release(pins[1]);
+
+    hr = IEnumPins_Reset(enum1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IEnumPins_Next(enum1, 3, pins, &count);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    ok(count == 2, "Got count %u.\n", count);
+    IPin_Release(pins[0]);
+    IPin_Release(pins[1]);
+
+    IEnumPins_Release(enum1);
+    IFilterGraph2_Release(graph);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+    ret = DeleteFileW(filename);
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+}
+
 START_TEST(mpegsplit)
 {
     CoInitialize(NULL);
 
     test_interfaces();
+    test_enum_pins();
 
     CoUninitialize();
 }

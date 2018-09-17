@@ -39,13 +39,14 @@ static IBaseFilter *create_avi_splitter(void)
     return filter;
 }
 
-static IFilterGraph2 *connect_input(IBaseFilter *splitter, const WCHAR *filename)
+IFilterGraph2 *connect_input(IBaseFilter *splitter, const WCHAR *filename)
 {
     static const WCHAR outputW[] = {'O','u','t','p','u','t',0};
     IFileSourceFilter *filesource;
     IFilterGraph2 *graph;
     IBaseFilter *reader;
     IPin *source, *sink;
+    IEnumPins *enumpins;
     HRESULT hr;
 
     CoCreateInstance(&CLSID_AsyncReader, NULL, CLSCTX_INPROC_SERVER,
@@ -58,7 +59,9 @@ static IFilterGraph2 *connect_input(IBaseFilter *splitter, const WCHAR *filename
     IFilterGraph2_AddFilter(graph, reader, NULL);
     IFilterGraph2_AddFilter(graph, splitter, NULL);
 
-    IBaseFilter_FindPin(splitter, sink_name, &sink);
+    IBaseFilter_EnumPins(splitter, &enumpins);
+    IEnumPins_Next(enumpins, 1, &sink, NULL);
+    IEnumPins_Release(enumpins);
     IBaseFilter_FindPin(reader, outputW, &source);
 
     hr = IFilterGraph2_ConnectDirect(graph, source, sink, NULL);
