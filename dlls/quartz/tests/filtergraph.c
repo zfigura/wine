@@ -1044,7 +1044,7 @@ static HRESULT WINAPI testmeminput_NotifyAllocator(IMemInputPin *iface, IMemAllo
 
 static HRESULT WINAPI testmeminput_GetAllocatorRequirements(IMemInputPin *iface, ALLOCATOR_PROPERTIES *props)
 {
-    ok(0, "unexpected call\n");
+    if (winetest_debug > 1) trace("%p->GetAllocatorRequirements()\n", iface);
     return E_NOTIMPL;
 }
 
