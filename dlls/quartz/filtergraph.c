@@ -43,6 +43,18 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 
+static const char *debugstr_pin(IPin *pin)
+{
+    PIN_INFO info;
+
+    if (!pin)
+        return "(null)";
+
+    IPin_QueryPinInfo(pin, &info);
+    IBaseFilter_Release(info.pFilter);
+    return wine_dbg_sprintf("[%p %s; filter %p]", pin, debugstr_w(info.achName), info.pFilter);
+}
+
 typedef struct {
     HWND     hWnd;      /* Target window */
     UINT     msg;       /* User window message */
@@ -847,50 +859,32 @@ out:
 
 /* NOTE: despite the implication, it doesn't matter which
  * way round you put in the input and output pins */
-static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface, IPin *ppinIn, IPin *ppinOut,
-        const AM_MEDIA_TYPE *pmt)
+static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface,
+        IPin *source, IPin *sink, const AM_MEDIA_TYPE *mt)
 {
-    IFilterGraphImpl *This = impl_from_IFilterGraph2(iface);
+    IFilterGraphImpl *graph = impl_from_IFilterGraph2(iface);
     PIN_DIRECTION dir;
     HRESULT hr;
 
-    TRACE("(%p/%p)->(%p, %p, %p)\n", This, iface, ppinIn, ppinOut, pmt);
+    TRACE("graph %p, source %s, sink %s, mt %p.\n",
+            graph, debugstr_pin(source), debugstr_pin(sink), mt);
 
     /* FIXME: check pins are in graph */
 
-    if (TRACE_ON(quartz))
-    {
-        PIN_INFO PinInfo;
-
-        hr = IPin_QueryPinInfo(ppinIn, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning ppinIn(%p) => %p\n", ppinIn, PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-
-        hr = IPin_QueryPinInfo(ppinOut, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning ppinOut(%p) => %p\n", ppinOut, PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-    }
-
-    hr = IPin_QueryDirection(ppinIn, &dir);
+    hr = IPin_QueryDirection(sink, &dir);
     if (SUCCEEDED(hr))
     {
         if (dir == PINDIR_INPUT)
         {
-            hr = CheckCircularConnection(This, ppinOut, ppinIn);
+            hr = CheckCircularConnection(graph, source, sink);
             if (SUCCEEDED(hr))
-                hr = IPin_Connect(ppinOut, ppinIn, pmt);
+                hr = IPin_Connect(source, sink, mt);
         }
         else
         {
-            hr = CheckCircularConnection(This, ppinIn, ppinOut);
+            hr = CheckCircularConnection(graph, sink, source);
             if (SUCCEEDED(hr))
-                hr = IPin_Connect(ppinIn, ppinOut, pmt);
+                hr = IPin_Connect(sink, source, mt);
         }
     }
 
@@ -907,7 +901,7 @@ static HRESULT WINAPI FilterGraph2_Reconnect(IFilterGraph2 *iface, IPin *ppin)
     IPin_QueryDirection(ppin, &pindir);
     hr = IPin_ConnectedTo(ppin, &pConnectedTo);
 
-    TRACE("(%p/%p)->(%p) -- %p\n", This, iface, ppin, pConnectedTo);
+    TRACE("graph %p, pin %s.\n", This, debugstr_pin(ppin));
 
     if (FAILED(hr)) {
         TRACE("Querying connected to failed: %x\n", hr);
@@ -926,16 +920,16 @@ static HRESULT WINAPI FilterGraph2_Reconnect(IFilterGraph2 *iface, IPin *ppin)
     return hr;
 }
 
-static HRESULT WINAPI FilterGraph2_Disconnect(IFilterGraph2 *iface, IPin *ppin)
+static HRESULT WINAPI FilterGraph2_Disconnect(IFilterGraph2 *iface, IPin *pin)
 {
-    IFilterGraphImpl *This = impl_from_IFilterGraph2(iface);
+    IFilterGraphImpl *graph = impl_from_IFilterGraph2(iface);
 
-    TRACE("(%p/%p)->(%p)\n", This, iface, ppin);
+    TRACE("graph %p, pin %s.\n", graph, debugstr_pin(pin));
 
-    if (!ppin)
+    if (!pin)
        return E_POINTER;
 
-    return IPin_Disconnect(ppin);
+    return IPin_Disconnect(pin);
 }
 
 static HRESULT WINAPI FilterGraph2_SetDefaultSyncSource(IFilterGraph2 *iface)
@@ -1066,27 +1060,10 @@ static HRESULT WINAPI FilterGraph2_Connect(IFilterGraph2 *iface, IPin *ppinOut, 
     PIN_DIRECTION dir;
     IFilterMapper2 *pFilterMapper2 = NULL;
 
-    TRACE("(%p/%p)->(%p, %p)\n", This, iface, ppinOut, ppinIn);
+    TRACE("graph %p, source %s, sink %s.\n", This, debugstr_pin(ppinOut), debugstr_pin(ppinIn));
 
     if(!ppinOut || !ppinIn)
         return E_POINTER;
-
-    if (TRACE_ON(quartz))
-    {
-        hr = IPin_QueryPinInfo(ppinIn, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning ppinIn(%p) => %p\n", ppinIn, PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-
-        hr = IPin_QueryPinInfo(ppinOut, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning ppinOut(%p) => %p\n", ppinOut, PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-    }
 
     EnterCriticalSection(&This->cs);
     ++This->recursioncount;
@@ -1397,19 +1374,7 @@ static HRESULT WINAPI FilterGraph2_Render(IFilterGraph2 *iface, IPin *ppinOut)
     IMoniker* pMoniker;
     IFilterMapper2 *pFilterMapper2 = NULL;
 
-    TRACE("(%p/%p)->(%p)\n", This, iface, ppinOut);
-
-    if (TRACE_ON(quartz))
-    {
-        PIN_INFO PinInfo;
-
-        hr = IPin_QueryPinInfo(ppinOut, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning pin => %p\n", PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-    }
+    TRACE("graph %p, pin %s.\n", This, debugstr_pin(ppinOut));
 
     /* Try to find out if there is a renderer for the specified subtype already, and use that
      */
