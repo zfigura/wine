@@ -92,6 +92,8 @@ static DWORD request_thread;
 static DWORD client_tid;
 static DWORD client_pid;
 
+static HANDLE ntoskrnl_heap;
+
 struct wine_driver
 {
     struct wine_rb_entry entry;
@@ -1933,7 +1935,7 @@ PVOID WINAPI ExAllocatePoolWithQuota( POOL_TYPE type, SIZE_T size )
 PVOID WINAPI ExAllocatePoolWithTag( POOL_TYPE type, SIZE_T size, ULONG tag )
 {
     /* FIXME: handle page alignment constraints */
-    void *ret = HeapAlloc( GetProcessHeap(), 0, size );
+    void *ret = HeapAlloc( ntoskrnl_heap, 0, size );
     TRACE( "%lu pool %u -> %p\n", size, type, ret );
     return ret;
 }
@@ -1993,7 +1995,7 @@ void WINAPI ExFreePool( void *ptr )
 void WINAPI ExFreePoolWithTag( void *ptr, ULONG tag )
 {
     TRACE( "%p\n", ptr );
-    HeapFree( GetProcessHeap(), 0, ptr );
+    HeapFree( ntoskrnl_heap, 0, ptr );
 }
 
 
@@ -2813,9 +2815,11 @@ BOOL WINAPI DllMain( HINSTANCE inst, DWORD reason, LPVOID reserved )
         handler = RtlAddVectoredExceptionHandler( TRUE, vectored_handler );
 #endif
         KeQueryTickCount( &count );  /* initialize the global KeTickCount */
+        ntoskrnl_heap = HeapCreate( HEAP_CREATE_ENABLE_EXECUTE, 0, 0 );
         break;
     case DLL_PROCESS_DETACH:
         if (reserved) break;
+        HeapDestroy( ntoskrnl_heap );
         RtlRemoveVectoredExceptionHandler( handler );
         break;
     }

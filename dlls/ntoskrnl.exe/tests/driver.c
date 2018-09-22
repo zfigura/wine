@@ -497,6 +497,26 @@ static void test_sync(void)
     KeCancelTimer(&timer);
 }
 
+#ifdef __i386__
+static void test_executable_pool(void)
+{
+    static const unsigned char bytes[] =
+        { 0xb8, 0xef, 0xbe, 0xad, 0xde, 0xc3 }; /* mov $0xdeadbeef,%eax ; ret */
+    static const ULONG tag = 0x74736574; /* test */
+    int (*func)(void);
+    int ret;
+
+    func = ExAllocatePoolWithTag(NonPagedPool, sizeof(bytes), tag);
+    ok(!!func, "Got NULL memory.\n");
+
+    memcpy(func, bytes, sizeof(bytes));
+    ret = func();
+    ok(ret == 0xdeadbeef, "Got %#x.\n", ret);
+
+    ExFreePoolWithTag(func, tag);
+}
+#endif
+
 static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)
 {
     ULONG length = stack->Parameters.DeviceIoControl.OutputBufferLength;
@@ -526,6 +546,9 @@ static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)
     test_init_funcs();
     test_load_driver();
     test_sync();
+#ifdef __i386__
+    test_executable_pool();
+#endif
 
     /* print process report */
     if (test_input->winetest_debug)
