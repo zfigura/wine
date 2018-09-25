@@ -524,6 +524,95 @@ static void test_connect_pin(void)
     ok(sink_pin.ref == 1, "Got outstanding refcount %d.\n", sink_pin.ref);
 }
 
+static void test_filter_state(void)
+{
+    struct testpin source_pin, sink_pin;
+    struct testfilter source, sink;
+
+    IBaseFilter *filter = create_acm_wrapper();
+    IPin *parser_source, *parser_sink;
+    IMAADPCMWAVEFORMAT wfx;
+    IMediaControl *control;
+    IFilterGraph2 *graph;
+    AM_MEDIA_TYPE req_mt;
+    FILTER_STATE state;
+    HRESULT hr;
+    ULONG ref;
+
+    testpin_init(&source_pin, &testsource_vtbl, PINDIR_OUTPUT);
+    testfilter_init(&source, &source_pin, 1);
+    testsink_init(&sink_pin, NULL, 0);
+    testfilter_init(&sink, &sink_pin, 1);
+
+    CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IFilterGraph2, (void **)&graph);
+    IFilterGraph2_AddFilter(graph, filter, NULL);
+    IFilterGraph2_AddFilter(graph, &source.IBaseFilter_iface, NULL);
+    IFilterGraph2_AddFilter(graph, &sink.IBaseFilter_iface, NULL);
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+
+    IBaseFilter_FindPin(filter, sink_id, &parser_sink);
+    IBaseFilter_FindPin(filter, source_id, &parser_source);
+    init_test_mt(&req_mt, &wfx);
+    IFilterGraph2_ConnectDirect(graph, &source_pin.IPin_iface, parser_sink, &req_mt);
+    IFilterGraph2_ConnectDirect(graph, parser_source, &sink_pin.IPin_iface, NULL);
+    IPin_Release(parser_source);
+    IPin_Release(parser_sink);
+
+    hr = IBaseFilter_GetState(filter, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Stopped, "Got state %d.\n", state);
+
+    hr = IMediaControl_Run(control);
+todo_wine
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(filter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Running, "Got state %d.\n", state);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(filter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Stopped, "Got state %d.\n", state);
+
+    hr = IMediaControl_Pause(control);
+todo_wine
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(filter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Paused, "Got state %d.\n", state);
+
+    hr = IMediaControl_Run(control);
+todo_wine
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(filter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Running, "Got state %d.\n", state);
+
+    hr = IMediaControl_Pause(control);
+todo_wine
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(filter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Paused, "Got state %d.\n", state);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IBaseFilter_GetState(filter, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(state == State_Stopped, "Got state %d.\n", state);
+
+    IMediaControl_Release(control);
+    IFilterGraph2_Release(graph);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+    ok(source.ref == 1, "Got outstanding refcount %d.\n", source.ref);
+    ok(source_pin.ref == 1, "Got outstanding refcount %d.\n", source_pin.ref);
+    ok(sink.ref == 1, "Got outstanding refcount %d.\n", sink.ref);
+    ok(sink_pin.ref == 1, "Got outstanding refcount %d.\n", sink_pin.ref);
+}
+
 START_TEST(acmwrapper)
 {
     CoInitialize(NULL);
@@ -533,6 +622,7 @@ START_TEST(acmwrapper)
     test_find_pin();
     test_pin_info();
     test_connect_pin();
+    test_filter_state();
 
     CoUninitialize();
 }
