@@ -61,6 +61,7 @@ static BOOL (WINAPI *pSetFileInformationByHandle)(HANDLE, FILE_INFO_BY_HANDLE_CL
 static BOOL (WINAPI *pGetQueuedCompletionStatusEx)(HANDLE, OVERLAPPED_ENTRY*, ULONG, ULONG*, DWORD, BOOL);
 static void (WINAPI *pRtlInitAnsiString)(PANSI_STRING,PCSZ);
 static void (WINAPI *pRtlFreeUnicodeString)(PUNICODE_STRING);
+static BOOL (WINAPI *pSetFileCompletionNotificationModes)(HANDLE, UCHAR);
 
 static char filename[MAX_PATH];
 static const char sillytext[] =
@@ -109,6 +110,7 @@ static void InitFunctionPointers(void)
     pGetFinalPathNameByHandleW = (void *) GetProcAddress(hkernel32, "GetFinalPathNameByHandleW");
     pSetFileInformationByHandle = (void *) GetProcAddress(hkernel32, "SetFileInformationByHandle");
     pGetQueuedCompletionStatusEx = (void *) GetProcAddress(hkernel32, "GetQueuedCompletionStatusEx");
+    pSetFileCompletionNotificationModes = (void *) GetProcAddress(hkernel32, "SetFileCompletionNotificationModes");
 }
 
 static void test__hread( void )
@@ -5102,6 +5104,159 @@ static void test_post_completion(void)
     CloseHandle( port );
 }
 
+static void test_SetFileCompletionNotificationModes(void)
+{
+    static const char pipe_name[] = "\\\\.\\pipe\\wine_test_completion_notification";
+    char write_buf[100], read_buf[100];
+    HANDLE port, client, server;
+    OVERLAPPED ov, *pov;
+    DWORD num_bytes;
+    ULONG_PTR key;
+    BOOL ret;
+
+    if (!pSetFileCompletionNotificationModes)
+    {
+        win_skip("SetFileCompletionNotificationModes is not available\n");
+        return;
+    }
+
+    server = CreateNamedPipeA(pipe_name, PIPE_ACCESS_INBOUND, PIPE_WAIT, 1, 1024, 1024, 0, NULL);
+    ok(server != INVALID_HANDLE_VALUE, "CreateNamedPipe failed: %u\n", GetLastError());
+
+    ret = pSetFileCompletionNotificationModes(server, FILE_SKIP_COMPLETION_PORT_ON_SUCCESS);
+    ok(!ret, "SetFileCompletionNotificationModes succeeded\n");
+todo_wine
+    ok(GetLastError() == ERROR_INVALID_PARAMETER, "wrong error %u\n", GetLastError());
+
+    CloseHandle(server);
+
+    server = CreateNamedPipeA(pipe_name, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                              PIPE_WAIT, 1, 1024, 1024, 0, NULL);
+    ok(server != INVALID_HANDLE_VALUE, "CreateNamedPipe failed: %u\n", GetLastError());
+
+    ret = pSetFileCompletionNotificationModes(server, FILE_SKIP_SET_EVENT_ON_HANDLE);
+todo_wine
+    ok(ret, "SetFileCompletionNotificationModes failed: %u\n", GetLastError());
+
+    ret = pSetFileCompletionNotificationModes(server, FILE_SKIP_SET_USER_EVENT_ON_FAST_IO);
+    ok(!ret, "SetFileCompletionNotificationModes succeeded\n");
+todo_wine
+    ok(GetLastError() == ERROR_INVALID_PARAMETER, "wrong error %u\n", GetLastError());
+
+    CloseHandle(server);
+
+    server = CreateNamedPipeA(pipe_name, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                              PIPE_WAIT, 1, 1024, 1024, 0, NULL);
+    ok(server != INVALID_HANDLE_VALUE, "CreateNamedPipe failed: %u\n", GetLastError());
+
+    client = CreateFileA(pipe_name, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(client != INVALID_HANDLE_VALUE, "CreateFile failed: %u\n", GetLastError());
+
+    memset(&ov, 0, sizeof(ov));
+    ov.hEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
+
+    port = CreateIoCompletionPort(server, NULL, 0xdeadbeef, 0);
+    ok(port != NULL, "CreateIoCompletionPort failed, error %u\n", GetLastError());
+
+    ret = WriteFile(client, write_buf, 100, &num_bytes, NULL);
+    ok(ret, "WriteFile failed: %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+
+    ret = ReadFile(server, read_buf, 100, &num_bytes, &ov);
+    ok(ret, "ReadFile failed: %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+
+    key = 0;
+    pov = NULL;
+    ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 0);
+    ok(ret, "GetQueuedCompletionStatus failed, error %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+    ok(key == 0xdeadbeef, "expected 0xdeadbeef, got %lx\n", key);
+    ok(pov == &ov, "expected %p, got %p\n", &ov, pov);
+
+    ret = pSetFileCompletionNotificationModes(server, FILE_SKIP_COMPLETION_PORT_ON_SUCCESS);
+todo_wine
+    ok(ret, "SetFileCompletionNotificationModes failed: %u\n", GetLastError());
+
+    ret = WriteFile(client, write_buf, 100, &num_bytes, &ov);
+    ok(ret, "WriteFile failed: %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+
+    ret = ReadFile(server, read_buf, 100, &num_bytes, &ov);
+    ok(ret, "ReadFile failed: %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+
+    pov = (void *)0xdeadbeef;
+    ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 0);
+todo_wine {
+    ok(!ret, "GetQueuedCompletionStatus succeeded\n");
+    ok(GetLastError() == WAIT_TIMEOUT, "wrong error %u\n", GetLastError());
+    ok(!pov, "got unexpected pov %p\n", pov);
+}
+
+    /* asynchronous reads and failed reads still trigger completions */
+
+    ret = ReadFile(server, read_buf, 100, &num_bytes, &ov);
+    ok(!ret, "ReadFile succeeded\n");
+    ok(GetLastError() == ERROR_IO_PENDING, "wrong error %u\n", GetLastError());
+
+    ret = WriteFile(client, write_buf, 100, &num_bytes, &ov);
+    ok(ret, "WriteFile failed: %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+
+    ret = GetOverlappedResult(server, &ov, &num_bytes, FALSE);
+    ok(ret, "GetOverlappedResult failed: %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+
+    ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 0);
+    ok(ret, "GetQueuedCompletionStatus failed, error %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+    ok(key == 0xdeadbeef, "expected 0xdeadbeef, got %lx\n", key);
+    ok(pov == &ov, "expected %p, got %p\n", &ov, pov);
+
+    ret = ReadFile(server, read_buf, 100, &num_bytes, &ov);
+    ok(!ret, "ReadFile succeeded\n");
+    ok(GetLastError() == ERROR_IO_PENDING, "wrong error %u\n", GetLastError());
+
+    CancelIo(server);
+
+    ret = GetOverlappedResult(server, &ov, &num_bytes, FALSE);
+    ok(!ret, "GetOverlappedResult succeeded\n");
+    ok(GetLastError() == ERROR_OPERATION_ABORTED, "wrong error %u\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 0);
+    ok(!ret, "GetQueuedCompletionStatus succeeded\n");
+    ok(GetLastError() == ERROR_OPERATION_ABORTED, "wrong error %u\n", GetLastError());
+
+    /* the flag cannot be unset once set */
+
+    ret = pSetFileCompletionNotificationModes(server, 0);
+todo_wine
+    ok(ret, "SetFileCompletionNotificationModes failed: %u\n", GetLastError());
+
+    ret = WriteFile(client, write_buf, 100, &num_bytes, NULL);
+    ok(ret, "WriteFile failed: %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+
+    ret = ReadFile(server, read_buf, 100, &num_bytes, &ov);
+    ok(ret, "ReadFile failed: %u\n", GetLastError());
+    ok(num_bytes == 100, "wrong size %u\n", num_bytes);
+
+    pov = (void *)0xdeadbeef;
+    ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 0);
+todo_wine {
+    ok(!ret, "GetQueuedCompletionStatus succeeded\n");
+    ok(GetLastError() == WAIT_TIMEOUT, "wrong error %u\n", GetLastError());
+    ok(!pov, "got unexpected pov %p\n", pov);
+}
+
+    CloseHandle(ov.hEvent);
+    CloseHandle(port);
+    CloseHandle(client);
+    CloseHandle(server);
+}
+
 START_TEST(file)
 {
     char temp_path[MAX_PATH];
@@ -5171,4 +5326,5 @@ START_TEST(file)
     test_SetFileInformationByHandle();
     test_GetFileAttributesExW();
     test_post_completion();
+    test_SetFileCompletionNotificationModes();
 }
