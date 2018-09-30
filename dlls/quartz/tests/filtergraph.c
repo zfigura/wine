@@ -877,13 +877,13 @@ HRESULT WINAPI testpin_QueryInterface(IPin *iface, REFIID iid, void **out)
     return E_NOINTERFACE;
 }
 
-static ULONG WINAPI testpin_AddRef(IPin *iface)
+ULONG WINAPI testpin_AddRef(IPin *iface)
 {
     struct testpin *pin = impl_from_IPin(iface);
     return InterlockedIncrement(&pin->ref);
 }
 
-static ULONG WINAPI testpin_Release(IPin *iface)
+ULONG WINAPI testpin_Release(IPin *iface)
 {
     struct testpin *pin = impl_from_IPin(iface);
     return InterlockedDecrement(&pin->ref);

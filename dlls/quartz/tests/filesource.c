@@ -87,7 +87,7 @@ static void test_interfaces(void)
     check_interface(filter, &IID_IVideoWindow, FALSE);
 
     load_file(filter, filename);
-    IBaseFilter_FindPin(filter, source_name, &pin);
+    IBaseFilter_FindPin(filter, source_id, &pin);
 
     check_interface(pin, &IID_IAsyncReader, TRUE);
     check_interface(pin, &IID_IPin, TRUE);
@@ -225,7 +225,7 @@ static void test_file_source_filter(void)
         ok(!file_mt.pbFormat, "Got format %p.\n", file_mt.pbFormat);
         CoTaskMemFree(olepath);
 
-        hr = IBaseFilter_FindPin(filter, source_name, &pin);
+        hr = IBaseFilter_FindPin(filter, source_id, &pin);
         ok(hr == S_OK, "Got hr %#x.\n", hr);
 
         hr = IPin_EnumMediaTypes(pin, &enum_mt);
@@ -303,7 +303,7 @@ static void test_file_source_filter(void)
     ok(!memcmp(&file_mt, &mt, sizeof(mt)), "Media types did not match.\n");
     CoTaskMemFree(olepath);
 
-    hr = IBaseFilter_FindPin(filter, source_name, &pin);
+    hr = IBaseFilter_FindPin(filter, source_id, &pin);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = IPin_EnumMediaTypes(pin, &enum_mt);
@@ -501,14 +501,14 @@ static void test_pin_info(void)
 
     load_file(filter, filename);
 
-    hr = IBaseFilter_FindPin(filter, source_name, &pin);
+    hr = IBaseFilter_FindPin(filter, source_id, &pin);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = IPin_QueryPinInfo(pin, &info);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     ok(info.pFilter == filter, "Expected filter %p, got %p.\n", filter, info.pFilter);
     ok(info.dir == PINDIR_OUTPUT, "Got direction %d.\n", info.dir);
-    ok(!lstrcmpW(info.achName, source_name), "Got name %s.\n", wine_dbgstr_w(info.achName));
+    ok(!lstrcmpW(info.achName, source_id), "Got name %s.\n", wine_dbgstr_w(info.achName));
     IBaseFilter_Release(info.pFilter);
 
     hr = IPin_QueryDirection(pin, &dir);
@@ -517,7 +517,7 @@ static void test_pin_info(void)
 
     hr = IPin_QueryId(pin, &id);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-    ok(!lstrcmpW(id, source_name), "Got id %s.\n", wine_dbgstr_w(id));
+    ok(!lstrcmpW(id, source_id), "Got id %s.\n", wine_dbgstr_w(id));
     CoTaskMemFree(id);
 
     IPin_Release(pin);
@@ -614,7 +614,7 @@ static void test_connect_pin(void)
 
     IBaseFilter_QueryInterface(filter, &IID_IFileSourceFilter, (void **)&filesource);
     IFileSourceFilter_Load(filesource, filename, NULL);
-    IBaseFilter_FindPin(filter, source_name, &pin);
+    IBaseFilter_FindPin(filter, source_id, &pin);
 
     hr = IPin_ConnectedTo(pin, &peer);
     ok(hr == VFW_E_NOT_CONNECTED, "Got hr %#x.\n", hr);
@@ -1007,7 +1007,7 @@ static void test_async_reader(void)
 
     IBaseFilter_QueryInterface(filter, &IID_IFileSourceFilter, (void **)&filesource);
     IFileSourceFilter_Load(filesource, filename, NULL);
-    IBaseFilter_FindPin(filter, source_name, &pin);
+    IBaseFilter_FindPin(filter, source_id, &pin);
 
     hr = IPin_QueryInterface(pin, &IID_IAsyncReader, (void **)&reader);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
