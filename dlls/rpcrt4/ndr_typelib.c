@@ -282,6 +282,37 @@ static size_t write_ip_tfs(unsigned char *str, size_t *len, const GUID *iid)
     return off;
 }
 
+static void get_default_iface(ITypeInfo *typeinfo, WORD count, GUID *iid)
+{
+    ITypeInfo *refinfo;
+    HREFTYPE reftype;
+    TYPEATTR *attr;
+    int flags, i;
+
+    for (i = 0; i < count; ++i)
+    {
+        ITypeInfo_GetImplTypeFlags(typeinfo, i, &flags);
+        if (flags & IMPLTYPEFLAG_FDEFAULT)
+        {
+            ITypeInfo_GetRefTypeOfImplType(typeinfo, i, &reftype);
+            ITypeInfo_GetRefTypeInfo(typeinfo, reftype, &refinfo);
+            ITypeInfo_GetTypeAttr(refinfo, &attr);
+            *iid = attr->guid;
+            ITypeInfo_ReleaseTypeAttr(refinfo, attr);
+            ITypeInfo_Release(refinfo);
+            return;
+        }
+    }
+
+    /* If no interface was explicitly marked default, choose the first one. */
+    ITypeInfo_GetRefTypeOfImplType(typeinfo, 0, &reftype);
+    ITypeInfo_GetRefTypeInfo(typeinfo, reftype, &refinfo);
+    ITypeInfo_GetTypeAttr(refinfo, &attr);
+    *iid = attr->guid;
+    ITypeInfo_ReleaseTypeAttr(refinfo, attr);
+    ITypeInfo_Release(refinfo);
+}
+
 static size_t write_pointer_tfs(ITypeInfo *typeinfo, unsigned char *str,
         size_t *len, TYPEDESC *desc, BOOL toplevel, BOOL onstack)
 {
@@ -289,6 +320,7 @@ static size_t write_pointer_tfs(ITypeInfo *typeinfo, unsigned char *str,
     size_t ref, off = *len;
     ITypeInfo *refinfo;
     TYPEATTR *attr;
+    GUID guid;
 
     if (desc->vt == VT_USERDEFINED)
     {
@@ -315,6 +347,10 @@ static size_t write_pointer_tfs(ITypeInfo *typeinfo, unsigned char *str,
         case TKIND_INTERFACE:
         case TKIND_DISPATCH:
             write_ip_tfs(str, len, &attr->guid);
+            break;
+        case TKIND_COCLASS:
+            get_default_iface(refinfo, attr->cImplTypes, &guid);
+            write_ip_tfs(str, len, &guid);
             break;
         case TKIND_ALIAS:
             off = write_pointer_tfs(refinfo, str, len, &attr->tdescAlias, toplevel, onstack);
