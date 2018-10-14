@@ -1344,6 +1344,14 @@ static HRESULT WINAPI Widget_mystruct_array(IWidget *iface, MYSTRUCT in[2])
     return S_OK;
 }
 
+static HRESULT WINAPI Widget_myint(IWidget *iface, myint_t val, myint_t *ptr, myint_t **ptr_ptr)
+{
+    ok(val == 123, "Got value %d.\n", val);
+    ok(*ptr == 456, "Got single ptr ref %d.\n", *ptr);
+    ok(**ptr_ptr == 789, "Got double ptr ref %d.\n", **ptr_ptr);
+    return S_OK;
+}
+
 static const struct IWidgetVtbl Widget_VTable =
 {
     Widget_QueryInterface,
@@ -1399,6 +1407,7 @@ static const struct IWidgetVtbl Widget_VTable =
     Widget_array_ptr,
     Widget_variant_array,
     Widget_mystruct_array,
+    Widget_myint,
 };
 
 static HRESULT WINAPI StaticWidget_QueryInterface(IStaticWidget *iface, REFIID riid, void **ppvObject)
@@ -1720,7 +1729,7 @@ static void test_marshal_basetypes(IWidget *widget, IDispatch *disp)
 
     signed char c;
     short s;
-    int i;
+    int i, i2, *pi;
     hyper h;
     unsigned char uc;
     unsigned short us;
@@ -1794,6 +1803,14 @@ static void test_marshal_basetypes(IWidget *widget, IDispatch *disp)
     ok(f == (float)M_LN2, "Got float %f.\n", f);
     ok(d == M_LN10, "Got double %f.\n", d);
     ok(st == STATE_UNWIDGETIFIED, "Got state %u.\n", st);
+
+    /* Test marshalling of public typedefs. */
+
+    i = 456;
+    i2 = 789;
+    pi = &i2;
+    hr = IWidget_myint(widget, 123, &i, &pi);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
 }
 
 static void test_marshal_pointer(IWidget *widget, IDispatch *disp)
