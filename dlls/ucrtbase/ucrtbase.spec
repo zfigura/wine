@@ -2324,7 +2324,7 @@
 @ cdecl fputws(wstr ptr) MSVCRT_fputws
 @ cdecl fread(ptr long long ptr) MSVCRT_fread
 @ cdecl fread_s(ptr long long long ptr) MSVCRT_fread_s
-@ cdecl free(ptr) MSVCRT_free
+@ cdecl -norelay free(ptr) MSVCRT_free
 @ cdecl freopen(str str ptr) MSVCRT_freopen
 @ cdecl freopen_s(ptr str str ptr) MSVCRT_freopen_s
 @ cdecl frexp(double ptr) MSVCRT_frexp
@@ -2409,7 +2409,7 @@
 @ cdecl lround(double) MSVCR120_lround
 @ cdecl lroundf(float) MSVCR120_lroundf
 @ cdecl lroundl(double) MSVCR120_lroundl
-@ cdecl malloc(long) MSVCRT_malloc
+@ cdecl -norelay malloc(long) MSVCRT_malloc
 @ cdecl mblen(ptr long) MSVCRT_mblen
 @ cdecl mbrlen(ptr long ptr) MSVCRT_mbrlen
 @ stub mbrtoc16
@@ -2422,9 +2422,9 @@
 @ cdecl mbtowc(ptr str long) MSVCRT_mbtowc
 @ cdecl memchr(ptr long long) MSVCRT_memchr
 @ cdecl memcmp(ptr ptr long) MSVCRT_memcmp
-@ cdecl memcpy(ptr ptr long) MSVCRT_memcpy
+@ cdecl -norelay memcpy(ptr ptr long) MSVCRT_memcpy
 @ cdecl memcpy_s(ptr long ptr long) MSVCRT_memcpy_s
-@ cdecl memmove(ptr ptr long) MSVCRT_memmove
+@ cdecl -norelay memmove(ptr ptr long) MSVCRT_memmove
 @ cdecl memmove_s(ptr long ptr long) MSVCRT_memmove_s
 @ cdecl memset(ptr long long) MSVCRT_memset
 @ cdecl modf(double ptr) MSVCRT_modf

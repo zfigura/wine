@@ -859,7 +859,7 @@
 @ stdcall GetThreadSelectorEntry(long long ptr)
 @ stdcall -import GetThreadTimes(long ptr ptr ptr ptr)
 @ stdcall -import GetThreadUILanguage()
-@ stdcall GetTickCount()
+@ stdcall -norelay GetTickCount()
 @ stdcall -ret64 GetTickCount64()
 @ stdcall GetTimeFormatA(long long ptr str ptr long)
 @ stdcall GetTimeFormatEx(wstr long ptr wstr ptr long)
@@ -923,7 +923,7 @@
 @ stub HeapCreateTagsW
 @ stdcall HeapDestroy(long)
 @ stub HeapExtend
-@ stdcall HeapFree(long long ptr)
+@ stdcall -norelay HeapFree(long long ptr)
 @ stdcall -import HeapLock(long)
 @ stdcall -import HeapQueryInformation(long long ptr long ptr)
 @ stub HeapQueryTagW
@@ -1169,7 +1169,7 @@
 @ stdcall -import QueryMemoryResourceNotification(ptr ptr)
 @ stub QueryNumberOfEventLogRecords
 @ stub QueryOldestEventLogRecord
-@ stdcall -import QueryPerformanceCounter(ptr)
+@ stdcall -import -norelay QueryPerformanceCounter(ptr)
 @ stdcall -import QueryPerformanceFrequency(ptr)
 # @ stub QueryProcessAffinityUpdateMode
 @ stdcall QueryProcessCycleTime(long ptr)
