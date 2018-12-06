@@ -1667,11 +1667,11 @@
 # @ stub VerifyPackageId
 # @ stub VerifyPackageRelativeApplicationId
 # @ stub VerifyScripts
-@ stdcall VirtualAlloc(ptr long long long)
+@ stdcall -norelay VirtualAlloc(ptr long long long)
 @ stdcall VirtualAllocEx(long ptr long long long)
 @ stdcall VirtualAllocExNuma(long ptr long long long long)
 # @ stub VirtualAllocFromApp
-@ stdcall VirtualFree(ptr long long)
+@ stdcall -norelay VirtualFree(ptr long long)
 @ stdcall VirtualFreeEx(long ptr long long)
 @ stdcall VirtualLock(ptr long)
 @ stdcall VirtualProtect(ptr long long ptr)
