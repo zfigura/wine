@@ -1169,7 +1169,7 @@
 @ stdcall QueryMemoryResourceNotification(ptr ptr)
 @ stub QueryNumberOfEventLogRecords
 @ stub QueryOldestEventLogRecord
-@ stdcall QueryPerformanceCounter(ptr)
+@ stdcall -norelay QueryPerformanceCounter(ptr)
 @ stdcall QueryPerformanceFrequency(ptr)
 # @ stub QueryProcessAffinityUpdateMode
 @ stdcall QueryProcessCycleTime(long ptr)
@@ -1557,11 +1557,11 @@
 # @ stub VerifyScripts
 @ stdcall VerifyVersionInfoA(long long int64)
 @ stdcall VerifyVersionInfoW(long long int64)
-@ stdcall VirtualAlloc(ptr long long long)
+@ stdcall -norelay VirtualAlloc(ptr long long long)
 @ stdcall VirtualAllocEx(long ptr long long long)
 @ stdcall VirtualAllocExNuma(long ptr long long long long)
 @ stub VirtualBufferExceptionHandler
-@ stdcall VirtualFree(ptr long long)
+@ stdcall -norelay VirtualFree(ptr long long)
 @ stdcall VirtualFreeEx(long ptr long long)
 @ stdcall VirtualLock(ptr long)
 @ stdcall VirtualProtect(ptr long long ptr)

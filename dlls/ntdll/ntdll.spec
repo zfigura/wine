@@ -433,8 +433,8 @@
 @ stdcall RtlAcquirePebLock()
 @ stdcall RtlAcquireResourceExclusive(ptr long)
 @ stdcall RtlAcquireResourceShared(ptr long)
-@ stdcall RtlAcquireSRWLockExclusive(ptr)
-@ stdcall RtlAcquireSRWLockShared(ptr)
+@ stdcall -norelay RtlAcquireSRWLockExclusive(ptr)
+@ stdcall -norelay RtlAcquireSRWLockShared(ptr)
 @ stdcall RtlActivateActivationContext(long ptr ptr)
 @ stub RtlActivateActivationContextEx
 @ stub RtlActivateActivationContextUnsafeFast
@@ -464,7 +464,7 @@
 @ stdcall RtlAdjustPrivilege(long long long ptr)
 @ stdcall RtlAllocateAndInitializeSid (ptr long long long long long long long long long ptr)
 @ stdcall RtlAllocateHandle(ptr ptr)
-@ stdcall RtlAllocateHeap(long long long)
+@ stdcall -norelay RtlAllocateHeap(long long long)
 @ stdcall RtlAnsiCharToUnicodeChar(ptr)
 @ stdcall RtlAnsiStringToUnicodeSize(ptr)
 @ stdcall RtlAnsiStringToUnicodeString(ptr ptr long)
@@ -555,7 +555,7 @@
 @ stdcall RtlDeactivateActivationContext(long long)
 @ stub RtlDeactivateActivationContextUnsafeFast
 @ stub RtlDebugPrintTimes
-@ stdcall RtlDecodePointer(ptr)
+@ stdcall -norelay RtlDecodePointer(ptr)
 @ stdcall RtlDecodeSystemPointer(ptr) RtlDecodePointer
 @ stdcall RtlDecompressBuffer(long ptr long ptr long ptr)
 @ stdcall RtlDecompressFragment(long ptr long ptr long long ptr ptr)
@@ -563,7 +563,7 @@
 @ stub RtlDelete
 @ stdcall RtlDeleteAce(ptr long)
 @ stdcall RtlDeleteAtomFromAtomTable(ptr long)
-@ stdcall RtlDeleteCriticalSection(ptr)
+@ stdcall -norelay RtlDeleteCriticalSection(ptr)
 @ cdecl -arch=arm,arm64,x86_64 RtlDeleteGrowableFunctionTable(ptr)
 @ stub RtlDeleteElementGenericTable
 @ stub RtlDeleteElementGenericTableAvl
@@ -601,7 +601,7 @@
 @ stdcall RtlDuplicateUnicodeString(long ptr ptr)
 @ stdcall RtlEmptyAtomTable(ptr long)
 # @ stub RtlEnableEarlyCriticalSectionEventCreation
-@ stdcall RtlEncodePointer(ptr)
+@ stdcall -norelay RtlEncodePointer(ptr)
 @ stdcall RtlEncodeSystemPointer(ptr) RtlEncodePointer
 @ stdcall -arch=win32 -ret64 RtlEnlargedIntegerMultiply(long long)
 @ stdcall -arch=win32 RtlEnlargedUnsignedDivide(int64 long ptr)
@@ -660,7 +660,7 @@
 @ stdcall RtlFormatMessage(ptr long long long long ptr ptr long)
 @ stdcall RtlFreeAnsiString(ptr)
 @ stdcall RtlFreeHandle(ptr ptr)
-@ stdcall RtlFreeHeap(long long ptr)
+@ stdcall -norelay RtlFreeHeap(long long ptr)
 @ stdcall RtlFreeOemString(ptr)
 # @ stub RtlFreeRangeList
 @ stdcall RtlFreeSid (ptr)
@@ -730,7 +730,7 @@
 @ stdcall RtlInitializeBitMap(ptr ptr long)
 @ stdcall RtlInitializeConditionVariable(ptr)
 @ stub RtlInitializeContext
-@ stdcall RtlInitializeCriticalSection(ptr)
+@ stdcall -norelay RtlInitializeCriticalSection(ptr)
 @ stdcall RtlInitializeCriticalSectionAndSpinCount(ptr long)
 @ stdcall RtlInitializeCriticalSectionEx(ptr long long)
 @ stdcall RtlInitializeGenericTable(ptr ptr ptr ptr ptr)
@@ -740,7 +740,7 @@
 # @ stub RtlInitializeRangeList
 @ stdcall RtlInitializeResource(ptr)
 @ stdcall RtlInitializeSListHead(ptr)
-@ stdcall RtlInitializeSRWLock(ptr)
+@ stdcall -norelay RtlInitializeSRWLock(ptr)
 @ stdcall RtlInitializeSid(ptr ptr long)
 # @ stub RtlInitializeStackTraceDataBase
 @ stub RtlInsertElementGenericTable
@@ -868,7 +868,7 @@
 @ stdcall RtlRaiseStatus(long)
 @ stdcall RtlRandom(ptr)
 @ stdcall RtlRandomEx(ptr)
-@ stdcall RtlReAllocateHeap(long long ptr long)
+@ stdcall -norelay RtlReAllocateHeap(long long ptr long)
 @ stub RtlReadMemoryStream
 @ stub RtlReadOutOfProcessMemoryStream
 @ stub RtlRealPredecessor
@@ -880,8 +880,8 @@
 @ stdcall RtlReleasePebLock()
 @ stdcall RtlReleaseRelativeName(ptr)
 @ stdcall RtlReleaseResource(ptr)
-@ stdcall RtlReleaseSRWLockExclusive(ptr)
-@ stdcall RtlReleaseSRWLockShared(ptr)
+@ stdcall -norelay RtlReleaseSRWLockExclusive(ptr)
+@ stdcall -norelay RtlReleaseSRWLockShared(ptr)
 @ stub RtlRemoteCall
 @ stdcall RtlRemoveVectoredContinueHandler(ptr)
 @ stdcall RtlRemoveVectoredExceptionHandler(ptr)
@@ -961,9 +961,9 @@
 # @ stub RtlTraceDatabaseLock
 # @ stub RtlTraceDatabaseUnlock
 # @ stub RtlTraceDatabaseValidate
-@ stdcall RtlTryAcquireSRWLockExclusive(ptr)
-@ stdcall RtlTryAcquireSRWLockShared(ptr)
-@ stdcall RtlTryEnterCriticalSection(ptr)
+@ stdcall -norelay RtlTryAcquireSRWLockExclusive(ptr)
+@ stdcall -norelay RtlTryAcquireSRWLockShared(ptr)
+@ stdcall -norelay RtlTryEnterCriticalSection(ptr)
 @ cdecl -i386 -norelay RtlUlongByteSwap() NTDLL_RtlUlongByteSwap
 @ cdecl -ret64 RtlUlonglongByteSwap(int64)
 # @ stub RtlUnhandledExceptionFilter2
