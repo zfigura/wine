@@ -1055,10 +1055,11 @@ void WINAPI IoFreeIrp( IRP *irp )
 /***********************************************************************
  *           IoAllocateErrorLogEntry  (NTOSKRNL.EXE.@)
  */
-PVOID WINAPI IoAllocateErrorLogEntry( PVOID IoObject, UCHAR EntrySize )
+void * WINAPI IoAllocateErrorLogEntry( void *object, UCHAR size )
 {
-    FIXME( "stub: %p, %u\n", IoObject, EntrySize );
-    return NULL;
+    TRACE("object %p, size %u.\n", object, size);
+
+    return heap_alloc( size );
 }
 
 
