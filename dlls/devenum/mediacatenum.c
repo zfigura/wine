@@ -419,7 +419,8 @@ static ULONG WINAPI DEVENUM_IMediaCatMoniker_Release(IMoniker *iface)
     TRACE("(%p) ref=%d\n", This, ref);
 
     if (ref == 0) {
-        CoTaskMemFree(This->name);
+        if (This->type != DEVICE_DMO)
+            CoTaskMemFree(This->name);
         CoTaskMemFree(This);
         DEVENUM_UnlockModule();
     }
