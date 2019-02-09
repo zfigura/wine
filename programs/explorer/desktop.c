@@ -729,7 +729,6 @@ static BOOL get_default_enable_shell( const WCHAR *name )
                                          'E','x','p','l','o','r','e','r','\\',
                                          'D','e','s','k','t','o','p','s',0};
     static const WCHAR enable_shellW[] = {'E','n','a','b','l','e','S','h','e','l','l',0};
-    static const WCHAR shellW[] = {'s','h','e','l','l',0};
     HKEY hkey;
     BOOL found = FALSE;
     BOOL result;
@@ -742,9 +741,9 @@ static BOOL get_default_enable_shell( const WCHAR *name )
             found = TRUE;
         RegCloseKey( hkey );
     }
-    /* Default off, except for the magic desktop name "shell" */
+    /* Default on */
     if (!found)
-        result = (lstrcmpiW( name, shellW ) == 0);
+        result = TRUE;
     return result;
 }
 
