@@ -1,0 +1,7 @@
+TESTDLL   = newdev.dll
+IMPORTS   = advapi32 newdev setupapi
+
+SOURCES = \
+	coinst.c \
+	coinst.spec \
+	newdev.c
