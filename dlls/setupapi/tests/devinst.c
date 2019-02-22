@@ -3297,6 +3297,7 @@ static void test_install_device(void)
     SP_DEVINFO_DATA device = {sizeof(device)};
     HKEY driver_key, class_key;
     HDEVINFO set;
+    DWORD size;
     BOOL ret;
     LONG res;
 
@@ -3362,6 +3363,19 @@ static void test_install_device(void)
     driver_key = SetupDiOpenDevRegKey(set, &device, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ);
     ok(driver_key != INVALID_HANDLE_VALUE, "Failed to open driver key, error %#x.\n", GetLastError());
     check_reg_str(driver_key, "foo", "bar");
+    check_reg_str(driver_key, "InfSection", "dev1");
+    check_reg_str(driver_key, "InfSectionExt", ".NT");
+
+    /* Windows XP/2003 copies the file to the inf directory inside of
+     * SetupDiInstallDevice(). Vista+ copies it inside of
+     * UpdateDriverForPlugAndPlayDevices(), the expected caller. */
+    size = sizeof(installed_inf_path);
+    res = RegQueryValueExA(driver_key, "InfPath", NULL, NULL, (BYTE *)&installed_inf_path, &size);
+    ok(!res, "Failed to get installed INF path.\n");
+    sprintf(path, "C:/windows/inf/%s", installed_inf_path);
+    DeleteFileA(path);
+    path[strlen(path) - 3] = 'p';
+    DeleteFileA(path);
     RegCloseKey(driver_key);
 
     /* We set DI_NOFILECOPY, so nothing should have been copied. */
@@ -3380,6 +3394,16 @@ static void test_install_device(void)
     driver_key = SetupDiOpenDevRegKey(set, &device, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ);
     ok(driver_key != INVALID_HANDLE_VALUE, "Failed to open driver key, error %#x.\n", GetLastError());
     check_reg_str(driver_key, "foo", "bar");
+    check_reg_str(driver_key, "InfSection", "dev1");
+    check_reg_str(driver_key, "InfSectionExt", ".NT");
+
+    size = sizeof(installed_inf_path);
+    res = RegQueryValueExA(driver_key, "InfPath", NULL, NULL, (BYTE *)&installed_inf_path, &size);
+    ok(!res, "Failed to get installed INF path.\n");
+    sprintf(path, "C:/windows/inf/%s", installed_inf_path);
+    DeleteFileA(path);
+    path[strlen(path) - 3] = 'p';
+    DeleteFileA(path);
     RegCloseKey(driver_key);
 
     ret = DeleteFileA("C:/windows/system32/setupapi_test_one.txt");
