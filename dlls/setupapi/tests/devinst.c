@@ -3093,6 +3093,70 @@ todo_wine {
     SetupDiDestroyDeviceInfoList(set);
 }
 
+static void test_install_driver_files(void)
+{
+    static const char hardware_id[] = "bogus_hardware_id\0";
+    SP_DEVINSTALL_PARAMS_A params = {sizeof(params)};
+    SP_DEVINFO_DATA device = {sizeof(device)};
+    char dir[MAX_PATH], path[MAX_PATH];
+    HDEVINFO set;
+    BOOL ret;
+
+    static const char inf_data[] = "[Version]\n"
+            "Signature=\"$Chicago$\"\n"
+            "ClassGuid={6a55b5a4-3f65-11db-b704-0011955c2bdb}\n"
+            "[Manufacturer]\n"
+            "mfg1=mfg1_key,NT" MYEXT ",NT" WOWEXT "\n"
+            "[mfg1_key.nt" MYEXT "]\n"
+            "desc1=dev1,bogus_hardware_id\n"
+            "[mfg1_key.nt" WOWEXT "]\n"
+            "desc1=dev1,bogus_hardware_id\n"
+            "[dev1]\n"
+            "CopyFiles=dev1_copy_one\n"
+            "[dev1_copy_one]\n"
+            "setupapi_test_one.txt\n";
+
+    GetTempPathA(sizeof(dir), dir);
+    sprintf(path, "%s/setupapi_test_one.txt", dir);
+    create_file(path, "");
+    sprintf(path, "%s/setupapi_test.inf", dir);
+    create_file(path, inf_data);
+
+    set = SetupDiCreateDeviceInfoList(&guid, NULL);
+    ok(set != INVALID_HANDLE_VALUE, "Failed to create device list, error %#x.\n", GetLastError());
+    ret = SetupDiCreateDeviceInfoA(set, "Root\\BOGUS\\0000", &guid, NULL, NULL, 0, &device);
+    ok(ret, "Failed to create device, error %#x.\n", GetLastError());
+    ret = SetupDiSetDeviceRegistryPropertyA(set, &device, SPDRP_HARDWAREID,
+            (const BYTE *)hardware_id, sizeof(hardware_id));
+    ok(ret, "Failed to set hardware ID, error %#x.\n", GetLastError());
+
+    ret = SetupDiGetDeviceInstallParamsA(set, &device, &params);
+    ok(ret, "Failed to get device install params, error %#x.\n", GetLastError());
+    strcpy(params.DriverPath, path);
+    params.Flags = DI_ENUMSINGLEINF;
+    ret = SetupDiSetDeviceInstallParamsA(set, &device, &params);
+    ok(ret, "Failed to set device install params, error %#x.\n", GetLastError());
+    ret = SetupDiBuildDriverInfoList(set, &device, SPDIT_COMPATDRIVER);
+    ok(ret, "Failed to build driver list, error %#x.\n", GetLastError());
+    ret = SetupDiSelectBestCompatDrv(set, &device);
+    ok(ret, "Failed to select driver, error %#x.\n", GetLastError());
+
+    ret = SetupDiInstallDriverFiles(set, &device);
+    ok(ret, "Failed to install driver files, error %#x.\n", GetLastError());
+
+    ret = DeleteFileA("C:/windows/system32/setupapi_test_one.txt");
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+
+    SetupDiDestroyDeviceInfoList(set);
+
+    sprintf(path, "%s/setupapi_test_one.txt", dir);
+    ret = DeleteFileA(path);
+    ok(ret, "Failed to delete %s, error %u.\n", path, GetLastError());
+    sprintf(path, "%s/setupapi_test.inf", dir);
+    ret = DeleteFileA(path);
+    ok(ret, "Failed to delete %s, error %u.\n", path, GetLastError());
+}
+
 START_TEST(devinst)
 {
     static BOOL (WINAPI *pIsWow64Process)(HANDLE, BOOL *);
@@ -3131,4 +3195,5 @@ START_TEST(devinst)
     test_driver_list();
     test_call_class_installer();
     test_get_class_devs();
+    test_install_driver_files();
 }
