@@ -3295,7 +3295,7 @@ static void test_install_device(void)
     SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
     SP_DEVINSTALL_PARAMS_A params = {sizeof(params)};
     SP_DEVINFO_DATA device = {sizeof(device)};
-    HKEY driver_key, class_key;
+    HKEY driver_key, class_key, device_key;
     HDEVINFO set;
     DWORD size;
     BOOL ret;
@@ -3317,6 +3317,10 @@ static void test_install_device(void)
             "setupapi_test_one.txt\n"
             "[dev1_sw_reg]\n"
             "HKR,,foo,,bar\n"
+            "[dev1.NT.HW]\n"
+            "AddReg=dev1_hw_reg\n"
+            "[dev1_hw_reg]\n"
+            "HKR,,foo,,qux\n"
             "[dev1.NT.Services]\n"
             "AddService = ,2\n";
 
@@ -3378,6 +3382,11 @@ static void test_install_device(void)
     DeleteFileA(path);
     RegCloseKey(driver_key);
 
+    device_key = SetupDiOpenDevRegKey(set, &device, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+    ok(device_key != INVALID_HANDLE_VALUE, "Failed to open driver key, error %#x.\n", GetLastError());
+    check_reg_str(device_key, "foo", "qux");
+    RegCloseKey(device_key);
+
     /* We set DI_NOFILECOPY, so nothing should have been copied. */
     ret = GetFileAttributesA("C:/windows/system32/setupapi_test_one.txt");
     ok(ret == INVALID_FILE_ATTRIBUTES, "Expected file not to be installed.\n");
@@ -3405,6 +3414,11 @@ static void test_install_device(void)
     path[strlen(path) - 3] = 'p';
     DeleteFileA(path);
     RegCloseKey(driver_key);
+
+    device_key = SetupDiOpenDevRegKey(set, &device, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+    ok(device_key != INVALID_HANDLE_VALUE, "Failed to open driver key, error %#x.\n", GetLastError());
+    check_reg_str(device_key, "foo", "qux");
+    RegCloseKey(device_key);
 
     ret = DeleteFileA("C:/windows/system32/setupapi_test_one.txt");
     ok(ret, "Failed to delete file, error %u.\n", GetLastError());
