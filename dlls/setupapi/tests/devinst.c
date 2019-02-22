@@ -3113,11 +3113,19 @@ static void test_install_driver_files(void)
             "desc1=dev1,bogus_hardware_id\n"
             "[dev1]\n"
             "CopyFiles=dev1_copy_one\n"
+            "[dev1.Interfaces]\n"
+            "AddInterface={deadbeef-3f65-11db-b704-0011955c2bdb},,dev1_iface\n"
+            "[dev1_iface]\n"
+            "CopyFiles=dev1_copy_two\n"
             "[dev1_copy_one]\n"
-            "setupapi_test_one.txt\n";
+            "setupapi_test_one.txt\n"
+            "[dev1_copy_two]\n"
+            "setupapi_test_two.txt\n";
 
     GetTempPathA(sizeof(dir), dir);
     sprintf(path, "%s/setupapi_test_one.txt", dir);
+    create_file(path, "");
+    sprintf(path, "%s/setupapi_test_two.txt", dir);
     create_file(path, "");
     sprintf(path, "%s/setupapi_test.inf", dir);
     create_file(path, inf_data);
@@ -3146,10 +3154,15 @@ static void test_install_driver_files(void)
 
     ret = DeleteFileA("C:/windows/system32/setupapi_test_one.txt");
     ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+    ret = DeleteFileA("C:/windows/system32/setupapi_test_two.txt");
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
 
     SetupDiDestroyDeviceInfoList(set);
 
     sprintf(path, "%s/setupapi_test_one.txt", dir);
+    ret = DeleteFileA(path);
+    ok(ret, "Failed to delete %s, error %u.\n", path, GetLastError());
+    sprintf(path, "%s/setupapi_test_two.txt", dir);
     ret = DeleteFileA(path);
     ok(ret, "Failed to delete %s, error %u.\n", path, GetLastError());
     sprintf(path, "%s/setupapi_test.inf", dir);
