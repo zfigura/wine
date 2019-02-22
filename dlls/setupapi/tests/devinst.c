@@ -2648,6 +2648,96 @@ static void test_class_coinstaller(void)
     RegCloseKey(coinst_key);
 }
 
+static void test_device_coinstaller(void)
+{
+    static const char hardware_id[] = "bogus_hardware_id\0";
+    SP_DEVINSTALL_PARAMS_A params = {sizeof(params)};
+    SP_DEVINFO_DATA device = {sizeof(device)};
+    char inf_path[MAX_PATH];
+    HKEY class_key;
+    HDEVINFO set;
+    BOOL ret;
+    LONG res;
+
+    static const char inf_data[] = "[Version]\n"
+            "Signature=\"$Chicago$\"\n"
+            "ClassGuid={6a55b5a4-3f65-11db-b704-0011955c2bdb}\n"
+            "[Manufacturer]\n"
+            "mfg1=mfg1_key,NT" MYEXT "\n"
+            "[mfg1_key.nt" MYEXT "]\n"
+            "desc1=dev1,bogus_hardware_id\n"
+            "[dev1.CoInstallers]\n"
+            "AddReg=dev1_AddReg\n"
+            "[dev1_AddReg]\n"
+            "HKR,,CoInstallers32,0x00010000,\"winetest_coinst.dll,co_success\"\n";
+
+    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, "System\\CurrentControlSet\\Control\\Class"
+            "\\{6a55b5a4-3f65-11db-b704-0011955c2bdb}", &class_key);
+    ok(!res, "Failed to create class key, error %u.\n", res);
+
+    GetTempPathA(sizeof(inf_path), inf_path);
+    strcat(inf_path, "setupapi_test.inf");
+    create_file(inf_path, inf_data);
+
+    set = SetupDiCreateDeviceInfoList(&guid, NULL);
+    ok(set != INVALID_HANDLE_VALUE, "Failed to create device list, error %#x.\n", GetLastError());
+    ret = SetupDiCreateDeviceInfoA(set, "Root\\LEGACY_BOGUS\\0000", &guid, NULL, NULL, 0, &device);
+    ok(ret, "Failed to create device, error %#x.\n", GetLastError());
+    ret = SetupDiSetDeviceRegistryPropertyA(set, &device, SPDRP_HARDWAREID,
+            (const BYTE *)hardware_id, sizeof(hardware_id));
+    ok(ret, "Failed to set hardware ID, error %#x.\n", GetLastError());
+    ret = SetupDiRegisterDeviceInfo(set, &device, 0, NULL, NULL, NULL);
+    ok(ret, "Failed to register device, error %#x.\n", GetLastError());
+
+    ret = SetupDiGetDeviceInstallParamsA(set, &device, &params);
+    ok(ret, "Failed to get device install params, error %#x.\n", GetLastError());
+    strcpy(params.DriverPath, inf_path);
+    params.Flags = DI_ENUMSINGLEINF;
+    ret = SetupDiSetDeviceInstallParamsA(set, &device, &params);
+    ok(ret, "Failed to set device install params, error %#x.\n", GetLastError());
+    ret = SetupDiBuildDriverInfoList(set, &device, SPDIT_COMPATDRIVER);
+    ok(ret, "Failed to build driver list, error %#x.\n", GetLastError());
+    ret = SetupDiSelectBestCompatDrv(set, &device);
+    ok(ret, "Failed to call class installer, error %#x.\n", GetLastError());
+
+    ret = SetupDiCallClassInstaller(DIF_ALLOW_INSTALL, set, &device);
+    ok(!ret, "Expected failure.\n");
+    ok(GetLastError() == ERROR_DI_DO_DEFAULT, "Got unexpected error %#x.\n", GetLastError());
+
+    ok(!*coinst_callback_count, "Got %d callbacks.\n", *coinst_callback_count);
+
+    ret = SetupDiRegisterCoDeviceInstallers(set, &device);
+    ok(ret, "Failed to register device co-installer, error %#x.\n", GetLastError());
+
+    ok(!*coinst_callback_count, "Got %d callbacks.\n", *coinst_callback_count);
+
+    ret = SetupDiCallClassInstaller(DIF_ALLOW_INSTALL, set, &device);
+    ok(!ret, "Expected failure.\n");
+    ok(GetLastError() == ERROR_DI_DO_DEFAULT, "Got unexpected error %#x.\n", GetLastError());
+
+    ok(*coinst_callback_count == 1, "Got %d callbacks.\n", *coinst_callback_count);
+    ok(*coinst_last_message == DIF_ALLOW_INSTALL, "Got unexpected message %#x.\n", *coinst_last_message);
+    *coinst_callback_count = 0;
+
+    ret = SetupDiCallClassInstaller(DIF_REMOVE, set, &device);
+    ok(ret, "Failed to call class installer, error %#x.\n", GetLastError());
+    ok(!device_is_registered(set, &device), "Expected device not to be registered.\n");
+
+    ok(*coinst_callback_count == 1, "Got %d callbacks.\n", *coinst_callback_count);
+    ok(*coinst_last_message == DIF_REMOVE, "Got unexpected message %#x.\n", *coinst_last_message);
+    *coinst_callback_count = 0;
+
+    SetupDiDestroyDeviceInfoList(set);
+
+    todo_wine ok(*coinst_callback_count == 1, "Got %d callbacks.\n", *coinst_callback_count);
+    todo_wine ok(*coinst_last_message == DIF_DESTROYPRIVATEDATA, "Got unexpected message %#x.\n", *coinst_last_message);
+    *coinst_callback_count = 0;
+
+    res = RegDeleteKeyA(class_key, "");
+    ok(!res, "Failed to delete class key, error %u.\n", res);
+    RegCloseKey(class_key);
+}
+
 static void test_call_class_installer(void)
 {
     SP_DEVINFO_DATA device = {sizeof(device)};
@@ -2695,6 +2785,7 @@ static void test_call_class_installer(void)
 
     test_class_installer();
     test_class_coinstaller();
+    test_device_coinstaller();
 
     FreeLibrary(coinst);
 
