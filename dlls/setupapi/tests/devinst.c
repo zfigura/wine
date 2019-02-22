@@ -3288,6 +3288,119 @@ static void test_install_device_ifaces(void)
     ok(!res, "Failed to delete interface class key, error %u.\n", res);
 }
 
+static void test_install_device(void)
+{
+    char dir[MAX_PATH], path[MAX_PATH], installed_inf_path[MAX_PATH];
+    static const char hardware_id[] = "bogus_hardware_id\0";
+    SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
+    SP_DEVINSTALL_PARAMS_A params = {sizeof(params)};
+    SP_DEVINFO_DATA device = {sizeof(device)};
+    HKEY driver_key, class_key;
+    HDEVINFO set;
+    BOOL ret;
+    LONG res;
+
+    static const char inf_data[] = "[Version]\n"
+            "Signature=\"$Chicago$\"\n"
+            "ClassGuid={6a55b5a4-3f65-11db-b704-0011955c2bdb}\n"
+            "[Manufacturer]\n"
+            "mfg1=mfg1_key,NT" MYEXT ",NT" WOWEXT "\n"
+            "[mfg1_key.nt" MYEXT "]\n"
+            "desc1=dev1,bogus_hardware_id\n"
+            "[mfg1_key.nt" WOWEXT "]\n"
+            "desc1=dev1,bogus_hardware_id\n"
+            "[dev1.NT]\n"
+            "AddReg=dev1_sw_reg\n"
+            "CopyFiles=dev1_copy\n"
+            "[dev1_copy]\n"
+            "setupapi_test_one.txt\n"
+            "[dev1_sw_reg]\n"
+            "HKR,,foo,,bar\n"
+            "[dev1.NT.Services]\n"
+            "AddService = ,2\n";
+
+    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, "System\\CurrentControlSet\\Control\\Class"
+            "\\{6a55b5a4-3f65-11db-b704-0011955c2bdb}", &class_key);
+    ok(!res, "Failed to create class key, error %u.\n", res);
+
+    GetTempPathA(sizeof(dir), dir);
+    sprintf(path, "%s/setupapi_test_one.txt", dir);
+    create_file(path, "");
+    sprintf(path, "%s/setupapi_test.inf", dir);
+    create_file(path, inf_data);
+
+    set = SetupDiCreateDeviceInfoList(&guid, NULL);
+    ok(set != INVALID_HANDLE_VALUE, "Failed to create device list, error %#x.\n", GetLastError());
+    ret = SetupDiCreateDeviceInfoA(set, "Root\\BOGUS\\0000", &guid, NULL, NULL, 0, &device);
+    ok(ret, "Failed to create device, error %#x.\n", GetLastError());
+    ret = SetupDiSetDeviceRegistryPropertyA(set, &device, SPDRP_HARDWAREID,
+            (const BYTE *)hardware_id, sizeof(hardware_id));
+    ok(ret, "Failed to set hardware ID, error %#x.\n", GetLastError());
+    ret = SetupDiRegisterDeviceInfo(set, &device, 0, NULL, NULL, NULL);
+    ok(ret, "Failed to register device, error %#x.\n", GetLastError());
+
+    ret = SetupDiGetDeviceInstallParamsA(set, &device, &params);
+    ok(ret, "Failed to get device install params, error %#x.\n", GetLastError());
+    strcpy(params.DriverPath, path);
+    params.Flags = DI_ENUMSINGLEINF | DI_NOFILECOPY;
+    ret = SetupDiSetDeviceInstallParamsA(set, &device, &params);
+    ok(ret, "Failed to set device install params, error %#x.\n", GetLastError());
+    ret = SetupDiBuildDriverInfoList(set, &device, SPDIT_COMPATDRIVER);
+    ok(ret, "Failed to build driver list, error %#x.\n", GetLastError());
+    ret = SetupDiSelectBestCompatDrv(set, &device);
+    ok(ret, "Failed to select driver, error %#x.\n", GetLastError());
+
+    /* This call is necessary for the next to succeed on Windows. */
+    ret = SetupDiInstallDriverFiles(set, &device);
+    ok(ret, "Failed to install driver, error %#x.\n", GetLastError());
+    ret = DeleteFileA("C:/windows/system32/setupapi_test_one.txt");
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+
+    ret = SetupDiInstallDevice(set, &device);
+    ok(ret, "Failed to install driver, error %#x.\n", GetLastError());
+
+    driver_key = SetupDiOpenDevRegKey(set, &device, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ);
+    ok(driver_key != INVALID_HANDLE_VALUE, "Failed to open driver key, error %#x.\n", GetLastError());
+    check_reg_str(driver_key, "foo", "bar");
+    RegCloseKey(driver_key);
+
+    /* We set DI_NOFILECOPY, so nothing should have been copied. */
+    ret = GetFileAttributesA("C:/windows/system32/setupapi_test_one.txt");
+    ok(ret == INVALID_FILE_ATTRIBUTES, "Expected file not to be installed.\n");
+
+    ret = SetupDiGetDeviceInstallParamsA(set, &device, &params);
+    ok(ret, "Failed to get device install params, error %#x.\n", GetLastError());
+    params.Flags &= ~DI_NOFILECOPY;
+    ret = SetupDiSetDeviceInstallParamsA(set, &device, &params);
+    ok(ret, "Failed to set device install params, error %#x.\n", GetLastError());
+
+    ret = SetupDiInstallDevice(set, &device);
+    ok(ret, "Failed to install driver files, error %#x.\n", GetLastError());
+
+    driver_key = SetupDiOpenDevRegKey(set, &device, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ);
+    ok(driver_key != INVALID_HANDLE_VALUE, "Failed to open driver key, error %#x.\n", GetLastError());
+    check_reg_str(driver_key, "foo", "bar");
+    RegCloseKey(driver_key);
+
+    ret = DeleteFileA("C:/windows/system32/setupapi_test_one.txt");
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+
+    ret = SetupDiRemoveDevice(set, &device);
+    ok(ret, "Failed to remove device, error %#x.\n", GetLastError());
+    SetupDiDestroyDeviceInfoList(set);
+
+    sprintf(path, "%s/setupapi_test_one.txt", dir);
+    ret = DeleteFileA(path);
+    ok(ret, "Failed to delete %s, error %u.\n", path, GetLastError());
+    sprintf(path, "%s/setupapi_test.inf", dir);
+    ret = DeleteFileA(path);
+    ok(ret, "Failed to delete %s, error %u.\n", path, GetLastError());
+
+    res = RegDeleteKeyA(class_key, "");
+    ok(!res, "Failed to delete class key, error %u.\n", res);
+    RegCloseKey(class_key);
+}
+
 START_TEST(devinst)
 {
     static BOOL (WINAPI *pIsWow64Process)(HANDLE, BOOL *);
@@ -3328,4 +3441,5 @@ START_TEST(devinst)
     test_get_class_devs();
     test_install_driver_files();
     test_install_device_ifaces();
+    test_install_device();
 }
