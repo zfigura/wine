@@ -54,7 +54,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(fsync);
 
 static inline int futex_wake( int *addr, int val )
 {
-    return syscall( __NR_futex, addr, 1, val, NULL, 0, 0 );
+    return syscall( __NR_futex, addr, 1, INT_MAX, NULL, 0, 0 );
 }
 
 int do_fsync(void)
@@ -398,8 +398,7 @@ NTSTATUS fsync_release_semaphore( HANDLE handle, ULONG count, ULONG *prev )
 
     if (prev) *prev = current;
 
-    if (!current)
-        futex_wake( &semaphore->count, count );
+    futex_wake( &semaphore->count, count );
 
     return STATUS_SUCCESS;
 }
@@ -436,8 +435,8 @@ NTSTATUS fsync_set_event( HANDLE handle, LONG *prev )
     if ((ret = get_object( handle, &obj ))) return ret;
     event = obj->shm;
 
-    if (!(current = __atomic_exchange_n( &event->signaled, 1, __ATOMIC_SEQ_CST )))
-        futex_wake( &event->signaled, obj->type == FSYNC_AUTO_EVENT ? 1 : INT_MAX );
+    current = __atomic_exchange_n( &event->signaled, 1, __ATOMIC_SEQ_CST );
+    futex_wake( &event->signaled, obj->type == FSYNC_AUTO_EVENT ? 1 : INT_MAX );
 
     if (prev) *prev = current;
 

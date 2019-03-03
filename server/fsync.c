@@ -298,8 +298,8 @@ void fsync_wake_futex( unsigned int shm_idx )
 {
     struct fsync_event *event = get_shm( shm_idx );
 
-    if (!__atomic_exchange_n( &event->signaled, 1, __ATOMIC_SEQ_CST ))
-        futex_wake( &event->signaled, INT_MAX );
+    __atomic_store_n( &event->signaled, 1, __ATOMIC_SEQ_CST );
+    futex_wake( &event->signaled, INT_MAX );
 }
 
 void fsync_wake_up( struct object *obj )
@@ -330,8 +330,8 @@ void fsync_set_event( struct fsync *fsync )
     struct fsync_event *event = get_shm( fsync->shm_idx );
     assert( fsync->obj.ops == &fsync_ops );
 
-    if (!__atomic_exchange_n( &event->signaled, 1, __ATOMIC_SEQ_CST ))
-        futex_wake( &event->signaled, INT_MAX );
+    __atomic_store_n( &event->signaled, 1, __ATOMIC_SEQ_CST );
+    futex_wake( &event->signaled, INT_MAX );
 }
 
 void fsync_reset_event( struct fsync *fsync )
