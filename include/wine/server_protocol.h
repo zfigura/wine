@@ -5796,6 +5796,7 @@ enum fsync_type
     FSYNC_AUTO_EVENT,
     FSYNC_MANUAL_EVENT,
     FSYNC_MUTEX,
+    FSYNC_AUTO_SERVER,
     FSYNC_MANUAL_SERVER,
     FSYNC_QUEUE,
 };
@@ -6801,6 +6802,6 @@ union generic_reply
     struct get_fsync_apc_idx_reply get_fsync_apc_idx_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 591
+#define SERVER_PROTOCOL_VERSION 592
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */

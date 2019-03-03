@@ -36,6 +36,7 @@
 #include "file.h"
 #include "handle.h"
 #include "request.h"
+#include "fsync.h"
 
 struct timer
 {
@@ -48,11 +49,13 @@ struct timer
     struct thread       *thread;    /* thread that set the APC function */
     client_ptr_t         callback;  /* callback APC function */
     client_ptr_t         arg;       /* callback argument */
+    unsigned int         fsync_idx; /* fsync shm index */
 };
 
 static void timer_dump( struct object *obj, int verbose );
 static struct object_type *timer_get_type( struct object *obj );
 static int timer_signaled( struct object *obj, struct wait_queue_entry *entry );
+static unsigned int timer_get_fsync_idx( struct object *obj, enum fsync_type *type );
 static void timer_satisfied( struct object *obj, struct wait_queue_entry *entry );
 static unsigned int timer_map_access( struct object *obj, unsigned int access );
 static void timer_destroy( struct object *obj );
@@ -65,7 +68,7 @@ static const struct object_ops timer_ops =
     add_queue,                 /* add_queue */
     remove_queue,              /* remove_queue */
     timer_signaled,            /* signaled */
-    NULL,                      /* get_fsync_idx */
+    timer_get_fsync_idx,       /* get_fsync_idx */
     timer_satisfied,           /* satisfied */
     no_signal,                 /* signal */
     no_get_fd,                 /* get_fd */
@@ -100,6 +103,9 @@ static struct timer *create_timer( struct object *root, const struct unicode_str
             timer->timeout  = NULL;
             timer->thread   = NULL;
         }
+
+        if (do_fsync())
+            timer->fsync_idx = fsync_alloc_shm( 0, 0 );
     }
     return timer;
 }
@@ -171,6 +177,9 @@ static int set_timer( struct timer *timer, timeout_t expire, unsigned int period
     {
         period = 0;  /* period doesn't make any sense for a manual timer */
         timer->signaled = 0;
+
+        if (do_fsync())
+            fsync_clear( &timer->obj );
     }
     timer->when     = (expire <= 0) ? current_time - expire : max( expire, current_time );
     timer->period   = period;
@@ -201,6 +210,13 @@ static int timer_signaled( struct object *obj, struct wait_queue_entry *entry )
     struct timer *timer = (struct timer *)obj;
     assert( obj->ops == &timer_ops );
     return timer->signaled;
+}
+
+static unsigned int timer_get_fsync_idx( struct object *obj, enum fsync_type *type )
+{
+    struct timer *timer = (struct timer *)obj;
+    *type = timer->manual ? FSYNC_MANUAL_SERVER : FSYNC_AUTO_SERVER;
+    return timer->fsync_idx;
 }
 
 static void timer_satisfied( struct object *obj, struct wait_queue_entry *entry )
