@@ -626,6 +626,9 @@ NTSTATUS WINAPI NtQueryMutant( HANDLE handle, MUTANT_INFORMATION_CLASS class,
     NTSTATUS ret;
     MUTANT_BASIC_INFORMATION *out = info;
 
+    if (do_fsync())
+        return fsync_query_mutex( handle, class, info, len, ret_len );
+
     TRACE("(%p, %u, %p, %u, %p)\n", handle, class, info, len, ret_len);
 
     if (class != MutantBasicInformation)
