@@ -58,6 +58,9 @@ typedef struct _BASE_DEVICE_EXTENSION {
     BOOL is_mouse;
     UNICODE_STRING mouse_link_name;
 
+    DEVICE_OBJECT *device;
+    struct list entry; /* entry in minidriver's list of devices */
+
     /* Minidriver Specific stuff will end up here */
 } BASE_DEVICE_EXTENSION;
 
@@ -71,12 +74,6 @@ UINT RingBuffer_GetSize(struct ReportRingBuffer *buffer) DECLSPEC_HIDDEN;
 void RingBuffer_Destroy(struct ReportRingBuffer *buffer) DECLSPEC_HIDDEN;
 struct ReportRingBuffer* RingBuffer_Create(UINT buffer_size) DECLSPEC_HIDDEN;
 NTSTATUS RingBuffer_SetSize(struct ReportRingBuffer *buffer, UINT size) DECLSPEC_HIDDEN;
-
-typedef struct _hiddevice
-{
-    struct list entry;
-    DEVICE_OBJECT *device;
-} hid_device;
 
 typedef struct _minidriver
 {
