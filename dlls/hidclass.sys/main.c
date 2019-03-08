@@ -48,11 +48,12 @@ static VOID WINAPI UnloadDriver(DRIVER_OBJECT *driver)
     md = find_minidriver(driver);
     if (md)
     {
-        hid_device *device, *next;
+        BASE_DEVICE_EXTENSION *ext, *next;
+
         TRACE("%i devices to unload\n", list_count(&md->device_list));
-        LIST_FOR_EACH_ENTRY_SAFE(device, next, &md->device_list, hid_device, entry)
+        LIST_FOR_EACH_ENTRY_SAFE(ext, next, &md->device_list, BASE_DEVICE_EXTENSION, entry)
         {
-            PNP_RemoveDevice(md, device->device, NULL);
+            PNP_RemoveDevice(md, ext->device, NULL);
         }
         if (md->DriverUnload)
             md->DriverUnload(md->minidriver.DriverObject);
