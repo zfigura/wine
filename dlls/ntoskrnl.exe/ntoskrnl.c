@@ -3490,6 +3490,7 @@ static HMODULE load_driver( const WCHAR *driver_name, const UNICODE_STRING *keyn
     static const WCHAR postfixW[] = {'.','s','y','s',0};
     static const WCHAR ntprefixW[] = {'\\','?','?','\\',0};
     static const WCHAR ImagePathW[] = {'I','m','a','g','e','P','a','t','h',0};
+    WCHAR drivers_dir[MAX_PATH];
     HKEY driver_hkey;
     HMODULE module;
     LPWSTR path = NULL, str;
@@ -3500,6 +3501,10 @@ static HMODULE load_driver( const WCHAR *driver_name, const UNICODE_STRING *keyn
         ERR( "cannot open key %s, err=%u\n", wine_dbgstr_w(keyname->Buffer), GetLastError() );
         return NULL;
     }
+
+    GetSystemDirectoryW(drivers_dir, ARRAY_SIZE(drivers_dir));
+    lstrcatW(drivers_dir, driversW);
+    SetDllDirectoryW(drivers_dir);
 
     /* read the executable path from memory */
     size = 0;
@@ -3540,14 +3545,8 @@ static HMODULE load_driver( const WCHAR *driver_name, const UNICODE_STRING *keyn
     else
     {
         /* default is to use the driver name + ".sys" */
-        WCHAR buffer[MAX_PATH];
-        GetSystemDirectoryW(buffer, MAX_PATH);
-        path = HeapAlloc(GetProcessHeap(),0,
-          (lstrlenW(buffer) + lstrlenW(driversW) + lstrlenW(driver_name) + lstrlenW(postfixW) + 1)
-          *sizeof(WCHAR));
-        lstrcpyW(path, buffer);
-        lstrcatW(path, driversW);
-        lstrcatW(path, driver_name);
+        path = heap_alloc((lstrlenW(driver_name) + lstrlenW(postfixW) + 1) * sizeof(WCHAR));
+        lstrcpyW(path, driver_name);
         lstrcatW(path, postfixW);
         str = path;
     }
