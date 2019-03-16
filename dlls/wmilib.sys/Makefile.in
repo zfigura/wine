@@ -1,0 +1,6 @@
+MODULE    = wmilib.sys
+IMPORTS   = ntoskrnl
+EXTRADLLFLAGS = -Wb,--subsystem,native
+
+C_SRCS = \
+	wmilib_main.c
