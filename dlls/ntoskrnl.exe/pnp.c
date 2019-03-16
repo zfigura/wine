@@ -786,9 +786,9 @@ NTSTATUS WINAPI IoOpenDeviceRegistryKey( DEVICE_OBJECT *device, ULONG type, ACCE
 /***********************************************************************
  *           PoSetPowerState   (NTOSKRNL.EXE.@)
  */
-POWER_STATE WINAPI PoSetPowerState( DEVICE_OBJECT *device, POWER_STATE_TYPE type, POWER_STATE state)
+DEVICE_POWER_STATE WINAPI PoSetPowerState( DEVICE_OBJECT *device, POWER_STATE_TYPE type, DEVICE_POWER_STATE state)
 {
-    FIXME("device %p, type %u, state %u, stub!\n", device, type, state.DeviceState);
+    FIXME("device %p, type %u, state %#x, stub!\n", device, type, state);
     return state;
 }
 
