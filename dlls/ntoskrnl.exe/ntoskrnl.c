@@ -835,7 +835,125 @@ static void unload_driver( struct wine_rb_entry *entry, void *context )
     CloseServiceHandle( (void *)service_handle );
 }
 
+/* convert PE image VirtualAddress to Real Address */
+static inline void *get_rva( HMODULE module, DWORD va )
+{
+    return (void *)((char *)module + va);
+}
+
+/* Copied from ntdll with checks for page alignment and characteristics removed */
+static NTSTATUS perform_relocations( void *module, SIZE_T len )
+{
+    IMAGE_NT_HEADERS *nt;
+    char *base;
+    IMAGE_BASE_RELOCATION *rel, *end;
+    const IMAGE_DATA_DIRECTORY *relocs;
+    const IMAGE_SECTION_HEADER *sec;
+    INT_PTR delta;
+    ULONG protect_old[96], i;
+
+    nt = RtlImageNtHeader( module );
+    base = (char *)nt->OptionalHeader.ImageBase;
+
+    assert( module != base );
+
+    relocs = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+
+    if (nt->FileHeader.Characteristics & IMAGE_FILE_RELOCS_STRIPPED)
+    {
+        WARN( "Need to relocate module from %p to %p, but there are no relocation records\n",
+              base, module );
+        return STATUS_CONFLICTING_ADDRESSES;
+    }
+
+    if (!relocs->Size) return STATUS_SUCCESS;
+    if (!relocs->VirtualAddress) return STATUS_CONFLICTING_ADDRESSES;
+
+    if (nt->FileHeader.NumberOfSections > ARRAY_SIZE( protect_old ))
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    sec = (const IMAGE_SECTION_HEADER *)((const char *)&nt->OptionalHeader +
+                                         nt->FileHeader.SizeOfOptionalHeader);
+    for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
+    {
+        void *addr = get_rva( module, sec[i].VirtualAddress );
+        SIZE_T size = sec[i].SizeOfRawData;
+        NtProtectVirtualMemory( NtCurrentProcess(), &addr,
+                                &size, PAGE_READWRITE, &protect_old[i] );
+    }
+
+    TRACE( "relocating from %p-%p to %p-%p\n",
+           base, base + len, module, (char *)module + len );
+
+    rel = get_rva( module, relocs->VirtualAddress );
+    end = get_rva( module, relocs->VirtualAddress + relocs->Size );
+    delta = (char *)module - base;
+
+    while (rel < end - 1 && rel->SizeOfBlock)
+    {
+        if (rel->VirtualAddress >= len)
+        {
+            WARN( "invalid address %p in relocation %p\n", get_rva( module, rel->VirtualAddress ), rel );
+            return STATUS_ACCESS_VIOLATION;
+        }
+        rel = LdrProcessRelocationBlock( get_rva( module, rel->VirtualAddress ),
+                                         (rel->SizeOfBlock - sizeof(*rel)) / sizeof(USHORT),
+                                         (USHORT *)(rel + 1), delta );
+        if (!rel) return STATUS_INVALID_IMAGE_FORMAT;
+    }
+
+    for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
+    {
+        void *addr = get_rva( module, sec[i].VirtualAddress );
+        SIZE_T size = sec[i].SizeOfRawData;
+        NtProtectVirtualMemory( NtCurrentProcess(), &addr,
+                                &size, protect_old[i], &protect_old[i] );
+    }
+
+    return STATUS_SUCCESS;
+}
+
+/* The loader does not apply relocations to non page-aligned binaries; we have
+ * to do it ourselves. */
+static void relocate_dll( void *module )
+{
+    IMAGE_NT_HEADERS *nt = RtlImageNtHeader( module );
+    SYSTEM_BASIC_INFORMATION info;
+    NTSTATUS status;
+    ULONG size;
+    DWORD old;
+
+    if ((char *)module == (char *)nt->OptionalHeader.ImageBase) return;
+
+    NtQuerySystemInformation( SystemBasicInformation, &info, sizeof(info), NULL );
+    if (nt->OptionalHeader.SectionAlignment < info.PageSize ||
+        !(nt->FileHeader.Characteristics & IMAGE_FILE_DLL))
+    {
+        status = perform_relocations(module, nt->OptionalHeader.SizeOfImage);
+        if (status != STATUS_SUCCESS)
+        {
+            ERR("Failed to perform relocations, status %#x.\n", status);
+            return;
+        }
+
+        /* make sure we don't try again */
+        size = FIELD_OFFSET( IMAGE_NT_HEADERS, OptionalHeader ) + nt->FileHeader.SizeOfOptionalHeader;
+        VirtualProtect( nt, size, PAGE_READWRITE, &old );
+        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size = 0;
+        VirtualProtect( nt, size, old, &old );
+    }
+}
+
+static void CALLBACK dll_initialize_cb( ULONG reason, LDR_DLL_NOTIFICATION_DATA *data, void *arg )
+{
+    if (reason == LDR_DLL_NOTIFICATION_REASON_LOADED)
+        relocate_dll( data->Loaded.DllBase );
+}
+
 PEPROCESS PsInitialSystemProcess = NULL;
+
+extern NTSTATUS WINAPI LdrRegisterDllNotification( ULONG flags, PLDR_DLL_NOTIFICATION_FUNCTION cb, void *ctx, void **cookie );
+extern NTSTATUS WINAPI LdrUnregisterDllNotification( void *cookie );
 
 /***********************************************************************
  *           wine_ntoskrnl_main_loop   (Not a Windows API)
@@ -846,6 +964,7 @@ NTSTATUS CDECL wine_ntoskrnl_main_loop( HANDLE stop_event )
     struct dispatch_context context;
     NTSTATUS status = STATUS_SUCCESS;
     HANDLE handles[2];
+    void *cookie;
 
     context.in_size = 4096;
     context.in_buff = NULL;
@@ -853,6 +972,9 @@ NTSTATUS CDECL wine_ntoskrnl_main_loop( HANDLE stop_event )
     /* Set the system process global before setting up the request thread trickery  */
     PsInitialSystemProcess = IoGetCurrentProcess();
     request_thread = GetCurrentThreadId();
+
+    if ((status = LdrRegisterDllNotification( 0, dll_initialize_cb, NULL, &cookie )))
+        ERR("Failed to register DLL notification, status %#x.\n", status);
 
     pnp_manager_start();
 
@@ -927,6 +1049,7 @@ done:
      * their unload routine is called, so we must stop the PnP manager first. */
     pnp_manager_stop();
     wine_rb_destroy( &wine_drivers, unload_driver, NULL );
+    LdrUnregisterDllNotification( cookie );
     return status;
 }
 
@@ -3347,141 +3470,6 @@ static LDR_MODULE *find_ldr_module( HMODULE module )
     return ldr;
 }
 
-/* convert PE image VirtualAddress to Real Address */
-static inline void *get_rva( HMODULE module, DWORD va )
-{
-    return (void *)((char *)module + va);
-}
-
-/* Copied from ntdll with checks for page alignment and characteristics removed */
-static NTSTATUS perform_relocations( void *module, SIZE_T len )
-{
-    IMAGE_NT_HEADERS *nt;
-    char *base;
-    IMAGE_BASE_RELOCATION *rel, *end;
-    const IMAGE_DATA_DIRECTORY *relocs;
-    const IMAGE_SECTION_HEADER *sec;
-    INT_PTR delta;
-    ULONG protect_old[96], i;
-
-    nt = RtlImageNtHeader( module );
-    base = (char *)nt->OptionalHeader.ImageBase;
-
-    assert( module != base );
-
-    relocs = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
-
-    if (nt->FileHeader.Characteristics & IMAGE_FILE_RELOCS_STRIPPED)
-    {
-        WARN( "Need to relocate module from %p to %p, but there are no relocation records\n",
-              base, module );
-        return STATUS_CONFLICTING_ADDRESSES;
-    }
-
-    if (!relocs->Size) return STATUS_SUCCESS;
-    if (!relocs->VirtualAddress) return STATUS_CONFLICTING_ADDRESSES;
-
-    if (nt->FileHeader.NumberOfSections > ARRAY_SIZE( protect_old ))
-        return STATUS_INVALID_IMAGE_FORMAT;
-
-    sec = (const IMAGE_SECTION_HEADER *)((const char *)&nt->OptionalHeader +
-                                         nt->FileHeader.SizeOfOptionalHeader);
-    for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
-    {
-        void *addr = get_rva( module, sec[i].VirtualAddress );
-        SIZE_T size = sec[i].SizeOfRawData;
-        NtProtectVirtualMemory( NtCurrentProcess(), &addr,
-                                &size, PAGE_READWRITE, &protect_old[i] );
-    }
-
-    TRACE( "relocating from %p-%p to %p-%p\n",
-           base, base + len, module, (char *)module + len );
-
-    rel = get_rva( module, relocs->VirtualAddress );
-    end = get_rva( module, relocs->VirtualAddress + relocs->Size );
-    delta = (char *)module - base;
-
-    while (rel < end - 1 && rel->SizeOfBlock)
-    {
-        if (rel->VirtualAddress >= len)
-        {
-            WARN( "invalid address %p in relocation %p\n", get_rva( module, rel->VirtualAddress ), rel );
-            return STATUS_ACCESS_VIOLATION;
-        }
-        rel = LdrProcessRelocationBlock( get_rva( module, rel->VirtualAddress ),
-                                         (rel->SizeOfBlock - sizeof(*rel)) / sizeof(USHORT),
-                                         (USHORT *)(rel + 1), delta );
-        if (!rel) return STATUS_INVALID_IMAGE_FORMAT;
-    }
-
-    for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
-    {
-        void *addr = get_rva( module, sec[i].VirtualAddress );
-        SIZE_T size = sec[i].SizeOfRawData;
-        NtProtectVirtualMemory( NtCurrentProcess(), &addr,
-                                &size, protect_old[i], &protect_old[i] );
-    }
-
-    return STATUS_SUCCESS;
-}
-
-/* load the driver module file */
-static HMODULE load_driver_module( const WCHAR *name )
-{
-    IMAGE_NT_HEADERS *nt;
-    const IMAGE_IMPORT_DESCRIPTOR *imports;
-    SYSTEM_BASIC_INFORMATION info;
-    int i;
-    INT_PTR delta;
-    ULONG size;
-    DWORD old;
-    NTSTATUS status;
-    HMODULE module = LoadLibraryW( name );
-
-    if (!module) return NULL;
-    nt = RtlImageNtHeader( module );
-
-    if (!(delta = (char *)module - (char *)nt->OptionalHeader.ImageBase)) return module;
-
-    /* the loader does not apply relocations to non page-aligned binaries or executables,
-     * we have to do it ourselves */
-
-    NtQuerySystemInformation( SystemBasicInformation, &info, sizeof(info), NULL );
-    if (nt->OptionalHeader.SectionAlignment < info.PageSize ||
-        !(nt->FileHeader.Characteristics & IMAGE_FILE_DLL))
-    {
-        status = perform_relocations(module, nt->OptionalHeader.SizeOfImage);
-        if (status != STATUS_SUCCESS)
-            goto error;
-
-        /* make sure we don't try again */
-        size = FIELD_OFFSET( IMAGE_NT_HEADERS, OptionalHeader ) + nt->FileHeader.SizeOfOptionalHeader;
-        VirtualProtect( nt, size, PAGE_READWRITE, &old );
-        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size = 0;
-        VirtualProtect( nt, size, old, &old );
-    }
-
-    /* make sure imports are relocated too */
-
-    if ((imports = RtlImageDirectoryEntryToData( module, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &size )))
-    {
-        for (i = 0; imports[i].Name && imports[i].FirstThunk; i++)
-        {
-            char *name = (char *)module + imports[i].Name;
-            WCHAR buffer[32], *p = buffer;
-
-            while (p < buffer + 32) if (!(*p++ = *name++)) break;
-            if (p <= buffer + 32) FreeLibrary( load_driver_module( buffer ) );
-        }
-    }
-
-    return module;
-
-error:
-    FreeLibrary( module );
-    return NULL;
-}
-
 /* load the .sys module for a device driver */
 static HMODULE load_driver( const WCHAR *driver_name, const UNICODE_STRING *keyname )
 {
@@ -3554,7 +3542,7 @@ static HMODULE load_driver( const WCHAR *driver_name, const UNICODE_STRING *keyn
 
     TRACE( "loading driver %s\n", wine_dbgstr_w(str) );
 
-    module = load_driver_module( str );
+    module = LoadLibraryW( str );
     HeapFree( GetProcessHeap(), 0, path );
     return module;
 }
