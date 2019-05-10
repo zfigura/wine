@@ -93,12 +93,12 @@ struct device_manager
     struct list            requests;       /* list of pending irps across all devices */
     struct irp_call       *current_call;   /* call currently executed on client side */
     struct wine_rb_tree    kernel_objects; /* map of objects that have client side pointer associated */
-    int                    esync_fd;       /* esync file descriptor */
+    struct esync_fd       *esync_fd;       /* esync file descriptor */
 };
 
 static void device_manager_dump( struct object *obj, int verbose );
 static int device_manager_signaled( struct object *obj, struct wait_queue_entry *entry );
-static int device_manager_get_esync_fd( struct object *obj, enum esync_type *type );
+static struct esync_fd *device_manager_get_esync_fd( struct object *obj, enum esync_type *type );
 static void device_manager_destroy( struct object *obj );
 
 static const struct object_ops device_manager_ops =
@@ -732,7 +732,7 @@ static int device_manager_signaled( struct object *obj, struct wait_queue_entry 
     return !list_empty( &manager->requests );
 }
 
-static int device_manager_get_esync_fd( struct object *obj, enum esync_type *type )
+static struct esync_fd *device_manager_get_esync_fd( struct object *obj, enum esync_type *type )
 {
     struct device_manager *manager = (struct device_manager *)obj;
     *type = ESYNC_MANUAL_SERVER;
@@ -775,7 +775,7 @@ static void device_manager_destroy( struct object *obj )
     }
 
     if (do_esync())
-        close( manager->esync_fd );
+        esync_close_fd( manager->esync_fd );
 }
 
 static struct device_manager *create_device_manager(void)

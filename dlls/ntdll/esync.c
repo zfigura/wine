@@ -53,19 +53,12 @@ WINE_DEFAULT_DEBUG_CHANNEL(esync);
 
 int do_esync(void)
 {
-#ifdef HAVE_SYS_EVENTFD_H
     static int do_esync_cached = -1;
 
     if (do_esync_cached == -1)
         do_esync_cached = getenv("WINEESYNC") && atoi(getenv("WINEESYNC"));
 
     return do_esync_cached;
-#else
-    static int once;
-    if (!once++)
-        FIXME("eventfd not supported on this platform.\n");
-    return 0;
-#endif
 }
 
 /* Entry point for drivers to set queue fd. */
@@ -77,9 +70,80 @@ void __wine_esync_set_queue_fd( int fd )
 struct esync
 {
     enum esync_type type;   /* defined in protocol.def */
+#ifdef HAVE_SYS_EVENTFD_H
     int fd;
+#else
+    int readfd, writefd, semaphore;
+#endif
     void *shm;              /* pointer to shm section */
 };
+
+/* Emulate read() on an eventfd: clear the object if it's not a semaphore, read
+ * 1 from it if it is. Return a nonzero value if the object was signaled. */
+static ssize_t efd_read(struct esync *esync)
+{
+#ifdef HAVE_SYS_EVENTFD_H
+    uint64_t value;
+
+    return read( esync->fd, &value, sizeof(value) );
+#else
+    static char buffer[4096];
+
+    if (esync->semaphore)
+        return read( esync->readfd, buffer, 1 );
+    else
+    {
+        int ret = 0, size;
+        do
+        {
+            size = read( esync->readfd, buffer, sizeof(buffer) );
+            ret |= size;
+        } while (size == sizeof(buffer));
+        return ret;
+    }
+#endif
+}
+
+/* Emulate write() on an eventfd. Return -1 on failure. */
+static ssize_t efd_write(struct esync *esync, uint64_t value)
+{
+#ifdef HAVE_SYS_EVENTFD_H
+    return write( esync->fd, &value, sizeof(value) );
+#else
+    static const char buffer[4096];
+
+    do
+    {
+        ssize_t ret = write( esync->writefd, buffer, min(value, sizeof(buffer)) );
+        if (ret == -1) return -1;
+        value -= ret;
+    } while (value);
+
+    return 0;
+#endif
+}
+
+static void efd_close(struct esync *esync)
+{
+#ifdef HAVE_SYS_EVENTFD_H
+    close( esync->fd );
+#else
+    close( esync->readfd );
+    close( esync->writefd );
+#endif
+}
+
+/* Careful how this is used—we can't reliably completely clear an object with it. */
+static int get_read_fd( struct esync *obj )
+{
+    if (!obj) return -1;
+
+#ifdef HAVE_SYS_EVENTFD_H
+    return obj->fd;
+#else
+    return obj->readfd;
+#endif
+}
 
 struct semaphore
 {
@@ -203,6 +267,34 @@ static struct esync *add_to_list( HANDLE handle, enum esync_type type, int fd, v
 {
     UINT_PTR entry, idx = handle_to_index( handle, &entry );
 
+#ifndef HAVE_SYS_EVENTFD_H
+    /* We got the read fd, but not the write fd. We only need the latter if
+     * we're not dealing with a server-bound object. */
+
+    int writefd = -1;
+    sigset_t sigset;
+    NTSTATUS ret;
+    obj_handle_t fd_handle;
+
+    if (type != ESYNC_MANUAL_SERVER && type != ESYNC_AUTO_SERVER && type != ESYNC_QUEUE)
+    {
+        server_enter_uninterrupted_section( &fd_cache_section, &sigset );
+
+        SERVER_START_REQ( get_esync_write_fd )
+        {
+            req->handle = wine_server_obj_handle( handle );
+            if (!(ret = wine_server_call( req )))
+            {
+                writefd = receive_fd( &fd_handle );
+                assert( wine_server_ptr_handle(fd_handle) == handle );
+            }
+        }
+        SERVER_END_REQ;
+
+        server_leave_uninterrupted_section( &fd_cache_section, &sigset );
+    }
+#endif
+
     if (entry >= ESYNC_LIST_ENTRIES)
     {
         FIXME( "too many allocated handles, not caching %p\n", handle );
@@ -223,7 +315,12 @@ static struct esync *add_to_list( HANDLE handle, enum esync_type type, int fd, v
 
     if (!interlocked_cmpxchg((int *)&esync_list[entry][idx].type, type, 0))
     {
+#ifdef HAVE_SYS_EVENTFD_H
         esync_list[entry][idx].fd = fd;
+#else
+        esync_list[entry][idx].readfd = fd;
+        esync_list[entry][idx].writefd = writefd;
+#endif
         esync_list[entry][idx].shm = shm;
     }
     return &esync_list[entry][idx];
@@ -267,7 +364,7 @@ static NTSTATUS get_object( HANDLE handle, struct esync **obj )
     server_enter_uninterrupted_section( &fd_cache_section, &sigset );
     if (!(*obj = get_cached_object( handle )))
     {
-        SERVER_START_REQ( get_esync_fd )
+        SERVER_START_REQ( get_esync_read_fd )
         {
             req->handle = wine_server_obj_handle( handle );
             if (!(ret = wine_server_call( req )))
@@ -311,7 +408,7 @@ NTSTATUS esync_close( HANDLE handle )
     {
         if (interlocked_xchg((int *)&esync_list[entry][idx].type, 0))
         {
-            close( esync_list[entry][idx].fd );
+            efd_close( &esync_list[entry][idx] );
             return STATUS_SUCCESS;
         }
     }
@@ -449,7 +546,7 @@ NTSTATUS esync_release_semaphore( HANDLE handle, ULONG count, ULONG *prev )
      * write(). The fact that we were able to increase the count means that we
      * have permission to actually write that many releases to the semaphore. */
 
-    if (write( obj->fd, &count64, sizeof(count64) ) == -1)
+    if (efd_write( obj, count64 ) == -1)
         return FILE_GetNtStatus();
 
     return STATUS_SUCCESS;
@@ -556,7 +653,6 @@ static inline void small_pause(void)
 
 NTSTATUS esync_set_event( HANDLE handle, LONG *prev )
 {
-    static const uint64_t value = 1;
     struct esync *obj;
     struct event *event;
     LONG current;
@@ -574,7 +670,7 @@ NTSTATUS esync_set_event( HANDLE handle, LONG *prev )
     /* Only bother signaling the fd if we weren't already signaled. */
     if (!(current = interlocked_xchg( &event->signaled, 1 )))
     {
-        if (write( obj->fd, &value, sizeof(value) ) == -1)
+        if (efd_write( obj, 1 ) == -1)
             return FILE_GetNtStatus();
     }
 
@@ -588,7 +684,6 @@ NTSTATUS esync_set_event( HANDLE handle, LONG *prev )
 
 NTSTATUS esync_reset_event( HANDLE handle, LONG *prev )
 {
-    uint64_t value;
     struct esync *obj;
     struct event *event;
     LONG current;
@@ -607,7 +702,7 @@ NTSTATUS esync_reset_event( HANDLE handle, LONG *prev )
     if ((current = interlocked_xchg( &event->signaled, 0 )))
     {
         /* we don't care about the return value */
-        read( obj->fd, &value, sizeof(value) );
+        efd_read( obj );
     }
 
     if (prev) *prev = current;
@@ -620,7 +715,6 @@ NTSTATUS esync_reset_event( HANDLE handle, LONG *prev )
 
 NTSTATUS esync_pulse_event( HANDLE handle, LONG *prev )
 {
-    uint64_t value = 1;
     struct esync *obj;
     struct event *event;
     LONG current;
@@ -638,14 +732,14 @@ NTSTATUS esync_pulse_event( HANDLE handle, LONG *prev )
     /* This isn't really correct; an application could miss the write.
      * Unfortunately we can't really do much better. Fortunately this is rarely
      * used (and publicly deprecated). */
-    if (write( obj->fd, &value, sizeof(value) ) == -1)
+    if (efd_write( obj, 1 ) == -1)
         return FILE_GetNtStatus();
 
     /* Try to give other threads a chance to wake up. Hopefully erring on this
      * side is the better thing to do... */
     NtYieldExecution();
 
-    read( obj->fd, &value, sizeof(value) );
+    efd_read( obj );
 
     current = interlocked_xchg( &event->signaled, 0 );
     if (prev) *prev = current;
@@ -674,7 +768,7 @@ NTSTATUS esync_query_event( HANDLE handle, EVENT_INFORMATION_CLASS class,
 
     if ((ret = get_object( handle, &obj ))) return ret;
 
-    fd.fd = obj->fd;
+    fd.fd = get_read_fd( obj );
     fd.events = POLLIN;
     out->EventState = poll( &fd, 1, 0 );
     out->EventType = (obj->type == ESYNC_AUTO_EVENT ? SynchronizationEvent : NotificationEvent);
@@ -704,7 +798,6 @@ NTSTATUS esync_release_mutex( HANDLE *handle, LONG *prev )
 {
     struct esync *obj;
     struct mutex *mutex;
-    static const uint64_t value = 1;
     NTSTATUS ret;
 
     TRACE("%p, %p.\n", handle, prev);
@@ -727,7 +820,7 @@ NTSTATUS esync_release_mutex( HANDLE *handle, LONG *prev )
          * theirs. */
         mutex->tid = 0;
 
-        if (write( obj->fd, &value, sizeof(value) ) == -1)
+        if (efd_write( obj, 1 ) == -1)
             return FILE_GetNtStatus();
     }
 
@@ -849,8 +942,6 @@ static NTSTATUS __esync_wait_objects( DWORD count, const HANDLE *handles,
     LARGE_INTEGER now;
     DWORD pollcount;
     ULONGLONG end;
-    int64_t value;
-    ssize_t size;
     int i, j;
     int ret;
 
@@ -963,7 +1054,7 @@ static NTSTATUS __esync_wait_objects( DWORD count, const HANDLE *handles,
                     }
                     else if (!mutex->count)
                     {
-                        if ((size = read( obj->fd, &value, sizeof(value) )) == sizeof(value))
+                        if (efd_read( obj ))
                         {
                             TRACE("Woken up by handle %p [%d].\n", handles[i], i);
                             mutex->tid = GetCurrentThreadId();
@@ -979,7 +1070,7 @@ static NTSTATUS __esync_wait_objects( DWORD count, const HANDLE *handles,
 
                     if (semaphore->count)
                     {
-                        if ((size = read( obj->fd, &value, sizeof(value) )) == sizeof(value))
+                        if (efd_read( obj ))
                         {
                             TRACE("Woken up by handle %p [%d].\n", handles[i], i);
                             interlocked_xchg_add( &semaphore->count, -1 );
@@ -994,7 +1085,7 @@ static NTSTATUS __esync_wait_objects( DWORD count, const HANDLE *handles,
 
                     if (event->signaled)
                     {
-                        if ((size = read( obj->fd, &value, sizeof(value) )) == sizeof(value))
+                        if (efd_read( obj ))
                         {
                             TRACE("Woken up by handle %p [%d].\n", handles[i], i);
                             event->signaled = 0;
@@ -1024,7 +1115,7 @@ static NTSTATUS __esync_wait_objects( DWORD count, const HANDLE *handles,
                 }
             }
 
-            fds[i].fd = obj ? obj->fd : -1;
+            fds[i].fd = get_read_fd( obj );
             fds[i].events = POLLIN;
         }
         if (msgwait)
@@ -1070,7 +1161,7 @@ static NTSTATUS __esync_wait_objects( DWORD count, const HANDLE *handles,
                         }
                         else
                         {
-                            if ((size = read( fds[i].fd, &value, sizeof(value) )) == sizeof(value))
+                            if (efd_read( obj ))
                             {
                                 /* We found our object. */
                                 TRACE("Woken up by handle %p [%d].\n", handles[i], i);
@@ -1143,7 +1234,7 @@ tryagain:
             {
                 struct esync *obj = objs[i];
 
-                fds[0].fd = obj ? obj->fd : -1;
+                fds[0].fd = get_read_fd( obj );
 
                 if (obj && obj->type == ESYNC_MUTEX)
                 {
@@ -1182,7 +1273,7 @@ tryagain:
              * handles were signaled. Check to make sure they still are. */
             for (i = 0; i < count; i++)
             {
-                fds[i].fd = objs[i] ? objs[i]->fd : -1;
+                fds[i].fd = get_read_fd( objs[i] );
                 fds[i].events = POLLIN;
             }
             if (msgwait)
@@ -1214,13 +1305,12 @@ tryagain:
                     }
                     case ESYNC_SEMAPHORE:
                     case ESYNC_AUTO_EVENT:
-                        if ((size = read( fds[i].fd, &value, sizeof(value) )) != sizeof(value))
+                        if (!efd_read( obj ))
                         {
                             /* We were too slow. Put everything back. */
-                            value = 1;
                             for (j = i; j >= 0; j--)
                             {
-                                if (write( obj->fd, &value, sizeof(value) ) == -1)
+                                if (efd_write( obj, 1 ) == -1)
                                     return FILE_GetNtStatus();
                             }
 

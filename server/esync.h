@@ -20,10 +20,15 @@
 
 extern int do_esync(void);
 void esync_init(void);
-int esync_create_fd( int initval, int flags );
-void esync_wake_fd( int fd );
+
+/* This is an eventfd or something that behaves like one. */
+struct esync_fd;
+
+struct esync_fd *esync_create_fd( int initval, int semaphore );
+void esync_close_fd( struct esync_fd *fd );
+void esync_wake_fd( struct esync_fd *fd );
 void esync_wake_up( struct object *obj );
-void esync_clear( int fd );
+void esync_clear( struct esync_fd *fd );
 
 struct esync;
 

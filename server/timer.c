@@ -49,13 +49,13 @@ struct timer
     struct thread       *thread;    /* thread that set the APC function */
     client_ptr_t         callback;  /* callback APC function */
     client_ptr_t         arg;       /* callback argument */
-    int                  esync_fd;  /* esync file descriptor */
+    struct esync_fd     *esync_fd;  /* esync file descriptor */
 };
 
 static void timer_dump( struct object *obj, int verbose );
 static struct object_type *timer_get_type( struct object *obj );
 static int timer_signaled( struct object *obj, struct wait_queue_entry *entry );
-static int timer_get_esync_fd( struct object *obj, enum esync_type *type );
+static struct esync_fd *timer_get_esync_fd( struct object *obj, enum esync_type *type );
 static void timer_satisfied( struct object *obj, struct wait_queue_entry *entry );
 static unsigned int timer_map_access( struct object *obj, unsigned int access );
 static void timer_destroy( struct object *obj );
@@ -212,7 +212,7 @@ static int timer_signaled( struct object *obj, struct wait_queue_entry *entry )
     return timer->signaled;
 }
 
-static int timer_get_esync_fd( struct object *obj, enum esync_type *type )
+static struct esync_fd *timer_get_esync_fd( struct object *obj, enum esync_type *type )
 {
     struct timer *timer = (struct timer *)obj;
     *type = timer->manual ? ESYNC_MANUAL_SERVER : ESYNC_AUTO_SERVER;
@@ -242,6 +242,8 @@ static void timer_destroy( struct object *obj )
 
     if (timer->timeout) remove_timeout_user( timer->timeout );
     if (timer->thread) release_object( timer->thread );
+    if (do_esync())
+        esync_close_fd( timer->esync_fd );
 }
 
 /* create a timer */

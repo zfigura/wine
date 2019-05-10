@@ -97,7 +97,7 @@ static const struct object_ops console_input_ops =
 static void console_input_events_dump( struct object *obj, int verbose );
 static void console_input_events_destroy( struct object *obj );
 static int console_input_events_signaled( struct object *obj, struct wait_queue_entry *entry );
-static int console_input_events_get_esync_fd( struct object *obj, enum esync_type *type );
+static struct esync_fd *console_input_events_get_esync_fd( struct object *obj, enum esync_type *type );
 
 struct console_input_events
 {
@@ -105,7 +105,7 @@ struct console_input_events
     int			  num_alloc;   /* number of allocated events */
     int 		  num_used;    /* number of actually used events */
     struct console_renderer_event*	events;
-    int                   esync_fd;    /* esync file descriptor (signalled when events present) */
+    struct esync_fd      *esync_fd;    /* esync file descriptor (signalled when events present) */
 };
 
 static const struct object_ops console_input_events_ops =
@@ -246,6 +246,8 @@ static void console_input_events_destroy( struct object *obj )
     struct console_input_events *evts = (struct console_input_events *)obj;
     assert( obj->ops == &console_input_events_ops );
     free( evts->events );
+    if (do_esync())
+        esync_close_fd( evts->esync_fd );
 }
 
 /* the renderer events list is signaled when it's not empty */
@@ -256,7 +258,7 @@ static int console_input_events_signaled( struct object *obj, struct wait_queue_
     return (evts->num_used != 0);
 }
 
-static int console_input_events_get_esync_fd( struct object *obj, enum esync_type *type )
+static struct esync_fd *console_input_events_get_esync_fd( struct object *obj, enum esync_type *type )
 {
     struct console_input_events *evts = (struct console_input_events *)obj;
     *type = ESYNC_MANUAL_SERVER;
@@ -329,7 +331,7 @@ static struct console_input_events *create_console_input_events(void)
     if (!(evt = alloc_object( &console_input_events_ops ))) return NULL;
     evt->num_alloc = evt->num_used = 0;
     evt->events = NULL;
-    evt->esync_fd = -1;
+    evt->esync_fd = NULL;
 
     if (do_esync())
         evt->esync_fd = esync_create_fd( 0, 0 );

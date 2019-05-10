@@ -54,8 +54,8 @@ struct thread
     struct process        *process;
     thread_id_t            id;            /* thread id */
     struct list            mutex_list;    /* list of currently owned mutexes */
-    int                    esync_fd;      /* esync file descriptor (signalled on exit) */
-    int                    esync_apc_fd;  /* esync apc fd (signalled when APCs are present) */
+    struct esync_fd       *esync_fd;      /* esync file descriptor (signalled on exit) */
+    struct esync_fd       *esync_apc_fd;  /* esync apc fd (signalled when APCs are present) */
     struct debug_ctx      *debug_ctx;     /* debugger context if this thread is a debugger */
     struct debug_event    *debug_event;   /* debug event being sent to debugger */
     int                    debug_break;   /* debug breakpoint pending? */

@@ -68,7 +68,7 @@ static struct security_descriptor *process_get_sd( struct object *obj );
 static void process_poll_event( struct fd *fd, int event );
 static struct list *process_get_kernel_obj_list( struct object *obj );
 static void process_destroy( struct object *obj );
-static int process_get_esync_fd( struct object *obj, enum esync_type *type );
+static struct esync_fd *process_get_esync_fd( struct object *obj, enum esync_type *type );
 static void terminate_process( struct process *process, struct thread *skip, int exit_code );
 
 static const struct object_ops process_ops =
@@ -533,7 +533,7 @@ struct process *create_process( int fd, struct process *parent, int inherit_all,
     process->trace_data      = 0;
     process->rawinput_mouse  = NULL;
     process->rawinput_kbd    = NULL;
-    process->esync_fd        = -1;
+    process->esync_fd        = NULL;
     list_init( &process->kernel_object );
     list_init( &process->thread_list );
     list_init( &process->locks );
@@ -637,7 +637,7 @@ static void process_destroy( struct object *obj )
     free( process->dir_cache );
 
     if (do_esync())
-        close( process->esync_fd );
+        esync_close_fd( process->esync_fd );
 }
 
 /* dump a process on stdout for debugging purposes */
@@ -662,7 +662,7 @@ static int process_signaled( struct object *obj, struct wait_queue_entry *entry 
     return !process->running_threads;
 }
 
-static int process_get_esync_fd( struct object *obj, enum esync_type *type )
+static struct esync_fd *process_get_esync_fd( struct object *obj, enum esync_type *type )
 {
     struct process *process = (struct process *)obj;
     *type = ESYNC_MANUAL_SERVER;

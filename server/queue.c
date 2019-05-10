@@ -121,7 +121,7 @@ struct msg_queue
 {
     struct object          obj;             /* object header */
     struct fd             *fd;              /* optional file descriptor to poll */
-    int                    esync_fd;        /* esync file descriptor (signalled on message) */
+    struct esync_fd       *esync_fd;        /* esync file descriptor (signalled on message) */
     int                    esync_in_msgwait; /* our thread is currently waiting on us */
     unsigned int           wake_bits;       /* wakeup bits */
     unsigned int           wake_mask;       /* wakeup mask */
@@ -159,7 +159,7 @@ static void msg_queue_dump( struct object *obj, int verbose );
 static int msg_queue_add_queue( struct object *obj, struct wait_queue_entry *entry );
 static void msg_queue_remove_queue( struct object *obj, struct wait_queue_entry *entry );
 static int msg_queue_signaled( struct object *obj, struct wait_queue_entry *entry );
-static int msg_queue_get_esync_fd( struct object *obj, enum esync_type *type );
+static struct esync_fd *msg_queue_get_esync_fd( struct object *obj, enum esync_type *type );
 static void msg_queue_satisfied( struct object *obj, struct wait_queue_entry *entry );
 static void msg_queue_destroy( struct object *obj );
 static void msg_queue_poll_event( struct fd *fd, int event );
@@ -292,7 +292,7 @@ static struct msg_queue *create_msg_queue( struct thread *thread, struct thread_
     if ((queue = alloc_object( &msg_queue_ops )))
     {
         queue->fd              = NULL;
-        queue->esync_fd        = -1;
+        queue->esync_fd        = NULL;
         queue->wake_bits       = 0;
         queue->wake_mask       = 0;
         queue->changed_bits    = 0;
@@ -982,7 +982,7 @@ static int msg_queue_signaled( struct object *obj, struct wait_queue_entry *entr
     return ret || is_signaled( queue );
 }
 
-static int msg_queue_get_esync_fd( struct object *obj, enum esync_type *type )
+static struct esync_fd *msg_queue_get_esync_fd( struct object *obj, enum esync_type *type )
 {
     struct msg_queue *queue = (struct msg_queue *)obj;
     *type = ESYNC_QUEUE;
@@ -1034,7 +1034,7 @@ static void msg_queue_destroy( struct object *obj )
     if (queue->fd) release_object( queue->fd );
 
     if (do_esync())
-        close( queue->esync_fd );
+        esync_close_fd( queue->esync_fd );
 }
 
 static void msg_queue_poll_event( struct fd *fd, int event )
