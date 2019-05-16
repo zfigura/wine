@@ -881,9 +881,9 @@ static HRESULT WINAPI FilterGraph2_Reconnect(IFilterGraph2 *iface, IPin *ppin)
     IPin_Disconnect(ppin);
     IPin_Disconnect(pConnectedTo);
     if (pindir == PINDIR_INPUT)
-        hr = IPin_Connect(pConnectedTo, ppin, NULL);
+        hr = IFilterGraph2_ConnectDirect(iface, pConnectedTo, ppin, NULL);
     else
-        hr = IPin_Connect(ppin, pConnectedTo, NULL);
+        hr = IFilterGraph2_ConnectDirect(iface, ppin, pConnectedTo, NULL);
     IPin_Release(pConnectedTo);
     if (FAILED(hr))
         WARN("Reconnecting pins failed, pins are not connected now..\n");
@@ -1073,7 +1073,7 @@ static HRESULT WINAPI FilterGraph2_Connect(IFilterGraph2 *iface, IPin *ppinOut, 
         goto out;
 
     /* Try direct connection first */
-    hr = IPin_Connect(ppinOut, ppinIn, NULL);
+    hr = IFilterGraph2_ConnectDirect(iface, ppinOut, ppinIn, NULL);
 
     /* If direct connection succeeded, we should propagate that return value.
      * If it returned VFW_E_NOT_CONNECTED or VFW_E_NO_AUDIO_HARDWARE, then don't
@@ -1229,7 +1229,7 @@ static HRESULT WINAPI FilterGraph2_Connect(IFilterGraph2 *iface, IPin *ppinOut, 
             goto error;
         }
 
-        hr = IPin_Connect(ppinOut, ppinfilter, NULL);
+        hr = IFilterGraph2_ConnectDirect(iface, ppinOut, ppinfilter, NULL);
         if (FAILED(hr)) {
             TRACE("Cannot connect to filter (%x), trying next one\n", hr);
             goto error;
@@ -1541,7 +1541,7 @@ static HRESULT WINAPI FilterGraph2_Render(IFilterGraph2 *iface, IPin *ppinOut)
                 }
 
                 /* Connect the pin to the "Renderer" */
-                hr = IPin_Connect(ppinOut, ppinfilter, NULL);
+                hr = IFilterGraph2_ConnectDirect(iface, ppinOut, ppinfilter, NULL);
                 IPin_Release(ppinfilter);
 
                 if (FAILED(hr)) {
