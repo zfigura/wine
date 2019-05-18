@@ -66,9 +66,6 @@ static const WCHAR sdl_busidW[] = {'S','D','L','J','O','Y',0};
 
 static DWORD map_controllers = 0;
 
-#include "initguid.h"
-DEFINE_GUID(GUID_DEVCLASS_SDL, 0x463d60b5,0x802b,0x4bb2,0x8f,0xdb,0x7d,0xa9,0xb9,0x96,0x04,0xd8);
-
 static void *sdl_handle = NULL;
 
 #ifdef SONAME_LIBSDL2
@@ -967,7 +964,7 @@ static void try_add_device(SDL_JoystickID index)
         input = 0;
 
     device = bus_create_hid_device(sdl_busidW, vid, pid,
-            input, version, id, serial, is_xbox_gamepad, &GUID_DEVCLASS_SDL,
+            input, version, id, serial, is_xbox_gamepad,
             &sdl_vtbl, sizeof(struct platform_private));
 
     if (device)
