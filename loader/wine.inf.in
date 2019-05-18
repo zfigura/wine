@@ -3699,4 +3699,5 @@ inf_section = 17
 l_intl.nls
 
 [inf_section]
+winebus.inf
 winehid.inf
