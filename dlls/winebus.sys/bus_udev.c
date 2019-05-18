@@ -1266,7 +1266,7 @@ static void try_add_device(struct udev_device *dev)
                 return;
             }
 #endif
-        IoInvalidateDeviceRelations(device, BusRelations);
+        IoInvalidateDeviceRelations(bus_pdo, BusRelations);
     }
     else
     {
