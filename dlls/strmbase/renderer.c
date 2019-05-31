@@ -45,6 +45,20 @@ static inline BaseRenderer *impl_from_IPin(IPin *iface)
     return CONTAINING_RECORD(iface, BaseRenderer, sink.pin.IPin_iface);
 }
 
+static HRESULT WINAPI BaseRenderer_InputPin_QueryInterface(IPin *iface, REFIID iid, void **out)
+{
+    BaseRenderer *filter = impl_from_IPin(iface);
+    HRESULT hr;
+
+    TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
+
+    if (filter->pFuncsTable->renderer_pin_query_interface
+            && SUCCEEDED(hr = filter->pFuncsTable->renderer_pin_query_interface(filter, iid, out)))
+        return hr;
+
+    return BaseInputPinImpl_QueryInterface(iface, iid, out);
+}
+
 static HRESULT WINAPI BaseRenderer_InputPin_ReceiveConnection(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt)
 {
     BaseRenderer *filter = impl_from_IPin(iface);
@@ -147,7 +161,7 @@ static HRESULT WINAPI BaseRenderer_InputPin_EndFlush(IPin * iface)
 
 static const IPinVtbl BaseRenderer_InputPin_Vtbl =
 {
-    BaseInputPinImpl_QueryInterface,
+    BaseRenderer_InputPin_QueryInterface,
     BasePinImpl_AddRef,
     BasePinImpl_Release,
     BaseInputPinImpl_Connect,
