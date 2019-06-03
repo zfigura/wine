@@ -20,10 +20,12 @@
  */
 
 #define COBJMACROS
+#include <math.h>
 #include "dshow.h"
 #include "initguid.h"
 #include "dsound.h"
 #include "amaudio.h"
+#include "wine/heap.h"
 #include "wine/strmbase.h"
 #include "wine/test.h"
 
@@ -747,8 +749,173 @@ static void test_allocator(IMemInputPin *input)
     IMemAllocator_Release(ret_allocator);
 }
 
+struct frame_thread_params
+{
+    IMemInputPin *sink;
+    IMediaSample *sample;
+};
+
+static DWORD WINAPI frame_thread(void *arg)
+{
+    struct frame_thread_params *params = arg;
+    HRESULT hr;
+
+    if (winetest_debug > 1) trace("%04x: Sending frame.\n", GetCurrentThreadId());
+    hr = IMemInputPin_Receive(params->sink, params->sample);
+    if (winetest_debug > 1) trace("%04x: Returned %#x.\n", GetCurrentThreadId(), hr);
+    IMediaSample_Release(params->sample);
+    heap_free(params);
+    return hr;
+}
+
+static HRESULT send_frame(IMemInputPin *sink)
+{
+    struct frame_thread_params *params = heap_alloc(sizeof(params));
+    REFERENCE_TIME start_time, end_time;
+    IMemAllocator *allocator;
+    unsigned short *words;
+    IMediaSample *sample;
+    HANDLE thread;
+    HRESULT hr;
+    BYTE *data;
+    DWORD ret;
+
+    hr = IMemInputPin_GetAllocator(sink, &allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, 0);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaSample_GetPointer(sample, &data);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    words = (unsigned short *)data;
+    for (int i = 0; i < 44100 * 2; i += 2)
+        words[i] = words[i+1] = sinf(i / 20.0f) * 0x7fff;
+
+    hr = IMediaSample_SetActualDataLength(sample, 44100 * 4);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    start_time = 0;
+    end_time = start_time + 10000000;
+    hr = IMediaSample_SetTime(sample, &start_time, &end_time);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    params->sink = sink;
+    params->sample = sample;
+    thread = CreateThread(NULL, 0, frame_thread, params, 0, NULL);
+    ok(!WaitForSingleObject(thread, 500), "Wait failed.\n");
+    GetExitCodeThread(thread, &ret);
+    CloseHandle(thread);
+
+    IMemAllocator_Release(allocator);
+    return ret;
+}
+
+static void test_filter_state(IMemInputPin *input, IFilterGraph2 *graph)
+{
+    IMemAllocator *allocator;
+    IMediaControl *control;
+    IMediaSample *sample;
+    OAFilterState state;
+    HRESULT hr;
+
+    hr = IMemInputPin_GetAllocator(input, &allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+
+    hr = send_frame(input);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#x.\n", hr);
+
+    /* The renderer is not fully paused until it receives a sample. The
+     * DirectSound renderer never blocks in Receive(), despite returning S_OK
+     * from ReceiveCanBlock(). Instead it holds on to each sample until its
+     * presentation time, then writes it into the buffer. This is more work
+     * than it's worth to emulate, so for now, we'll ignore this behaviour. */
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    /* It's possible to queue multiple samples while paused. The number of
+     * samples that can be queued depends on the length of each sample, but
+     * it's not particularly clear how. */
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    todo_wine ok(hr == VFW_S_STATE_INTERMEDIATE, "Got hr %#x.\n", hr);
+
+    hr = send_frame(input);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, AM_GBF_NOWAIT);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+    if (hr == S_OK) IMediaSample_Release(sample);
+
+    hr = send_frame(input);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    todo_wine ok(hr == VFW_S_STATE_INTERMEDIATE, "Got hr %#x.\n", hr);
+
+    hr = send_frame(input);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Run(control);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(input);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(input);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Pause(control);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    /* The DirectSound renderer will silently refuse to transition to running
+     * if it hasn't finished pausing yet. Once it does it reports itself as
+     * completely paused. This confuses the filter graph, which returns
+     * VFW_S_STATE_INTERMEDIATE until a new state is given. */
+
+    IMediaControl_Release(control);
+    IMemAllocator_Release(allocator);
+}
+
 static void test_connect_pin(void)
 {
+    ALLOCATOR_PROPERTIES req_props = {1, 4 * 44100, 1, 0}, ret_props;
     WAVEFORMATEX wfx =
     {
         .wFormatTag = WAVE_FORMAT_PCM,
@@ -769,6 +936,7 @@ static void test_connect_pin(void)
     IBaseFilter *filter = create_dsound_render();
     IFilterGraph2 *graph = create_graph();
     struct testfilter source;
+    IMemAllocator *allocator;
     IMemInputPin *input;
     AM_MEDIA_TYPE mt;
     IPin *pin, *peer;
@@ -806,6 +974,22 @@ static void test_connect_pin(void)
 
     test_allocator(input);
 
+    hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMemAllocator, (void **)&allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IMemAllocator_SetProperties(allocator, &req_props, &ret_props);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!memcmp(&ret_props, &req_props, sizeof(req_props)), "Properties did not match.\n");
+    hr = IMemInputPin_NotifyAllocator(input, allocator, TRUE);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IMemAllocator_Commit(allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMemInputPin_ReceiveCanBlock(input);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    test_filter_state(input, graph);
+
     hr = IFilterGraph2_Disconnect(graph, pin);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     hr = IFilterGraph2_Disconnect(graph, pin);
@@ -821,6 +1005,8 @@ static void test_connect_pin(void)
     hr = IPin_ConnectionMediaType(pin, &mt);
     ok(hr == VFW_E_NOT_CONNECTED, "Got hr %#x.\n", hr);
 
+    ref = IMemAllocator_Release(allocator);
+    todo_wine ok(!ref, "Got outstanding refcount %d.\n", ref);
     IMemInputPin_Release(input);
     IPin_Release(pin);
     ref = IFilterGraph2_Release(graph);
@@ -829,62 +1015,6 @@ static void test_connect_pin(void)
     ok(!ref, "Got outstanding refcount %d.\n", ref);
     ref = IBaseFilter_Release(&source.filter.IBaseFilter_iface);
     ok(!ref, "Got outstanding refcount %d.\n", ref);
-}
-
-static void test_pin(IPin *pin)
-{
-    IMemInputPin *mpin = NULL;
-
-    IPin_QueryInterface(pin, &IID_IMemInputPin, (void **)&mpin);
-
-    ok(mpin != NULL, "No IMemInputPin found!\n");
-    if (mpin)
-    {
-        ok(IMemInputPin_ReceiveCanBlock(mpin) == S_OK, "Receive can't block for pin!\n");
-        ok(IMemInputPin_NotifyAllocator(mpin, NULL, 0) == E_POINTER, "NotifyAllocator likes a NULL pointer argument\n");
-        IMemInputPin_Release(mpin);
-    }
-    /* TODO */
-}
-
-static void test_basefilter(void)
-{
-    IEnumPins *pin_enum = NULL;
-    IBaseFilter *base = create_dsound_render();
-    IPin *pins[2];
-    ULONG ref;
-    HRESULT hr;
-
-    hr = IBaseFilter_EnumPins(base, NULL);
-    ok(hr == E_POINTER, "hr = %08x and not E_POINTER\n", hr);
-
-    hr= IBaseFilter_EnumPins(base, &pin_enum);
-    ok(hr == S_OK, "hr = %08x and not S_OK\n", hr);
-
-    hr = IEnumPins_Next(pin_enum, 1, NULL, NULL);
-    ok(hr == E_POINTER, "hr = %08x and not E_POINTER\n", hr);
-
-    hr = IEnumPins_Next(pin_enum, 2, pins, NULL);
-    ok(hr == E_INVALIDARG, "hr = %08x and not E_INVALIDARG\n", hr);
-
-    pins[0] = (void *)0xdead;
-    pins[1] = (void *)0xdeed;
-
-    hr = IEnumPins_Next(pin_enum, 2, pins, &ref);
-    ok(hr == S_FALSE, "hr = %08x instead of S_FALSE\n", hr);
-    ok(pins[0] != (void *)0xdead && pins[0] != NULL, "pins[0] = %p\n", pins[0]);
-    if (pins[0] != (void *)0xdead && pins[0] != NULL)
-    {
-        test_pin(pins[0]);
-        IPin_Release(pins[0]);
-    }
-
-    ok(pins[1] == (void *)0xdeed, "pins[1] = %p\n", pins[1]);
-
-    ref = IEnumPins_Release(pin_enum);
-    ok(ref == 0, "ref is %u and not 0!\n", ref);
-
-    IBaseFilter_Release(base);
 }
 
 static void test_unconnected_filter_state(void)
@@ -972,7 +1102,6 @@ START_TEST(dsoundrender)
     test_enum_media_types();
     test_unconnected_filter_state();
     test_connect_pin();
-    test_basefilter();
 
     CoUninitialize();
 }
