@@ -913,6 +913,56 @@ static void test_filter_state(IMemInputPin *input, IFilterGraph2 *graph)
     IMemAllocator_Release(allocator);
 }
 
+static void test_flushing(IPin *pin, IMemInputPin *input, IFilterGraph2 *graph)
+{
+    IMediaControl *control;
+    OAFilterState state;
+    HRESULT hr;
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = send_frame(input);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IPin_BeginFlush(pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(input);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IPin_EndFlush(pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Run(control);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IPin_BeginFlush(pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(input);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IPin_EndFlush(pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(input);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    IMediaControl_Release(control);
+}
+
 static void test_connect_pin(void)
 {
     ALLOCATOR_PROPERTIES req_props = {1, 4 * 44100, 1, 0}, ret_props;
@@ -989,6 +1039,7 @@ static void test_connect_pin(void)
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     test_filter_state(input, graph);
+    test_flushing(pin, input, graph);
 
     hr = IFilterGraph2_Disconnect(graph, pin);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
