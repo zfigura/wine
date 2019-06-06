@@ -20,6 +20,7 @@
  */
 
 #define COBJMACROS
+#include <limits.h>
 #include <math.h>
 #include "dshow.h"
 #include "initguid.h"
@@ -768,11 +769,12 @@ static DWORD WINAPI frame_thread(void *arg)
     return hr;
 }
 
-static HRESULT send_frame(IMemInputPin *sink)
+static HRESULT send_frame_params(IMemInputPin *sink, REFERENCE_TIME start_time,
+        REFERENCE_TIME length, BOOL discontinuity, double frequency)
 {
     struct frame_thread_params *params = heap_alloc(sizeof(params));
-    REFERENCE_TIME start_time, end_time;
     IMemAllocator *allocator;
+    REFERENCE_TIME end_time;
     unsigned short *words;
     IMediaSample *sample;
     HANDLE thread;
@@ -790,13 +792,15 @@ static HRESULT send_frame(IMemInputPin *sink)
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     words = (unsigned short *)data;
     for (int i = 0; i < 44100 * 2; i += 2)
-        words[i] = words[i+1] = sinf(i / 20.0f) * 0x7fff;
+        words[i] = words[i+1] = sin(M_PI * i * frequency / 22050.0) * 0x7fff;
 
-    hr = IMediaSample_SetActualDataLength(sample, 44100 * 4);
+    hr = IMediaSample_SetActualDataLength(sample, (LONGLONG)44100 * 4 * length / 10000000);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
-    start_time = 0;
-    end_time = start_time + 10000000;
+    hr = IMediaSample_SetDiscontinuity(sample, discontinuity);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    end_time = start_time + length;
     hr = IMediaSample_SetTime(sample, &start_time, &end_time);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
@@ -809,6 +813,11 @@ static HRESULT send_frame(IMemInputPin *sink)
 
     IMemAllocator_Release(allocator);
     return ret;
+}
+
+static HRESULT send_frame(IMemInputPin *sink)
+{
+    return send_frame_params(sink, 0, 10000000, FALSE, 440.0);
 }
 
 static void test_filter_state(IMemInputPin *input, IFilterGraph2 *graph)
@@ -1107,6 +1116,154 @@ static void test_eos(IPin *pin, IMemInputPin *input, IFilterGraph2 *graph)
     IMediaControl_Release(control);
 }
 
+static DWORD WINAPI song_thread(void *arg)
+{
+    REFERENCE_TIME start_time = GetTickCount();
+    IMemInputPin *input;
+    IPin *pin = arg;
+
+    IPin_QueryInterface(pin, &IID_IMemInputPin, (void **)&input);
+
+    /* Samples that are not marked as discontinuous are rendered one after the
+     * other, without regard to presentation time. However, samples stamped
+     * earlier than the start of the stream are silently dropped. Samples that
+     * straddle the start of the stream show inconsistent behaviour—sometimes
+     * they are played continuously, sometimes only the part between 0 and the
+     * sample end is played, without any clear pattern. */
+
+    trace("Starting song 1, time = %u ms.\n", GetTickCount());
+    send_frame_params(input, 0, 4000000, FALSE, 246.94);
+    send_frame_params(input, 10 * 10000000, 2000000, FALSE, 277.18);
+    send_frame_params(input, 10 * 10000000, 4000000, FALSE, 293.66);
+    send_frame_params(input, (LONGLONG)100000 * 10000000, 2000000, FALSE, 329.63);
+    send_frame_params(input, 0, 6000000, FALSE, 277.18);
+    send_frame_params(input, -1 * 10000000, 4000000, FALSE, 440.0); /* not played */
+    send_frame_params(input, 0, 4000000, FALSE, 220.0);
+    send_frame_params(input, -1 * 10000000, 4000000, FALSE, 440.0); /* not played */
+    send_frame_params(input, LLONG_MAX, 10000000, FALSE, 246.94);
+    send_frame_params(input, LLONG_MIN, 10000000, FALSE, 440.0); /* not played */
+    trace("Song 1 done, time = %u ms.\n", GetTickCount());
+
+    /* Similarly, if nothing is in the buffer, a continuous sample is played
+     * immediately, instead of whenever it's timestamped to. */
+    Sleep(1500);
+    trace("A begins, time = %u ms.\n", GetTickCount());
+    send_frame_params(input, 10 * 10000000, 5000000, FALSE, 440.0);
+    Sleep(500);
+    trace("A ends, time = %u ms.\n", GetTickCount());
+
+    Sleep(500);
+    trace("G# begins, time = %u ms.\n", GetTickCount());
+    send_frame_params(input, 0, 5000000, FALSE, 415.30);
+    Sleep(500);
+    trace("G# ends, time = %u ms.\n", GetTickCount());
+
+    Sleep(500);
+    send_frame_params(input, -1 * 10000000, 5000000, FALSE, 392.0); /* not played */
+
+    /* Samples that are marked as discontinuous are rendered at their
+     * presentation time. If that presentation time is in the past, it is
+     * played immediately. If it overlaps the presentation time of the last
+     * sample, it is played continuously following that sample.
+     *
+     * However, the DirectSound renderer tries to preserve relative timing
+     * between samples, if not per se absolute timing. So if a sample is played
+     * too late for one of these reasons, the next sample will be delayed by
+     * that much. In other words, the time a discontinuous sample is rendered
+     * is the time the last (discontinuous?) sample was rendered, plus the
+     * difference in presentation time between those two samples.
+     *
+     * At no point does the DirectSound renderer decide that we have underrun
+     * and skip ahead. Some filters rely on this and use gaps between samples
+     * to effect silence, e.g. native Windows Media Player 9. There is one
+     * exception to this: the first discontinuous sample encountered in a
+     * stream is always played immediately. */
+
+    trace("Starting song 2, time = %u ms.\n", GetTickCount());
+    send_frame_params(input, ((GetTickCount() - start_time) * 10000) + 10000000, 5000000, TRUE, 233.08);
+    send_frame_params(input, 0, 5000000, TRUE, 196.0);
+    send_frame_params(input, 0, 10000000, TRUE, 261.63);
+    send_frame_params(input, -15000000, 10000000, TRUE, 116.54); /* not played */
+    send_frame_params(input, 5000000, 10000000, TRUE, 220.0);
+
+    send_frame_params(input, 25000000, 10000000, TRUE, 293.66);
+    send_frame_params(input, 0, 10000000, FALSE, 233.08);
+    send_frame_params(input, 0, 5000000, FALSE, 220.0);
+    send_frame_params(input, 15000000, 5000000, TRUE, 261.63);
+
+    send_frame_params(input, 30000000, 5000000, TRUE, 233.08);
+    send_frame_params(input, 35000000, 5000000, TRUE, 293.66);
+    send_frame_params(input, 0, 10000000, FALSE, 392.0);
+    send_frame_params(input, 0, 10000000, FALSE, 220.0);
+
+    send_frame_params(input, 70000000, 10000000, TRUE, 349.23);
+    send_frame_params(input, 85000000, 10000000, FALSE, 196.0);
+    send_frame_params(input, 0, 5000000, TRUE, 220.0);
+    send_frame_params(input, 0, 5000000, TRUE, 233.08);
+    trace("Song 2 done, time = %u ms.\n", GetTickCount());
+
+    Sleep(3000);
+    trace("A begins, time = %u ms.\n", GetTickCount());
+    send_frame_params(input, 0, 5000000, TRUE, 440.0);
+    Sleep(500);
+    trace("A ends, time = %u ms.\n", GetTickCount());
+
+    Sleep(500);
+    send_frame_params(input, 15000000, 5000000, TRUE, 415.30);
+    Sleep(500);
+    trace("G# begins, time = %u ms.\n", GetTickCount());
+    Sleep(500);
+    trace("G# ends, time = %u ms.\n", GetTickCount());
+
+    IPin_EndOfStream(pin);
+    IMemInputPin_Release(input);
+    return 0;
+}
+
+static void test_sample_time(IPin *pin, IFilterGraph2 *graph)
+{
+    IMediaControl *control;
+    IMediaEvent *eventsrc;
+    OAFilterState state;
+    HANDLE thread;
+    HRESULT hr;
+    LONG code;
+
+    /* These tests don't require user input, but they do take some time to
+     * execute, and need manual validation. */
+    if (!winetest_interactive)
+    {
+        skip("Interactive tests for sample presentation time.\n");
+        return;
+    }
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaEvent, (void **)&eventsrc);
+
+    thread = CreateThread(NULL, 0, song_thread, pin, 0, NULL);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_GetState(control, 1000, &state);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaEvent_WaitForCompletion(eventsrc, INFINITE, &code);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    ok(!WaitForSingleObject(thread, 1000), "Wait failed.\n");
+    CloseHandle(thread);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    IMediaEvent_Release(eventsrc);
+    IMediaControl_Release(control);
+}
+
 static void test_connect_pin(void)
 {
     ALLOCATOR_PROPERTIES req_props = {1, 4 * 44100, 1, 0}, ret_props;
@@ -1185,6 +1342,7 @@ static void test_connect_pin(void)
     test_filter_state(input, graph);
     test_flushing(pin, input, graph);
     test_eos(pin, input, graph);
+    test_sample_time(pin, graph);
 
     hr = IFilterGraph2_Disconnect(graph, pin);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
