@@ -624,6 +624,12 @@ static inline struct testfilter *impl_from_strmbase_filter(struct strmbase_filte
     return CONTAINING_RECORD(iface, struct testfilter, filter);
 }
 
+static HRESULT testfilter_query_interface(struct strmbase_filter *iface, REFIID iid, void **out)
+{
+    ok(!IsEqualGUID(iid, &IID_IQualityControl), "Unexpected query for IQualityControl.\n");
+    return E_NOTIMPL;
+}
+
 static IPin *testfilter_get_pin(struct strmbase_filter *iface, unsigned int index)
 {
     struct testfilter *filter = impl_from_strmbase_filter(iface);
@@ -643,6 +649,7 @@ static const struct strmbase_filter_ops testfilter_ops =
 {
     .filter_get_pin = testfilter_get_pin,
     .filter_destroy = testfilter_destroy,
+    .filter_query_interface = testfilter_query_interface,
 };
 
 static const IPinVtbl testsource_vtbl =
