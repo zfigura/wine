@@ -598,62 +598,6 @@ static const BaseRendererFuncTable BaseFuncTable =
     .renderer_query_interface = dsound_render_query_interface,
 };
 
-HRESULT DSoundRender_create(IUnknown *outer, void **out)
-{
-    static const WCHAR sink_name[] = {'A','u','d','i','o',' ','I','n','p','u','t',' ','p','i','n',' ','(','r','e','n','d','e','r','e','d',')',0};
-
-    HRESULT hr;
-    DSoundRenderImpl * pDSoundRender;
-
-    *out = NULL;
-
-    pDSoundRender = CoTaskMemAlloc(sizeof(DSoundRenderImpl));
-    if (!pDSoundRender)
-        return E_OUTOFMEMORY;
-    ZeroMemory(pDSoundRender, sizeof(DSoundRenderImpl));
-
-    hr = strmbase_renderer_init(&pDSoundRender->renderer, &DSoundRender_Vtbl,
-            outer, &CLSID_DSoundRender, sink_name, &BaseFuncTable);
-
-    pDSoundRender->IBasicAudio_iface.lpVtbl = &IBasicAudio_Vtbl;
-    pDSoundRender->IReferenceClock_iface.lpVtbl = &IReferenceClock_Vtbl;
-    pDSoundRender->IAMDirectSound_iface.lpVtbl = &IAMDirectSound_Vtbl;
-
-    if (SUCCEEDED(hr))
-    {
-        hr = DirectSoundCreate8(NULL, &pDSoundRender->dsound, NULL);
-        if (FAILED(hr))
-            ERR("Cannot create Direct Sound object (%x)\n", hr);
-        else
-            hr = IDirectSound8_SetCooperativeLevel(pDSoundRender->dsound, GetDesktopWindow(), DSSCL_PRIORITY);
-        if (SUCCEEDED(hr)) {
-            IDirectSoundBuffer *buf;
-            DSBUFFERDESC buf_desc;
-            memset(&buf_desc,0,sizeof(DSBUFFERDESC));
-            buf_desc.dwSize = sizeof(DSBUFFERDESC);
-            buf_desc.dwFlags = DSBCAPS_PRIMARYBUFFER;
-            hr = IDirectSound8_CreateSoundBuffer(pDSoundRender->dsound, &buf_desc, &buf, NULL);
-            if (SUCCEEDED(hr)) {
-                IDirectSoundBuffer_Play(buf, 0, 0, DSBPLAY_LOOPING);
-                IDirectSoundBuffer_Release(buf);
-            }
-            hr = S_OK;
-        }
-    }
-
-    if (SUCCEEDED(hr))
-    {
-        *out = &pDSoundRender->renderer.filter.IUnknown_inner;
-    }
-    else
-    {
-        strmbase_renderer_cleanup(&pDSoundRender->renderer);
-        CoTaskMemFree(pDSoundRender);
-    }
-
-    return hr;
-}
-
 static const IBaseFilterVtbl DSoundRender_Vtbl =
 {
     BaseFilterImpl_QueryInterface,
@@ -1198,3 +1142,60 @@ static const IAMDirectSoundVtbl IAMDirectSound_Vtbl =
     AMDirectSound_SetFocusWindow,
     AMDirectSound_GetFocusWindow
 };
+
+HRESULT dsound_render_create(IUnknown *outer, void **out)
+{
+    static const WCHAR sink_name[] = {'A','u','d','i','o',' ','I','n','p','u','t',' ','p','i','n',' ','(','r','e','n','d','e','r','e','d',')',0};
+    DSoundRenderImpl *object;
+    HRESULT hr;
+
+    *out = NULL;
+
+    if (!(object = CoTaskMemAlloc(sizeof(DSoundRenderImpl))))
+        return E_OUTOFMEMORY;
+    memset(object, 0, sizeof(*object));
+
+    hr = strmbase_renderer_init(&object->renderer, &DSoundRender_Vtbl,
+            outer, &CLSID_DSoundRender, sink_name, &BaseFuncTable);
+
+    object->IBasicAudio_iface.lpVtbl = &IBasicAudio_Vtbl;
+    object->IReferenceClock_iface.lpVtbl = &IReferenceClock_Vtbl;
+    object->IAMDirectSound_iface.lpVtbl = &IAMDirectSound_Vtbl;
+
+    if (SUCCEEDED(hr))
+    {
+        hr = DirectSoundCreate8(NULL, &object->dsound, NULL);
+        if (FAILED(hr))
+            ERR("Cannot create Direct Sound object (%x)\n", hr);
+        else
+            hr = IDirectSound8_SetCooperativeLevel(object->dsound, GetDesktopWindow(), DSSCL_PRIORITY);
+        if (SUCCEEDED(hr))
+        {
+            IDirectSoundBuffer *buffer;
+            static const DSBUFFERDESC desc =
+            {
+                .dwSize = sizeof(DSBUFFERDESC),
+                .dwFlags = DSBCAPS_PRIMARYBUFFER,
+            };
+            if (SUCCEEDED(IDirectSound8_CreateSoundBuffer(object->dsound, &desc, &buffer, NULL)))
+            {
+                IDirectSoundBuffer_Play(buffer, 0, 0, DSBPLAY_LOOPING);
+                IDirectSoundBuffer_Release(buffer);
+            }
+            hr = S_OK;
+        }
+    }
+
+    if (SUCCEEDED(hr))
+    {
+        TRACE("Created DirectSound renderer %p.\n", object);
+        *out = &object->renderer.filter.IUnknown_inner;
+    }
+    else
+    {
+        strmbase_renderer_cleanup(&object->renderer);
+        CoTaskMemFree(object);
+    }
+
+    return hr;
+}
