@@ -408,7 +408,8 @@ HRESULT WINAPI BaseRendererImpl_Run(IBaseFilter * iface, REFERENCE_TIME tStart)
 {
     HRESULT hr = S_OK;
     BaseRenderer *This = impl_from_IBaseFilter(iface);
-    TRACE("(%p)->(%s)\n", This, wine_dbgstr_longlong(tStart));
+
+    TRACE("iface %p, start %s.\n", iface, debugstr_time(tStart));
 
     EnterCriticalSection(&This->csRenderLock);
     This->filter.rtStreamStart = tStart;
