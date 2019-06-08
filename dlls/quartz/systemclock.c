@@ -106,6 +106,8 @@ HRESULT reference_clock_get_time(struct reference_clock *clock, REFERENCE_TIME *
 
     LeaveCriticalSection(&clock->cs);
 
+    TRACE("Returning %s.\n", debugstr_time(ret));
+
     return hr;
 }
 
@@ -115,7 +117,7 @@ HRESULT reference_clock_advise(struct reference_clock *clock,
     struct advise_sink *sink;
 
     TRACE("clock %p, time %s, event %#lx, cookie %p.\n",
-            clock, wine_dbgstr_longlong(time), event, cookie);
+            clock, debugstr_time(time), event, cookie);
 
     if (!event)
         return E_INVALIDARG;
@@ -150,7 +152,7 @@ HRESULT reference_clock_advise_periodic(struct reference_clock *clock,
     struct advise_sink *sink;
 
     TRACE("clock %p, start %s, period %s, semaphore %#lx, cookie %p.\n",
-            clock, wine_dbgstr_longlong(start), wine_dbgstr_longlong(period), semaphore, cookie);
+            clock, debugstr_time(start), debugstr_time(period), semaphore, cookie);
 
     if (!semaphore)
         return E_INVALIDARG;
@@ -331,7 +333,7 @@ static HRESULT WINAPI system_clock_AdviseTime(IReferenceClock *iface,
     struct system_clock *clock = impl_from_IReferenceClock(iface);
 
     TRACE("clock %p, base %s, offset %s, event %#lx, cookie %p.\n",
-            clock, wine_dbgstr_longlong(base), wine_dbgstr_longlong(offset), event, cookie);
+            clock, debugstr_time(base), debugstr_time(offset), event, cookie);
 
     return reference_clock_advise(&clock->clock, base + offset, event, cookie);
 }
@@ -342,7 +344,7 @@ static HRESULT WINAPI system_clock_AdvisePeriodic(IReferenceClock* iface,
     struct system_clock *clock = impl_from_IReferenceClock(iface);
 
     TRACE("clock %p, start %s, period %s, semaphore %#lx, cookie %p.\n",
-            clock, wine_dbgstr_longlong(start), wine_dbgstr_longlong(period), semaphore, cookie);
+            clock, debugstr_time(start), debugstr_time(period), semaphore, cookie);
 
     return reference_clock_advise_periodic(&clock->clock, start, period, semaphore, cookie);
 }

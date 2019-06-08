@@ -205,15 +205,15 @@ static HRESULT WINAPI WAVEParserImpl_seek(IMediaSeeking *iface)
 
     if (newpos > endpos)
     {
-        WARN("Requesting position %s beyond end of stream %s\n",
-             wine_dbgstr_longlong(newpos), wine_dbgstr_longlong(endpos));
+        WARN("Requesting position %s beyond end of stream %s.\n",
+                debugstr_time(newpos), debugstr_time(endpos));
         return E_INVALIDARG;
     }
 
     if (curpos/1000000 == newpos/1000000)
     {
         TRACE("Requesting position %s same as current position %s\n",
-              wine_dbgstr_longlong(newpos), wine_dbgstr_longlong(curpos));
+                debugstr_time(newpos), debugstr_time(curpos));
         return S_OK;
     }
 
@@ -314,7 +314,7 @@ static HRESULT WAVEParser_InputPin_PreConnect(IPin * iface, IPin * pConnectPin, 
 
     pWAVEParser->Parser.sourceSeeking.llCurrent = 0;
     pWAVEParser->Parser.sourceSeeking.llStop = pWAVEParser->Parser.sourceSeeking.llDuration = bytepos_to_duration(pWAVEParser, pWAVEParser->EndOfFile);
-    TRACE("Duration: %u seconds\n", (DWORD)(pWAVEParser->Parser.sourceSeeking.llDuration / (LONGLONG)10000000));
+    TRACE("Duration: %s seconds.\n", debugstr_time(pWAVEParser->Parser.sourceSeeking.llDuration));
 
     This->rtStop = pWAVEParser->EndOfFile;
     This->rtStart = pWAVEParser->StartOfFile;

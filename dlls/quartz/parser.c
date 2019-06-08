@@ -261,7 +261,7 @@ HRESULT WINAPI Parser_Run(IBaseFilter * iface, REFERENCE_TIME tStart)
 
     ULONG i;
 
-    TRACE("%p->(%s)\n", This, wine_dbgstr_longlong(tStart));
+    TRACE("filter %p, start %s.\n", This, debugstr_time(tStart));
 
     EnterCriticalSection(&pin->thread_lock);
     EnterCriticalSection(&This->filter.csFilter);

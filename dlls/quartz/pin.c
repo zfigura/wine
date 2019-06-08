@@ -810,7 +810,9 @@ HRESULT WINAPI PullPin_Disconnect(IPin *iface)
 HRESULT WINAPI PullPin_NewSegment(IPin * iface, REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate)
 {
     newsegmentargs args;
-    FIXME("(%p)->(%s, %s, %g) stub\n", iface, wine_dbgstr_longlong(tStart), wine_dbgstr_longlong(tStop), dRate);
+
+    FIXME("iface %p, start %s, stop %s, rate %.16e stub!\n",
+            iface, debugstr_time(tStart), debugstr_time(tStop), dRate);
 
     args.tStart = tStart;
     args.tStop = tStop;

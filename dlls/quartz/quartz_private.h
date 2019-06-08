@@ -44,6 +44,24 @@ static inline const char *debugstr_fourcc(DWORD fourcc)
             (char)(fourcc >> 16), (char)(fourcc >> 24));
 }
 
+static inline const char *debugstr_time(REFERENCE_TIME time)
+{
+    unsigned int i = 0, j = 0;
+    char buffer[22], rev[22];
+
+    while (time || i <= 8)
+    {
+        buffer[i++] = '0' + (time % 10);
+        time /= 10;
+        if (i == 7) buffer[i++] = '.';
+    }
+
+    while (i--) rev[j++] = buffer[i];
+    rev[j] = 0;
+
+    return wine_dbg_sprintf("%s", rev);
+}
+
 /* see IAsyncReader::Request on MSDN for the explanation of this */
 #define MEDIATIME_FROM_BYTES(x) ((LONGLONG)(x) * 10000000)
 #define SEC_FROM_MEDIATIME(time) ((time) / 10000000)

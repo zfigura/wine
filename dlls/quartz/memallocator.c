@@ -561,7 +561,8 @@ static HRESULT WINAPI StdMediaSample2_SetTime(IMediaSample2 *iface, REFERENCE_TI
 {
     StdMediaSample2 *sample = impl_from_IMediaSample2(iface);
 
-    TRACE("iface %p, start %p, end %p.\n", iface, start, end);
+    TRACE("sample %p, start %s, end %s.\n", sample, start ? debugstr_time(*start) : "(null)",
+            end ? debugstr_time(*end) : "(null)");
 
     if (start)
     {

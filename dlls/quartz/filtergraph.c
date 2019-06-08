@@ -2411,6 +2411,8 @@ static HRESULT WINAPI MediaSeeking_GetStopPosition(IMediaSeeking *iface, LONGLON
         *pStop = This->stop_position;
     LeaveCriticalSection(&This->cs);
 
+    TRACE("Returning %s (%s seconds).\n", wine_dbgstr_longlong(*pStop), debugstr_time(*pStop));
+
     return hr;
 }
 
@@ -2434,7 +2436,7 @@ static HRESULT WINAPI MediaSeeking_GetCurrentPosition(IMediaSeeking *iface, LONG
     *pCurrent = time;
     LeaveCriticalSection(&This->cs);
 
-    TRACE("Time: %u.%03u\n", (DWORD)(*pCurrent / 10000000), (DWORD)((*pCurrent / 10000)%1000));
+    TRACE("Returning %s (%s seconds).\n", wine_dbgstr_longlong(*pCurrent), debugstr_time(*pCurrent));
 
     return S_OK;
 }
@@ -2482,6 +2484,13 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *
     struct pos_args args;
 
     TRACE("(%p/%p)->(%p, %08x, %p, %08x)\n", This, iface, pCurrent, dwCurrentFlags, pStop, dwStopFlags);
+
+    if (pCurrent)
+        TRACE("Setting current position to %s (%s seconds).\n",
+                wine_dbgstr_longlong(*pCurrent), debugstr_time(*pCurrent));
+    if (pStop)
+        TRACE("Setting stop position to %s (%s seconds).\n",
+                wine_dbgstr_longlong(*pStop), debugstr_time(*pStop));
 
     EnterCriticalSection(&This->cs);
     state = This->state;
@@ -5134,7 +5143,7 @@ static HRESULT WINAPI MediaFilter_Run(IMediaFilter *iface, REFERENCE_TIME start)
 {
     IFilterGraphImpl *graph = impl_from_IMediaFilter(iface);
 
-    TRACE("graph %p, start %s.\n", graph, wine_dbgstr_longlong(start));
+    TRACE("graph %p, start %s.\n", graph, debugstr_time(start));
 
     EnterCriticalSection(&graph->cs);
 

@@ -1007,9 +1007,7 @@ static HRESULT AVISplitter_InitializeStreams(AVISplitterImpl *This)
 
         frames /= stream->streamheader.dwRate;
 
-        TRACE("Duration: %d days, %d hours, %d minutes and %d.%03u seconds\n", (DWORD)(frames / 86400),
-        (DWORD)((frames % 86400) / 3600), (DWORD)((frames % 3600) / 60), (DWORD)(frames % 60),
-        (DWORD)(This->Parser.sourceSeeking.llDuration/10000) % 1000);
+        TRACE("Duration is %s seconds.\n", debugstr_time(This->Parser.sourceSeeking.llDuration));
     }
 
     return S_OK;
@@ -1273,7 +1271,7 @@ static HRESULT WINAPI AVISplitter_seek(IMediaSeeking *iface)
         return E_INVALIDARG;
     }
 
-    FIXME("Moving position to %u.%03u s!\n", (DWORD)(newpos / 10000000), (DWORD)((newpos / 10000)%1000));
+    FIXME("Moving position to %s seconds!\n", debugstr_time(newpos));
 
     EnterCriticalSection(&pPin->thread_lock);
     /* Send a flush to all output pins */

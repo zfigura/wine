@@ -232,7 +232,7 @@ static HRESULT FillBuffer(MPEGSplitterImpl *This, IMediaSample *pCurrentSample)
     }
     /* If not, we're presumably at the end of file */
 
-    TRACE("Media time : %u.%03u\n", (DWORD)(This->position/10000000), (DWORD)((This->position/10000)%1000));
+    TRACE("Media time: %s.\n", debugstr_time(This->position));
 
     if (IMediaSample_IsDiscontinuity(pCurrentSample) == S_OK) {
         IPin *victim;
