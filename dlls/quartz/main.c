@@ -78,7 +78,7 @@ static const struct object_creation_info object_creation[] =
     { &CLSID_DSoundRender, dsound_render_create },
     { &CLSID_AudioRender, dsound_render_create },
     { &CLSID_AVIDec, AVIDec_create },
-    { &CLSID_SystemClock, QUARTZ_CreateSystemClock },
+    { &CLSID_SystemClock, system_clock_create },
     { &CLSID_ACMWrapper, ACMWrapper_create },
     { &CLSID_WAVEParser, WAVEParser_create }
 };

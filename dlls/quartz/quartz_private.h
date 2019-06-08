@@ -20,6 +20,7 @@
 #ifndef __QUARTZ_PRIVATE_INCLUDED__
 #define __QUARTZ_PRIVATE_INCLUDED__
 
+#include <limits.h>
 #include <stdarg.h>
 #include <wchar.h>
 
@@ -61,7 +62,7 @@ HRESULT AVIDec_create(IUnknown * pUnkOuter, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT dsound_render_create(IUnknown *outer, void **out) DECLSPEC_HIDDEN;
 HRESULT VideoRenderer_create(IUnknown * pUnkOuter, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT VideoRendererDefault_create(IUnknown * pUnkOuter, LPVOID * ppv) DECLSPEC_HIDDEN;
-HRESULT QUARTZ_CreateSystemClock(IUnknown * pUnkOuter, LPVOID * ppv) DECLSPEC_HIDDEN;
+HRESULT system_clock_create(IUnknown *outer, void **out) DECLSPEC_HIDDEN;
 HRESULT ACMWrapper_create(IUnknown * pUnkOuter, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT WAVEParser_create(IUnknown * pUnkOuter, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT VMR7Impl_create(IUnknown *pUnkOuter, LPVOID *ppv) DECLSPEC_HIDDEN;
@@ -78,5 +79,38 @@ BOOL CompareMediaTypes(const AM_MEDIA_TYPE * pmt1, const AM_MEDIA_TYPE * pmt2, B
 void dump_AM_MEDIA_TYPE(const AM_MEDIA_TYPE * pmt) DECLSPEC_HIDDEN;
 
 BOOL get_media_type(const WCHAR *filename, GUID *majortype, GUID *subtype, GUID *source_clsid) DECLSPEC_HIDDEN;
+
+struct reference_clock;
+
+struct reference_clock_ops
+{
+    /* Get the current time. */
+    REFERENCE_TIME (*clock_get_time)(struct reference_clock *clock);
+    /* Wait until the "time" or one of the clock's events is signaled. If "time"
+     * is LLONG_MAX, wait forever. Return FALSE if stop_event was signaled,
+     * TRUE otherwise. */
+    BOOL (*clock_wait_time)(struct reference_clock *clock, REFERENCE_TIME time);
+};
+
+struct reference_clock
+{
+    const struct reference_clock_ops *ops;
+
+    BOOL thread_created;
+    HANDLE thread, notify_event, stop_event;
+    REFERENCE_TIME last_time;
+    CRITICAL_SECTION cs;
+
+    struct list sinks;
+};
+
+void reference_clock_init(struct reference_clock *clock, const struct reference_clock_ops *ops) DECLSPEC_HIDDEN;
+void reference_clock_cleanup(struct reference_clock *clock) DECLSPEC_HIDDEN;
+
+HRESULT reference_clock_get_time(struct reference_clock *clock, REFERENCE_TIME *time) DECLSPEC_HIDDEN;
+HRESULT reference_clock_advise(struct reference_clock *clock, REFERENCE_TIME time, HEVENT event, DWORD_PTR *cookie) DECLSPEC_HIDDEN;
+HRESULT reference_clock_advise_periodic(struct reference_clock *clock, REFERENCE_TIME time, REFERENCE_TIME offset,
+        HEVENT event, DWORD_PTR *cookie) DECLSPEC_HIDDEN;
+HRESULT reference_clock_unadvise(struct reference_clock *clock, DWORD_PTR cookie) DECLSPEC_HIDDEN;
 
 #endif /* __QUARTZ_PRIVATE_INCLUDED__ */

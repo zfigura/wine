@@ -20,9 +20,6 @@
 
 #include "quartz_private.h"
 
-#include "wine/debug.h"
-#include <assert.h>
-
 WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 
 static int cookie_counter;
@@ -35,39 +32,20 @@ struct advise_sink
     int cookie;
 };
 
-struct system_clock
+static DWORD WINAPI advise_thread(void *param)
 {
-    IReferenceClock IReferenceClock_iface;
-    LONG ref;
-
-    BOOL thread_created;
-    HANDLE thread, notify_event, stop_event;
-    REFERENCE_TIME last_time;
-    CRITICAL_SECTION cs;
-
-    struct list sinks;
-};
-
-static inline struct system_clock *impl_from_IReferenceClock(IReferenceClock *iface)
-{
-    return CONTAINING_RECORD(iface, struct system_clock, IReferenceClock_iface);
-}
-
-static DWORD WINAPI SystemClockAdviseThread(void *param)
-{
-    struct system_clock *clock = param;
+    REFERENCE_TIME current_time, next_time;
+    struct reference_clock *clock = param;
     struct advise_sink *sink, *cursor;
-    REFERENCE_TIME current_time;
-    DWORD timeout = INFINITE;
-    HANDLE handles[2] = {clock->stop_event, clock->notify_event};
 
     TRACE("Starting advise thread for clock %p.\n", clock);
 
     for (;;)
     {
-        EnterCriticalSection(&clock->cs);
+        current_time = clock->ops->clock_get_time(clock);
+        next_time = LLONG_MAX;
 
-        current_time = GetTickCount64() * 10000;
+        EnterCriticalSection(&clock->cs);
 
         LIST_FOR_EACH_ENTRY_SAFE(sink, cursor, &clock->sinks, struct advise_sink, entry)
         {
@@ -88,91 +66,38 @@ static DWORD WINAPI SystemClockAdviseThread(void *param)
                 }
             }
 
-            timeout = min(timeout, (sink->due_time - current_time) / 10000);
+            next_time = min(next_time, sink->due_time);
         }
 
         LeaveCriticalSection(&clock->cs);
 
-        if (WaitForMultipleObjects(2, handles, FALSE, timeout) == 0)
+        if (!clock->ops->clock_wait_time(clock, next_time))
             return 0;
     }
 }
 
-static void notify_thread(struct system_clock *clock)
+static void notify_thread(struct reference_clock *clock)
 {
     if (!InterlockedCompareExchange(&clock->thread_created, TRUE, FALSE))
     {
         clock->notify_event = CreateEventW(NULL, FALSE, FALSE, NULL);
         clock->stop_event = CreateEventW(NULL, TRUE, FALSE, NULL);
-        clock->thread = CreateThread(NULL, 0, SystemClockAdviseThread, clock, 0, NULL);
+        clock->thread = CreateThread(NULL, 0, advise_thread, clock, 0, NULL);
     }
     SetEvent(clock->notify_event);
 }
 
-static HRESULT WINAPI SystemClockImpl_QueryInterface(IReferenceClock *iface, REFIID iid, void **out)
+HRESULT reference_clock_get_time(struct reference_clock *clock, REFERENCE_TIME *time)
 {
-    struct system_clock *clock = impl_from_IReferenceClock(iface);
-    TRACE("clock %p, iid %s, out %p.\n", clock, debugstr_guid(iid), out);
-
-    if (IsEqualGUID(iid, &IID_IUnknown) || IsEqualGUID(iid, &IID_IReferenceClock))
-    {
-        IReferenceClock_AddRef(iface);
-        *out = iface;
-        return S_OK;
-    }
-
-    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
-    *out = NULL;
-    return E_NOINTERFACE;
-}
-
-static ULONG WINAPI SystemClockImpl_AddRef(IReferenceClock *iface)
-{
-    struct system_clock *clock = impl_from_IReferenceClock(iface);
-    ULONG refcount = InterlockedIncrement(&clock->ref);
-
-    TRACE("%p increasing refcount to %u.\n", clock, refcount);
-
-    return refcount;
-}
-
-static ULONG WINAPI SystemClockImpl_Release(IReferenceClock *iface)
-{
-    struct system_clock *clock = impl_from_IReferenceClock(iface);
-    ULONG refcount = InterlockedDecrement(&clock->ref);
-
-    TRACE("%p decreasing refcount to %u.\n", clock, refcount);
-
-    if (!refcount)
-    {
-        if (clock->thread)
-        {
-            SetEvent(clock->stop_event);
-            WaitForSingleObject(clock->thread, INFINITE);
-            CloseHandle(clock->thread);
-            CloseHandle(clock->notify_event);
-            CloseHandle(clock->stop_event);
-        }
-        clock->cs.DebugInfo->Spare[0] = 0;
-        DeleteCriticalSection(&clock->cs);
-        heap_free(clock);
-    }
-    return refcount;
-}
-
-static HRESULT WINAPI SystemClockImpl_GetTime(IReferenceClock *iface, REFERENCE_TIME *time)
-{
-    struct system_clock *clock = impl_from_IReferenceClock(iface);
     REFERENCE_TIME ret;
     HRESULT hr;
 
     TRACE("clock %p, time %p.\n", clock, time);
 
-    if (!time) {
+    if (!time)
         return E_POINTER;
-    }
 
-    ret = GetTickCount64() * 10000;
+    ret = clock->ops->clock_get_time(clock);
 
     EnterCriticalSection(&clock->cs);
 
@@ -184,19 +109,18 @@ static HRESULT WINAPI SystemClockImpl_GetTime(IReferenceClock *iface, REFERENCE_
     return hr;
 }
 
-static HRESULT WINAPI SystemClockImpl_AdviseTime(IReferenceClock *iface,
-        REFERENCE_TIME base, REFERENCE_TIME offset, HEVENT event, DWORD_PTR *cookie)
+HRESULT reference_clock_advise(struct reference_clock *clock,
+        REFERENCE_TIME time, HEVENT event, DWORD_PTR *cookie)
 {
-    struct system_clock *clock = impl_from_IReferenceClock(iface);
     struct advise_sink *sink;
 
-    TRACE("clock %p, base %s, offset %s, event %#lx, cookie %p.\n",
-            clock, wine_dbgstr_longlong(base), wine_dbgstr_longlong(offset), event, cookie);
+    TRACE("clock %p, time %s, event %#lx, cookie %p.\n",
+            clock, wine_dbgstr_longlong(time), event, cookie);
 
     if (!event)
         return E_INVALIDARG;
 
-    if (base + offset <= 0)
+    if (time <= 0)
         return E_INVALIDARG;
 
     if (!cookie)
@@ -206,7 +130,7 @@ static HRESULT WINAPI SystemClockImpl_AdviseTime(IReferenceClock *iface,
         return E_OUTOFMEMORY;
 
     sink->handle = (HANDLE)event;
-    sink->due_time = base + offset;
+    sink->due_time = time;
     sink->period = 0;
     sink->cookie = InterlockedIncrement(&cookie_counter);
 
@@ -220,10 +144,9 @@ static HRESULT WINAPI SystemClockImpl_AdviseTime(IReferenceClock *iface,
     return S_OK;
 }
 
-static HRESULT WINAPI SystemClockImpl_AdvisePeriodic(IReferenceClock* iface,
+HRESULT reference_clock_advise_periodic(struct reference_clock *clock,
         REFERENCE_TIME start, REFERENCE_TIME period, HSEMAPHORE semaphore, DWORD_PTR *cookie)
 {
-    struct system_clock *clock = impl_from_IReferenceClock(iface);
     struct advise_sink *sink;
 
     TRACE("clock %p, start %s, period %s, semaphore %#lx, cookie %p.\n",
@@ -256,9 +179,8 @@ static HRESULT WINAPI SystemClockImpl_AdvisePeriodic(IReferenceClock* iface,
     return S_OK;
 }
 
-static HRESULT WINAPI SystemClockImpl_Unadvise(IReferenceClock *iface, DWORD_PTR cookie)
+HRESULT reference_clock_unadvise(struct reference_clock *clock, DWORD_PTR cookie)
 {
-    struct system_clock *clock = impl_from_IReferenceClock(iface);
     struct advise_sink *sink;
 
     TRACE("clock %p, cookie %#lx.\n", clock, cookie);
@@ -281,18 +203,160 @@ static HRESULT WINAPI SystemClockImpl_Unadvise(IReferenceClock *iface, DWORD_PTR
     return S_FALSE;
 }
 
-static const IReferenceClockVtbl SystemClock_Vtbl = 
+void reference_clock_init(struct reference_clock *clock, const struct reference_clock_ops *ops)
 {
-    SystemClockImpl_QueryInterface,
-    SystemClockImpl_AddRef,
-    SystemClockImpl_Release,
-    SystemClockImpl_GetTime,
-    SystemClockImpl_AdviseTime,
-    SystemClockImpl_AdvisePeriodic,
-    SystemClockImpl_Unadvise
+    memset(clock, 0, sizeof(*clock));
+    clock->ops = ops;
+    list_init(&clock->sinks);
+    InitializeCriticalSection(&clock->cs);
+    clock->cs.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": reference_clock.cs");
+}
+
+void reference_clock_cleanup(struct reference_clock *clock)
+{
+    if (clock->thread)
+    {
+        SetEvent(clock->stop_event);
+        WaitForSingleObject(clock->thread, INFINITE);
+        CloseHandle(clock->thread);
+        CloseHandle(clock->notify_event);
+        CloseHandle(clock->stop_event);
+    }
+    clock->cs.DebugInfo->Spare[0] = 0;
+    DeleteCriticalSection(&clock->cs);
+}
+
+struct system_clock
+{
+    struct reference_clock clock;
+
+    IReferenceClock IReferenceClock_iface;
+    LONG ref;
 };
 
-HRESULT QUARTZ_CreateSystemClock(IUnknown *outer, void **out)
+static inline struct system_clock *impl_from_IReferenceClock(IReferenceClock *iface)
+{
+    return CONTAINING_RECORD(iface, struct system_clock, IReferenceClock_iface);
+}
+
+static HRESULT WINAPI system_clock_QueryInterface(IReferenceClock *iface, REFIID iid, void **out)
+{
+    struct system_clock *clock = impl_from_IReferenceClock(iface);
+    TRACE("clock %p, iid %s, out %p.\n", clock, debugstr_guid(iid), out);
+
+    if (IsEqualGUID(iid, &IID_IUnknown) || IsEqualGUID(iid, &IID_IReferenceClock))
+    {
+        IReferenceClock_AddRef(iface);
+        *out = iface;
+        return S_OK;
+    }
+
+    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI system_clock_AddRef(IReferenceClock *iface)
+{
+    struct system_clock *clock = impl_from_IReferenceClock(iface);
+    ULONG refcount = InterlockedIncrement(&clock->ref);
+
+    TRACE("%p increasing refcount to %u.\n", clock, refcount);
+
+    return refcount;
+}
+
+static ULONG WINAPI system_clock_Release(IReferenceClock *iface)
+{
+    struct system_clock *clock = impl_from_IReferenceClock(iface);
+    ULONG refcount = InterlockedDecrement(&clock->ref);
+
+    TRACE("%p decreasing refcount to %u.\n", clock, refcount);
+
+    if (!refcount)
+    {
+        reference_clock_cleanup(&clock->clock);
+        heap_free(clock);
+    }
+    return refcount;
+}
+
+static HRESULT WINAPI system_clock_GetTime(IReferenceClock *iface, REFERENCE_TIME *time)
+{
+    struct system_clock *clock = impl_from_IReferenceClock(iface);
+
+    TRACE("clock %p, time %p.\n", clock, time);
+
+    return reference_clock_get_time(&clock->clock, time);
+}
+
+static HRESULT WINAPI system_clock_AdviseTime(IReferenceClock *iface,
+        REFERENCE_TIME base, REFERENCE_TIME offset, HEVENT event, DWORD_PTR *cookie)
+{
+    struct system_clock *clock = impl_from_IReferenceClock(iface);
+
+    TRACE("clock %p, base %s, offset %s, event %#lx, cookie %p.\n",
+            clock, wine_dbgstr_longlong(base), wine_dbgstr_longlong(offset), event, cookie);
+
+    return reference_clock_advise(&clock->clock, base + offset, event, cookie);
+}
+
+static HRESULT WINAPI system_clock_AdvisePeriodic(IReferenceClock* iface,
+        REFERENCE_TIME start, REFERENCE_TIME period, HSEMAPHORE semaphore, DWORD_PTR *cookie)
+{
+    struct system_clock *clock = impl_from_IReferenceClock(iface);
+
+    TRACE("clock %p, start %s, period %s, semaphore %#lx, cookie %p.\n",
+            clock, wine_dbgstr_longlong(start), wine_dbgstr_longlong(period), semaphore, cookie);
+
+    return reference_clock_advise_periodic(&clock->clock, start, period, semaphore, cookie);
+}
+
+static HRESULT WINAPI system_clock_Unadvise(IReferenceClock *iface, DWORD_PTR cookie)
+{
+    struct system_clock *clock = impl_from_IReferenceClock(iface);
+
+    TRACE("clock %p, cookie %#lx.\n", clock, cookie);
+
+    return reference_clock_unadvise(&clock->clock, cookie);
+}
+
+static const IReferenceClockVtbl system_clock_vtbl =
+{
+    system_clock_QueryInterface,
+    system_clock_AddRef,
+    system_clock_Release,
+    system_clock_GetTime,
+    system_clock_AdviseTime,
+    system_clock_AdvisePeriodic,
+    system_clock_Unadvise,
+};
+
+static REFERENCE_TIME system_clock_get_time(struct reference_clock *clock)
+{
+    return GetTickCount64() * 10000;
+}
+
+static BOOL system_clock_wait_time(struct reference_clock *clock, REFERENCE_TIME time)
+{
+    HANDLE handles[2] = {clock->stop_event, clock->notify_event};
+    DWORD timeout;
+
+    if (time == LLONG_MAX)
+        timeout = INFINITE;
+    else
+        timeout = max(time / 10000 - GetTickCount64(), 0);
+
+    return WaitForMultipleObjects(2, handles, FALSE, timeout) != 0;
+}
+
+static const struct reference_clock_ops system_clock_ops =
+{
+    system_clock_get_time,
+    system_clock_wait_time,
+};
+
+HRESULT system_clock_create(IUnknown *outer, void **out)
 {
     struct system_clock *object;
   
@@ -304,10 +368,8 @@ HRESULT QUARTZ_CreateSystemClock(IUnknown *outer, void **out)
         return E_OUTOFMEMORY;
     }
 
-    object->IReferenceClock_iface.lpVtbl = &SystemClock_Vtbl;
-    list_init(&object->sinks);
-    InitializeCriticalSection(&object->cs);
-    object->cs.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": SystemClockImpl.cs");
+    object->IReferenceClock_iface.lpVtbl = &system_clock_vtbl;
+    reference_clock_init(&object->clock, &system_clock_ops);
 
-    return SystemClockImpl_QueryInterface(&object->IReferenceClock_iface, &IID_IReferenceClock, out);
+    return IReferenceClock_QueryInterface(&object->IReferenceClock_iface, &IID_IReferenceClock, out);
 }
