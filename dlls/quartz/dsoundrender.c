@@ -59,6 +59,9 @@ typedef struct DSoundRenderImpl
     DWORD in_loop;
     DWORD last_playpos, writepos;
 
+    /* We last started playing at about this many ticks. */
+    ULONGLONG start_ticks;
+
     REFERENCE_TIME play_time;
 
     LONG volume;
@@ -423,7 +426,11 @@ static void dsound_render_start_stream(BaseRenderer *iface)
 
     if (This->renderer.sink.pin.peer)
     {
+        DWORD bytes;
+
+        IDirectSoundBuffer_GetCurrentPosition(This->dsbuffer, &bytes, NULL);
         IDirectSoundBuffer_Play(This->dsbuffer, 0, 0, DSBPLAY_LOOPING);
+        This->start_ticks = GetTickCount64() + time_from_pos(This, bytes) / 10000;
     }
 }
 
@@ -892,32 +899,39 @@ static HRESULT WINAPI ReferenceClock_GetTime(IReferenceClock *iface,
                                              REFERENCE_TIME *pTime)
 {
     DSoundRenderImpl *This = impl_from_IReferenceClock(iface);
-    HRESULT hr = E_FAIL;
+    REFERENCE_TIME ret, ret_ticks;
+    ULONGLONG ticks, seconds;
+    DWORD bytes;
 
     TRACE("(%p/%p)->(%p)\n", This, iface, pTime);
     if (!pTime)
         return E_POINTER;
 
-    if (This->dsbuffer) {
-        DWORD writepos1, writepos2;
-        EnterCriticalSection(&This->renderer.filter.csFilter);
-        DSoundRender_UpdatePositions(This, &writepos1, &writepos2);
-        if (This->renderer.sink.pin.mtCurrent.pbFormat)
-        {
-            *pTime = This->play_time + time_from_pos(This, This->last_playpos);
-            hr = S_OK;
-        }
-        else
-        {
-            ERR("pInputPin Disconnected\n");
-            hr = E_FAIL;
-        }
-        LeaveCriticalSection(&This->renderer.filter.csFilter);
-    }
-    if (FAILED(hr))
-        WARN("Could not get reference time (%x)!\n", hr);
+    EnterCriticalSection(&This->renderer.filter.csFilter);
 
-    return hr;
+    ticks = GetTickCount64();
+    ret = ret_ticks = ticks * 10000;
+
+    if (This->renderer.filter.state == State_Running)
+    {
+        IDirectSoundBuffer_GetCurrentPosition(This->dsbuffer, &bytes, NULL);
+        seconds = ticks - ((ticks - This->start_ticks) % 1000);
+        ret = seconds * 10000 + time_from_pos(This, bytes);
+
+        /* The system clock and the DirectSound clock might be off by several
+         * milliseconds in either direction. If we are near the beginning or end
+         * of the buffer, we will be 1 second off in either direction as a
+         * result, so correct for this. */
+        if (ret - ret_ticks > 5000000)
+            ret -= 10000000;
+        else if (ret - ret_ticks < -5000000)
+            ret += 10000000;
+    }
+
+    LeaveCriticalSection(&This->renderer.filter.csFilter);
+
+    *pTime = ret;
+    return S_OK;
 }
 
 static HRESULT WINAPI ReferenceClock_AdviseTime(IReferenceClock *iface,
