@@ -55,6 +55,9 @@ typedef struct VideoRendererImpl
     LONG VideoWidth;
     LONG VideoHeight;
     LONG FullScreenMode;
+
+    /* The first sample blocks in Receive() until the filter is running. */
+    HANDLE run_event;
 } VideoRendererImpl;
 
 static inline VideoRendererImpl *impl_from_BaseWindow(BaseWindow *iface)
@@ -285,17 +288,14 @@ static HRESULT WINAPI VideoRenderer_DoRenderSample(BaseRenderer* iface, IMediaSa
     SetEvent(This->hEvent);
     if (This->renderer.filter.state == State_Paused)
     {
+        HANDLE handles[2] = {This->run_event, This->renderer.flush_event};
+
         VideoRenderer_SendSampleData(This, pbSrcStream, cbSrcStream);
         SetEvent(This->hEvent);
-        if (This->renderer.filter.state == State_Paused)
-        {
-            /* Flushing */
-            return S_OK;
-        }
-        if (This->renderer.filter.state == State_Stopped)
-        {
-            return VFW_E_WRONG_STATE;
-        }
+
+        LeaveCriticalSection(&This->renderer.csRenderLock);
+        WaitForMultipleObjects(ARRAY_SIZE(handles), handles, FALSE, INFINITE);
+        EnterCriticalSection(&This->renderer.csRenderLock);
     } else {
         VideoRenderer_SendSampleData(This, pbSrcStream, cbSrcStream);
     }
@@ -382,6 +382,7 @@ static void video_renderer_destroy(BaseRenderer *iface)
     WaitForSingleObject(filter->hThread, INFINITE);
     CloseHandle(filter->hThread);
     CloseHandle(filter->hEvent);
+    CloseHandle(filter->run_event);
 
     strmbase_renderer_cleanup(&filter->renderer);
     CoTaskMemFree(filter);
@@ -412,6 +413,7 @@ static void video_renderer_stop_stream(BaseRenderer *iface)
     if (This->baseControlWindow.AutoShow)
         /* Black it out */
         RedrawWindow(This->baseControlWindow.baseWindow.hWnd, NULL, NULL, RDW_INVALIDATE|RDW_ERASE);
+    ResetEvent(This->run_event);
 }
 
 static void video_renderer_start_stream(BaseRenderer *iface)
@@ -429,6 +431,8 @@ static void video_renderer_start_stream(BaseRenderer *iface)
             VideoRenderer_AutoShowWindow(This);
         }
     }
+
+    SetEvent(This->run_event);
 }
 
 static LPWSTR WINAPI VideoRenderer_GetClassWindowStyles(BaseWindow *This, DWORD *pClassStyles, DWORD *pWindowStyles, DWORD *pWindowStylesEx)
@@ -822,6 +826,8 @@ HRESULT VideoRenderer_create(IUnknown *outer, void **out)
         hr = E_FAIL;
         goto fail;
     }
+
+    pVideoRenderer->run_event = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     *out = &pVideoRenderer->renderer.filter.IUnknown_inner;
     return S_OK;
