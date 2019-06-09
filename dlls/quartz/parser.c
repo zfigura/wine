@@ -569,8 +569,6 @@ static HRESULT Parser_OutputPin_query_accept(struct strmbase_pin *pin, const AM_
 {
     Parser_OutputPin *This = (Parser_OutputPin *)pin;
 
-    dump_AM_MEDIA_TYPE(pmt);
-
     return (memcmp(This->pmt, pmt, sizeof(AM_MEDIA_TYPE)) == 0);
 }
 
@@ -664,6 +662,7 @@ static HRESULT WINAPI Parser_PullPin_ReceiveConnection(IPin * iface, IPin * pRec
     HRESULT hr;
 
     TRACE("()\n");
+    strmbase_dump_media_type(pmt);
 
     hr = PullPin_ReceiveConnection(iface, pReceivePin, pmt);
     if (FAILED(hr))

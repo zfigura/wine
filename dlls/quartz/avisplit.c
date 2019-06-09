@@ -859,7 +859,7 @@ static HRESULT AVISplitter_ProcessStreamList(AVISplitterImpl * This, const BYTE 
         amt.subtype.Data1 = ((WAVEFORMATEX *)amt.pbFormat)->wFormatTag;
     }
 
-    dump_AM_MEDIA_TYPE(&amt);
+    strmbase_dump_media_type(&amt);
     TRACE("fSamplesPerSec = %f\n", (double)fSamplesPerSec);
     TRACE("dwSampleSize = %x\n", dwSampleSize);
     TRACE("dwLength = %x\n", dwLength);

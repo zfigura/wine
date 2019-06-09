@@ -460,15 +460,7 @@ static HRESULT MPEGSplitter_init_audio(MPEGSplitterImpl *This, const BYTE *heade
     }
     pamt->subtype.Data1 = format->wFormatTag;
 
-    TRACE("MPEG audio stream detected:\n"
-          "\tLayer %d (%#x)\n"
-          "\tFrequency: %d\n"
-          "\tChannels: %d (%d)\n"
-          "\tBytesPerSec: %d\n",
-          layer, format->wFormatTag, format->nSamplesPerSec,
-          format->nChannels, mode, format->nAvgBytesPerSec);
-
-    dump_AM_MEDIA_TYPE(pamt);
+    strmbase_dump_media_type(pamt);
 
     return S_OK;
 }

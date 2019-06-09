@@ -252,7 +252,7 @@ HRESULT WINAPI PullPin_ReceiveConnection(IPin * iface, IPin * pReceivePin, const
     PullPin *This = impl_PullPin_from_IPin(iface);
 
     TRACE("(%p/%p)->(%p, %p)\n", This, iface, pReceivePin, pmt);
-    dump_AM_MEDIA_TYPE(pmt);
+    strmbase_dump_media_type(pmt);
 
     EnterCriticalSection(&This->pin.filter->csFilter);
     if (!This->pin.peer)

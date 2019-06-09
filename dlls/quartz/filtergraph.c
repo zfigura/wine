@@ -820,6 +820,7 @@ static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface, IPin *ppi
     HRESULT hr;
 
     TRACE("(%p/%p)->(%p, %p, %p)\n", This, iface, ppinIn, ppinOut, pmt);
+    strmbase_dump_media_type(pmt);
 
     /* FIXME: check pins are in graph */
 
@@ -1767,6 +1768,7 @@ static HRESULT WINAPI FilterGraph2_ReconnectEx(IFilterGraph2 *iface, IPin *ppin,
     IFilterGraphImpl *This = impl_from_IFilterGraph2(iface);
 
     TRACE("(%p/%p)->(%p %p): stub !!!\n", This, iface, ppin, pmt);
+    strmbase_dump_media_type(pmt);
 
     return S_OK;
 }
@@ -5403,6 +5405,7 @@ static HRESULT WINAPI GraphConfig_Reconnect(IGraphConfig *iface, IPin *pOutputPi
     IFilterGraphImpl *This = impl_from_IGraphConfig(iface);
 
     FIXME("(%p)->(%p, %p, %p, %p, %p, %x): stub!\n", This, pOutputPin, pInputPin, pmtFirstConnection, pUsingFilter, hAbortEvent, dwFlags);
+    strmbase_dump_media_type(pmtFirstConnection);
     
     return E_NOTIMPL;
 }
