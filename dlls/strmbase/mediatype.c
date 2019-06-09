@@ -21,6 +21,14 @@
 
 #include "strmbase_private.h"
 
+/* don't define those GUIDs here */
+#include "drmexternals.h"
+#include "initguid.h"
+#undef EXTERN_GUID
+#define EXTERN_GUID DEFINE_GUID
+#include "wmcodecdsp.h"
+#include "wmsdkidl.h"
+
 WINE_DEFAULT_DEBUG_CHANNEL(strmbase);
 
 static const struct
@@ -37,6 +45,29 @@ strmbase_guids[] =
 #define OUR_GUID_ENTRY(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) X(name),
 #include "uuids.h"
 
+    /* Windows Media DSP subtypes not defined above. */
+    X(MEDIASUBTYPE_I420),
+
+    /* Windows Media SDK subtypes not defined above. */
+    X(WMMEDIASUBTYPE_M4S2),
+    X(WMMEDIASUBTYPE_MP43),
+    X(WMMEDIASUBTYPE_MP4S),
+    X(WMMEDIASUBTYPE_MPEG2_VIDEO),
+    X(WMMEDIASUBTYPE_MSS1),
+    X(WMMEDIASUBTYPE_MSS2),
+    X(WMMEDIASUBTYPE_P422),
+    X(WMMEDIASUBTYPE_VIDEOIMAGE),
+    X(WMMEDIASUBTYPE_WMAudioV9),
+    X(WMMEDIASUBTYPE_WMAudio_Lossless),
+    X(WMMEDIASUBTYPE_WMSP1),
+    X(WMMEDIASUBTYPE_WMSP2),
+    X(WMMEDIASUBTYPE_WMV1),
+    X(WMMEDIASUBTYPE_WMV2),
+    X(WMMEDIASUBTYPE_WMV3),
+    X(WMMEDIASUBTYPE_WMVA),
+    X(WMMEDIASUBTYPE_WMVP),
+    X(WMMEDIASUBTYPE_WVC1),
+    X(WMMEDIASUBTYPE_WVP2),
 #undef X
 };
 
