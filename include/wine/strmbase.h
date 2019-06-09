@@ -160,7 +160,6 @@ struct strmbase_filter
     CRITICAL_SECTION csFilter;
 
     FILTER_STATE state;
-    REFERENCE_TIME rtStreamStart;
     IReferenceClock * pClock;
     FILTER_INFO filterInfo;
     CLSID clsid;
@@ -543,6 +542,7 @@ typedef struct BaseRendererTag
      * to immediately unblock the streaming thread. */
     HANDLE flush_event;
     IMediaSample *pMediaSample;
+    REFERENCE_TIME stream_start;
 
     IQualityControl *pQSink;
     struct QualityControlImpl *qcimpl;

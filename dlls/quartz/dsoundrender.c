@@ -161,10 +161,10 @@ static HRESULT DSoundRender_GetWritePos(DSoundRenderImpl *This, DWORD *ret_write
     if (This->renderer.filter.pClock == &This->IReferenceClock_iface) {
         max_lag = min_lag;
         cur = This->play_time + time_from_pos(This, playpos);
-        cur -= This->renderer.filter.rtStreamStart;
+        cur -= This->renderer.stream_start;
     } else if (This->renderer.filter.pClock) {
         IReferenceClock_GetTime(This->renderer.filter.pClock, &cur);
-        cur -= This->renderer.filter.rtStreamStart;
+        cur -= This->renderer.stream_start;
     } else
         write_at = -1;
 
