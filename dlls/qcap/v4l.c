@@ -208,35 +208,28 @@ HRESULT qcap_driver_set_format(Capture *device, AM_MEDIA_TYPE *mt)
     return S_OK;
 }
 
-HRESULT qcap_driver_get_format(const Capture *capBox, AM_MEDIA_TYPE ** mT)
+HRESULT qcap_driver_get_format(const Capture *capBox, AM_MEDIA_TYPE *mt)
 {
     VIDEOINFOHEADER *vi;
 
-    mT[0] = CoTaskMemAlloc(sizeof(AM_MEDIA_TYPE));
-    if (!mT[0])
+    if (!(vi = CoTaskMemAlloc(sizeof(VIDEOINFOHEADER))))
         return E_OUTOFMEMORY;
-    vi = CoTaskMemAlloc(sizeof(VIDEOINFOHEADER));
-    mT[0]->cbFormat = sizeof(VIDEOINFOHEADER);
-    if (!vi)
-    {
-        CoTaskMemFree(mT[0]);
-        mT[0] = NULL;
-        return E_OUTOFMEMORY;
-    }
-    mT[0]->majortype = MEDIATYPE_Video;
-    mT[0]->subtype = MEDIASUBTYPE_RGB24;
-    mT[0]->formattype = FORMAT_VideoInfo;
-    mT[0]->bFixedSizeSamples = TRUE;
-    mT[0]->bTemporalCompression = FALSE;
-    mT[0]->pUnk = NULL;
-    mT[0]->lSampleSize = capBox->outputwidth * capBox->outputheight * capBox->bitDepth / 8;
-    TRACE("Output format: %dx%d - %d bits = %u KB\n", capBox->outputwidth,
-          capBox->outputheight, capBox->bitDepth, mT[0]->lSampleSize/1024);
+
+    mt->majortype = MEDIATYPE_Video;
+    mt->subtype = MEDIASUBTYPE_RGB24;
+    mt->formattype = FORMAT_VideoInfo;
+    mt->bFixedSizeSamples = TRUE;
+    mt->bTemporalCompression = FALSE;
+    mt->pUnk = NULL;
+    mt->lSampleSize = capBox->outputwidth * capBox->outputheight * capBox->bitDepth / 8;
+    mt->cbFormat = sizeof(VIDEOINFOHEADER);
+    mt->pbFormat = (BYTE *)vi;
+
     vi->rcSource.left = 0; vi->rcSource.top = 0;
     vi->rcTarget.left = 0; vi->rcTarget.top = 0;
     vi->rcSource.right = capBox->width; vi->rcSource.bottom = capBox->height;
     vi->rcTarget.right = capBox->outputwidth; vi->rcTarget.bottom = capBox->outputheight;
-    vi->dwBitRate = capBox->fps * mT[0]->lSampleSize;
+    vi->dwBitRate = capBox->fps * mt->lSampleSize;
     vi->dwBitErrorRate = 0;
     vi->AvgTimePerFrame = (LONGLONG)10000000.0 / (LONGLONG)capBox->fps;
     vi->bmiHeader.biSize = 40;
@@ -245,11 +238,10 @@ HRESULT qcap_driver_get_format(const Capture *capBox, AM_MEDIA_TYPE ** mT)
     vi->bmiHeader.biPlanes = 1;
     vi->bmiHeader.biBitCount = 24;
     vi->bmiHeader.biCompression = BI_RGB;
-    vi->bmiHeader.biSizeImage = mT[0]->lSampleSize;
+    vi->bmiHeader.biSizeImage = mt->lSampleSize;
     vi->bmiHeader.biClrUsed = vi->bmiHeader.biClrImportant = 0;
     vi->bmiHeader.biXPelsPerMeter = 100;
     vi->bmiHeader.biYPelsPerMeter = 100;
-    mT[0]->pbFormat = (void *)vi;
     return S_OK;
 }
 
@@ -685,7 +677,7 @@ HRESULT qcap_driver_set_format(Capture *capBox, AM_MEDIA_TYPE * mT)
     FAIL_WITH_ERR;
 }
 
-HRESULT qcap_driver_get_format(const Capture *capBox, AM_MEDIA_TYPE ** mT)
+HRESULT qcap_driver_get_format(const Capture *device, AM_MEDIA_TYPE *mt)
 {
     FAIL_WITH_ERR;
 }

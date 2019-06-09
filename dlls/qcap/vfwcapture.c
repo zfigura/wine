@@ -244,16 +244,19 @@ AMStreamConfig_SetFormat(IAMStreamConfig *iface, AM_MEDIA_TYPE *pmt)
     return hr;
 }
 
-static HRESULT WINAPI
-AMStreamConfig_GetFormat( IAMStreamConfig *iface, AM_MEDIA_TYPE **pmt )
+static HRESULT WINAPI AMStreamConfig_GetFormat(IAMStreamConfig *iface, AM_MEDIA_TYPE **mt)
 {
-    VfwCapture *This = impl_from_IAMStreamConfig(iface);
+    VfwCapture *filter = impl_from_IAMStreamConfig(iface);
     HRESULT hr;
 
-    TRACE("%p -> (%p)\n", iface, pmt);
-    hr = qcap_driver_get_format(This->driver_info, pmt);
+    TRACE("filter %p, mt %p.\n", filter, mt);
+
+    if (!(*mt = CoTaskMemAlloc(sizeof(**mt))))
+        return E_OUTOFMEMORY;
+
+    hr = qcap_driver_get_format(filter->driver_info, *mt);
     if (SUCCEEDED(hr))
-        strmbase_dump_media_type(*pmt);
+        strmbase_dump_media_type(*mt);
     return hr;
 }
 
@@ -521,23 +524,16 @@ static HRESULT source_query_accept(struct strmbase_pin *pin, const AM_MEDIA_TYPE
     return qcap_driver_check_format(filter->driver_info, mt);
 }
 
-static HRESULT WINAPI VfwPin_GetMediaType(struct strmbase_pin *pin, int iPosition, AM_MEDIA_TYPE *pmt)
+static HRESULT WINAPI VfwPin_GetMediaType(struct strmbase_pin *pin, int iPosition, AM_MEDIA_TYPE *mt)
 {
     VfwCapture *filter = impl_from_strmbase_pin(pin);
-    AM_MEDIA_TYPE *vfw_pmt;
-    HRESULT hr;
 
     if (iPosition < 0)
         return E_INVALIDARG;
     if (iPosition > 0)
         return VFW_S_NO_MORE_ITEMS;
 
-    hr = qcap_driver_get_format(filter->driver_info, &vfw_pmt);
-    if (SUCCEEDED(hr)) {
-        CopyMediaType(pmt, vfw_pmt);
-        DeleteMediaType(vfw_pmt);
-    }
-    return hr;
+    return qcap_driver_get_format(filter->driver_info, mt);
 }
 
 static HRESULT WINAPI VfwPin_DecideBufferSize(struct strmbase_source *iface,
@@ -594,13 +590,13 @@ static HRESULT WINAPI
 VfwPin_EnumMediaTypes(IPin * iface, IEnumMediaTypes ** ppEnum)
 {
     VfwCapture *filter = impl_from_IPin(iface);
-    AM_MEDIA_TYPE *pmt;
+    AM_MEDIA_TYPE mt;
     HRESULT hr;
 
-    hr = qcap_driver_get_format(filter->driver_info, &pmt);
-    if (SUCCEEDED(hr)) {
+    if (SUCCEEDED(hr = qcap_driver_get_format(filter->driver_info, &mt)))
+    {
         hr = BasePinImpl_EnumMediaTypes(iface, ppEnum);
-        DeleteMediaType(pmt);
+        FreeMediaType(&mt);
     }
     return hr;
 }
