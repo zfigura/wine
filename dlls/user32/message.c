@@ -3836,6 +3836,12 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetMessageW( MSG *msg, HWND hwnd, UINT first, UINT
     HANDLE server_queue = get_server_queue_handle();
     unsigned int mask = QS_POSTMESSAGE | QS_SENDMESSAGE;  /* Always selected */
 
+    if (hwnd && !IsWindow( hwnd ))
+    {
+        SetLastError( ERROR_INVALID_WINDOW_HANDLE );
+        return -1;
+    }
+
     USER_CheckNotLock();
     check_for_driver_events( 0 );
 
@@ -3866,7 +3872,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetMessageW( MSG *msg, HWND hwnd, UINT first, UINT
 BOOL WINAPI DECLSPEC_HOTPATCH GetMessageA( MSG *msg, HWND hwnd, UINT first, UINT last )
 {
     if (get_pending_wmchar( msg, first, last, TRUE )) return TRUE;
-    GetMessageW( msg, hwnd, first, last );
+    if (GetMessageW( msg, hwnd, first, last ) == -1) return -1;
     map_wparam_WtoA( msg, TRUE );
     return (msg->message != WM_QUIT);
 }

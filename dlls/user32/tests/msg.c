@@ -17692,6 +17692,17 @@ static void test_SendMessage_pump(void)
     DestroyWindow(hwnd);
 }
 
+static void test_invalid_window(void)
+{
+    MSG msg;
+    BOOL ret;
+
+    SetLastError(0xdeadbeef);
+    ret = GetMessageA(&msg, (HWND)0xdeadbeef, 0, 0);
+    ok(ret == -1, "wrong ret %d\n", ret);
+    ok(GetLastError() == ERROR_INVALID_WINDOW_HANDLE, "wrong error %u\n", GetLastError());
+}
+
 static void init_funcs(void)
 {
     HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
@@ -17817,6 +17828,7 @@ START_TEST(msg)
     test_notify_message();
     test_SetActiveWindow();
     test_restore_messages();
+    test_invalid_window();
 
     if (!pTrackMouseEvent)
         win_skip("TrackMouseEvent is not available\n");
