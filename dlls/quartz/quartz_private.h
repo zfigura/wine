@@ -68,8 +68,8 @@ static inline const char *debugstr_time(REFERENCE_TIME time)
 #define BYTES_FROM_MEDIATIME(time) SEC_FROM_MEDIATIME(time)
 #define MSEC_FROM_MEDIATIME(time) ((time) / 10000)
 
-HRESULT FilterGraph_create(IUnknown *pUnkOuter, LPVOID *ppObj) DECLSPEC_HIDDEN;
-HRESULT FilterGraphNoThread_create(IUnknown *pUnkOuter, LPVOID *ppObj) DECLSPEC_HIDDEN;
+HRESULT filter_graph_create(IUnknown *outer, void **out) DECLSPEC_HIDDEN;
+HRESULT filter_graph_no_thread_create(IUnknown *outer, void **out) DECLSPEC_HIDDEN;
 HRESULT FilterMapper2_create(IUnknown *pUnkOuter, LPVOID *ppObj) DECLSPEC_HIDDEN;
 HRESULT FilterMapper_create(IUnknown *pUnkOuter, LPVOID *ppObj) DECLSPEC_HIDDEN;
 HRESULT AsyncReader_create(IUnknown * pUnkOuter, LPVOID * ppv) DECLSPEC_HIDDEN;
