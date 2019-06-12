@@ -31,6 +31,7 @@
 #include "gst_cbs.h"
 
 #include "uuids.h"
+#include "wmsdkidl.h"
 #include "mmreg.h"
 #include "windef.h"
 #include "winbase.h"
@@ -46,9 +47,6 @@
 
 #include "wine/unicode.h"
 #include "wine/debug.h"
-
-#include "initguid.h"
-DEFINE_GUID(WMMEDIASUBTYPE_MP3, 0x00000055, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71);
 
 WINE_DEFAULT_DEBUG_CHANNEL(gstreamer);
 
