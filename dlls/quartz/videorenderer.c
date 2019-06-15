@@ -57,6 +57,8 @@ typedef struct VideoRendererImpl
 
     /* The first sample blocks in Receive() until the filter is running. */
     HANDLE run_event;
+
+    DWORD saved_style;
 } VideoRendererImpl;
 
 static inline VideoRendererImpl *impl_from_BaseWindow(BaseWindow *iface)
@@ -397,17 +399,6 @@ static void video_renderer_start_stream(BaseRenderer *iface)
     SetEvent(This->run_event);
 }
 
-static LPWSTR WINAPI VideoRenderer_GetClassWindowStyles(BaseWindow *This, DWORD *pClassStyles, DWORD *pWindowStyles, DWORD *pWindowStylesEx)
-{
-    static const WCHAR classnameW[] = { 'W','i','n','e',' ','A','c','t','i','v','e','M','o','v','i','e',' ','C','l','a','s','s',0 };
-
-    *pClassStyles = 0;
-    *pWindowStyles = WS_SIZEBOX;
-    *pWindowStylesEx = 0;
-
-    return (LPWSTR)classnameW;
-}
-
 static RECT WINAPI VideoRenderer_GetDefaultRect(BaseWindow *iface)
 {
     VideoRendererImpl *This = impl_from_BaseWindow(iface);
@@ -446,7 +437,6 @@ static const BaseRendererFuncTable BaseFuncTable =
 };
 
 static const BaseWindowFuncTable renderer_BaseWindowFuncTable = {
-    VideoRenderer_GetClassWindowStyles,
     VideoRenderer_GetDefaultRect,
     VideoRenderer_OnSize
 };
@@ -679,7 +669,7 @@ static HRESULT WINAPI VideoWindow_put_FullScreenMode(IVideoWindow *iface,
     FIXME("(%p/%p)->(%d): stub !!!\n", This, iface, FullScreenMode);
 
     if (FullScreenMode) {
-        This->baseControlWindow.baseWindow.WindowStyles = GetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE);
+        This->saved_style = GetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE);
         ShowWindow(This->baseControlWindow.baseWindow.hWnd, SW_HIDE);
         SetParent(This->baseControlWindow.baseWindow.hWnd, 0);
         SetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE, WS_POPUP);
@@ -689,7 +679,7 @@ static HRESULT WINAPI VideoWindow_put_FullScreenMode(IVideoWindow *iface,
     } else {
         ShowWindow(This->baseControlWindow.baseWindow.hWnd, SW_HIDE);
         SetParent(This->baseControlWindow.baseWindow.hWnd, This->baseControlWindow.hwndOwner);
-        SetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE, This->baseControlWindow.baseWindow.WindowStyles);
+        SetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE, This->saved_style);
         GetClientRect(This->baseControlWindow.baseWindow.hWnd, &This->DestRect);
         SetWindowPos(This->baseControlWindow.baseWindow.hWnd,0,This->DestRect.left,This->DestRect.top,This->DestRect.right,This->DestRect.bottom,SWP_NOZORDER|SWP_SHOWWINDOW);
         This->WindowPos = This->DestRect;
