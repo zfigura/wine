@@ -1441,7 +1441,7 @@ static void test_video_window_style(IVideoWindow *window, HWND hwnd, HWND our_hw
     style = GetWindowLongA(hwnd, GWL_STYLE);
     todo_wine ok(style == (WS_CLIPSIBLINGS | WS_OVERLAPPEDWINDOW), "Got style %#x.\n", style);
 
-    todo_wine ok(GetActiveWindow() == our_hwnd, "Got active window %p.\n", GetActiveWindow());
+    ok(GetActiveWindow() == our_hwnd, "Got active window %p.\n", GetActiveWindow());
 
     hr = IVideoWindow_get_WindowStyleEx(window, &style);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
@@ -1490,7 +1490,7 @@ static void test_video_window_state(IVideoWindow *window, HWND hwnd, HWND our_hw
     ok(IsWindowVisible(hwnd), "Window should be visible.\n");
     ok(!IsIconic(hwnd), "Window should not be minimized.\n");
     ok(!IsZoomed(hwnd), "Window should not be maximized.\n");
-    todo_wine ok(GetActiveWindow() == our_hwnd, "Got active window %p.\n", GetActiveWindow());
+    ok(GetActiveWindow() == our_hwnd, "Got active window %p.\n", GetActiveWindow());
 
     hr = IVideoWindow_put_WindowState(window, SW_MINIMIZE);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
@@ -1505,7 +1505,7 @@ static void test_video_window_state(IVideoWindow *window, HWND hwnd, HWND our_hw
     ok(IsWindowVisible(hwnd), "Window should be visible.\n");
     ok(IsIconic(hwnd), "Window should be minimized.\n");
     ok(!IsZoomed(hwnd), "Window should not be maximized.\n");
-    todo_wine ok(GetActiveWindow() == our_hwnd, "Got active window %p.\n", GetActiveWindow());
+    ok(GetActiveWindow() == our_hwnd, "Got active window %p.\n", GetActiveWindow());
 
     hr = IVideoWindow_put_WindowState(window, SW_RESTORE);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
