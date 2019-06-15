@@ -1597,14 +1597,14 @@ static void test_video_window_state(IVideoWindow *window, HWND hwnd, HWND our_hw
     ok(GetActiveWindow() == hwnd, "Got active window %p.\n", GetActiveWindow());
     ok(GetFocus() == hwnd, "Got focus window %p.\n", GetFocus());
     ok(GetForegroundWindow() == hwnd, "Got foreground window %p.\n", GetForegroundWindow());
-    todo_wine ok(GetTopWindow(NULL) == hwnd, "Got top window %p.\n", GetTopWindow(NULL));
+    ok(GetTopWindow(NULL) == hwnd, "Got top window %p.\n", GetTopWindow(NULL));
 
     SetWindowPos(our_hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     hr = IVideoWindow_SetWindowForeground(window, OAFALSE);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-    todo_wine ok(GetActiveWindow() == our_hwnd, "Got active window %p.\n", GetActiveWindow());
-    todo_wine ok(GetFocus() == our_hwnd, "Got focus window %p.\n", GetFocus());
-    todo_wine ok(GetForegroundWindow() == our_hwnd, "Got foreground window %p.\n", GetForegroundWindow());
+    ok(GetActiveWindow() == our_hwnd, "Got active window %p.\n", GetActiveWindow());
+    ok(GetFocus() == our_hwnd, "Got focus window %p.\n", GetFocus());
+    ok(GetForegroundWindow() == our_hwnd, "Got foreground window %p.\n", GetForegroundWindow());
     ok(GetTopWindow(NULL) == hwnd, "Got top window %p.\n", GetTopWindow(NULL));
 }
 
