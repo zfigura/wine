@@ -1485,7 +1485,7 @@ static void test_video_window_state(IVideoWindow *window, HWND hwnd, HWND our_hw
     todo_wine ok(state == SW_SHOW, "Got state %d.\n", state);
 
     hr = IVideoWindow_get_Visible(window, &state);
-    todo_wine ok(state == OATRUE, "Got state %d.\n", state);
+    ok(state == OATRUE, "Got state %d.\n", state);
 
     ok(IsWindowVisible(hwnd), "Window should be visible.\n");
     ok(!IsIconic(hwnd), "Window should not be minimized.\n");
@@ -1500,7 +1500,7 @@ static void test_video_window_state(IVideoWindow *window, HWND hwnd, HWND our_hw
     todo_wine ok(state == SW_MINIMIZE, "Got state %d.\n", state);
 
     hr = IVideoWindow_get_Visible(window, &state);
-    todo_wine ok(state == OATRUE, "Got state %d.\n", state);
+    ok(state == OATRUE, "Got state %d.\n", state);
 
     ok(IsWindowVisible(hwnd), "Window should be visible.\n");
     ok(IsIconic(hwnd), "Window should be minimized.\n");
@@ -1515,7 +1515,7 @@ static void test_video_window_state(IVideoWindow *window, HWND hwnd, HWND our_hw
     todo_wine ok(state == SW_SHOW, "Got state %d.\n", state);
 
     hr = IVideoWindow_get_Visible(window, &state);
-    todo_wine ok(state == OATRUE, "Got state %d.\n", state);
+    ok(state == OATRUE, "Got state %d.\n", state);
 
     ok(IsWindowVisible(hwnd), "Window should be visible.\n");
     ok(!IsIconic(hwnd), "Window should not be minimized.\n");
@@ -1563,7 +1563,7 @@ static void test_video_window_state(IVideoWindow *window, HWND hwnd, HWND our_hw
     todo_wine ok(state == SW_SHOW, "Got state %d.\n", state);
 
     hr = IVideoWindow_get_Visible(window, &state);
-    todo_wine ok(state == OATRUE, "Got state %d.\n", state);
+    ok(state == OATRUE, "Got state %d.\n", state);
 
     ok(IsWindowVisible(hwnd), "Window should be visible.\n");
     ok(!IsIconic(hwnd), "Window should not be minimized.\n");
@@ -1786,7 +1786,7 @@ static void test_video_window_owner(IVideoWindow *window, HWND hwnd, HWND our_hw
 
     hr = IVideoWindow_get_Visible(window, &state);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-    todo_wine ok(state == OATRUE, "Got state %d.\n", state);
+    ok(state == OATRUE, "Got state %d.\n", state);
 }
 
 static void test_video_window_messages(IVideoWindow *window, HWND hwnd, HWND our_hwnd)
@@ -1896,14 +1896,14 @@ static void test_video_window_autoshow(IVideoWindow *window, IFilterGraph2 *grap
 
     hr = IVideoWindow_get_Visible(window, &l);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-    todo_wine ok(l == OATRUE, "Got %d.\n", l);
+    ok(l == OATRUE, "Got %d.\n", l);
 
     hr = IMediaControl_Stop(control);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = IVideoWindow_get_Visible(window, &l);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-    todo_wine ok(l == OATRUE, "Got %d.\n", l);
+    ok(l == OATRUE, "Got %d.\n", l);
 
     hr = IVideoWindow_put_AutoShow(window, OAFALSE);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
