@@ -2258,6 +2258,9 @@ static HRESULT vmr_create(IUnknown *outer, void **out, const CLSID *clsid)
     if (FAILED(hr))
         goto fail;
 
+    if (FAILED(BaseWindowImpl_PrepareWindow(&pVMR->baseControlWindow.baseWindow)))
+        goto fail;
+
     hr = strmbase_video_init(&pVMR->baseControlVideo, &pVMR->renderer.filter,
             &pVMR->renderer.filter.csFilter, &pVMR->renderer.sink.pin,
             &renderer_BaseControlVideoFuncTable);
@@ -2592,16 +2595,13 @@ static UINT d3d9_adapter_from_hwnd(IDirect3D9 *d3d9, HWND hwnd, HMONITOR *mon_ou
     return d3d9_adapter;
 }
 
-static BOOL CreateRenderingWindow(VMR9DefaultAllocatorPresenterImpl *This, VMR9AllocationInfo *info, DWORD *numbuffers)
+static BOOL create_device(VMR9DefaultAllocatorPresenterImpl *This, VMR9AllocationInfo *info, DWORD *numbuffers)
 {
     D3DPRESENT_PARAMETERS d3dpp;
     DWORD d3d9_adapter;
     HRESULT hr;
 
     TRACE("(%p)->()\n", This);
-
-    if (FAILED(BaseWindowImpl_PrepareWindow(&This->pVMR9->baseControlWindow.baseWindow)))
-        return FALSE;
 
     /* Obtain a monitor and d3d9 device */
     d3d9_adapter = d3d9_adapter_from_hwnd(This->d3d9_ptr, This->pVMR9->baseControlWindow.baseWindow.hWnd, &This->hMon);
@@ -2618,7 +2618,6 @@ static BOOL CreateRenderingWindow(VMR9DefaultAllocatorPresenterImpl *This, VMR9A
     if (FAILED(hr))
     {
         ERR("Could not create device: %08x\n", hr);
-        BaseWindowImpl_DoneWithWindow(&This->pVMR9->baseControlWindow.baseWindow);
         return FALSE;
     }
     IVMRSurfaceAllocatorNotify9_SetD3DDevice(This->SurfaceAllocatorNotify, This->d3d9_dev, This->hMon);
@@ -2640,7 +2639,6 @@ static BOOL CreateRenderingWindow(VMR9DefaultAllocatorPresenterImpl *This, VMR9A
     if (FAILED(hr))
     {
         IVMRSurfaceAllocatorEx9_TerminateDevice(This->pVMR9->allocator, This->pVMR9->cookie);
-        BaseWindowImpl_DoneWithWindow(&This->pVMR9->baseControlWindow.baseWindow);
         return FALSE;
     }
 
@@ -2661,9 +2659,9 @@ static HRESULT WINAPI VMR9_SurfaceAllocator_InitializeDevice(IVMRSurfaceAllocato
 
     This->info = *allocinfo;
 
-    if (!CreateRenderingWindow(This, allocinfo, numbuffers))
+    if (!create_device(This, allocinfo, numbuffers))
     {
-        ERR("Failed to create rendering window, expect no output!\n");
+        ERR("Failed to create device; expect no output!\n");
         return VFW_E_WRONG_STATE;
     }
 
@@ -2672,15 +2670,6 @@ static HRESULT WINAPI VMR9_SurfaceAllocator_InitializeDevice(IVMRSurfaceAllocato
 
 static HRESULT WINAPI VMR9_SurfaceAllocator_TerminateDevice(IVMRSurfaceAllocatorEx9 *iface, DWORD_PTR id)
 {
-    VMR9DefaultAllocatorPresenterImpl *This = impl_from_IVMRSurfaceAllocatorEx9(iface);
-
-    if (!This->pVMR9->baseControlWindow.baseWindow.hWnd)
-    {
-        return S_OK;
-    }
-
-    BaseWindowImpl_DoneWithWindow(&This->pVMR9->baseControlWindow.baseWindow);
-
     return S_OK;
 }
 
