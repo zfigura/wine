@@ -357,32 +357,6 @@ VOID WINAPI OutputQueue_EOS(OutputQueue *pOutputQueue);
 VOID WINAPI OutputQueue_SendAnyway(OutputQueue *pOutputQueue);
 DWORD WINAPI OutputQueueImpl_ThreadProc(OutputQueue *pOutputQueue);
 
-typedef struct tagBaseWindow
-{
-	HWND hWnd;
-	LONG Width;
-	LONG Height;
-
-	const struct BaseWindowFuncTable* pFuncsTable;
-} BaseWindow;
-
-typedef RECT (WINAPI *BaseWindow_GetDefaultRect)(BaseWindow *This);
-typedef BOOL (WINAPI *BaseWindow_OnSize)(BaseWindow *This, LONG Height, LONG Width);
-
-typedef struct BaseWindowFuncTable
-{
-	/* Required */
-	BaseWindow_GetDefaultRect pfnGetDefaultRect;
-	/* Optional, WinProc Related */
-	BaseWindow_OnSize pfnOnSize;
-} BaseWindowFuncTable;
-
-HRESULT WINAPI BaseWindow_Init(BaseWindow *pBaseWindow, const BaseWindowFuncTable* pFuncsTable);
-HRESULT WINAPI BaseWindow_Destroy(BaseWindow *pBaseWindow);
-
-HRESULT WINAPI BaseWindowImpl_PrepareWindow(BaseWindow *This);
-HRESULT WINAPI BaseWindowImpl_DoneWithWindow(BaseWindow *This);
-
 enum strmbase_type_id
 {
     IBasicAudio_tid,
@@ -396,24 +370,33 @@ enum strmbase_type_id
 
 HRESULT strmbase_get_typeinfo(enum strmbase_type_id tid, ITypeInfo **typeinfo);
 
-#ifdef __IVideoWindow_FWD_DEFINED__
-typedef struct tagBaseControlWindow
-{
-	BaseWindow baseWindow;
-	IVideoWindow IVideoWindow_iface;
+struct strmbase_window;
 
-	BOOL AutoShow;
-	HWND hwndDrain;
-	HWND hwndOwner;
-	struct strmbase_filter *pFilter;
-	struct strmbase_pin *pPin;
+typedef struct BaseWindowFuncTable
+{
+    RECT (WINAPI *window_get_default_rect)(struct strmbase_window *window);
+    BOOL (WINAPI *window_resize)(struct strmbase_window *window, LONG width, LONG height);
+} BaseWindowFuncTable;
+
+#ifdef __IVideoWindow_FWD_DEFINED__
+typedef struct strmbase_window
+{
+    IVideoWindow IVideoWindow_iface;
+
+    const struct BaseWindowFuncTable *func_table;
+
+    HWND hwnd;
+    LONG width, height;
+
+    BOOL AutoShow;
+    HWND hwndDrain, hwndOwner;
+    struct strmbase_filter *pFilter;
+    struct strmbase_pin *pPin;
 } BaseControlWindow;
 
 HRESULT WINAPI strmbase_window_init(BaseControlWindow *window, const IVideoWindowVtbl *vtbl,
         struct strmbase_filter *filter, struct strmbase_pin *pin, const BaseWindowFuncTable *func_table);
 HRESULT WINAPI BaseControlWindow_Destroy(BaseControlWindow *pControlWindow);
-
-BOOL WINAPI BaseControlWindowImpl_PossiblyEatMessage(BaseWindow *This, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 HRESULT WINAPI BaseControlWindowImpl_QueryInterface(IVideoWindow *iface, REFIID iid, void **out);
 ULONG WINAPI BaseControlWindowImpl_AddRef(IVideoWindow *iface);

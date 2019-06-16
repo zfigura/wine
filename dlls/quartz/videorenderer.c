@@ -61,9 +61,9 @@ typedef struct VideoRendererImpl
     DWORD saved_style;
 } VideoRendererImpl;
 
-static inline VideoRendererImpl *impl_from_BaseWindow(BaseWindow *iface)
+static inline VideoRendererImpl *impl_from_BaseControlWindow(BaseControlWindow *iface)
 {
-    return CONTAINING_RECORD(iface, VideoRendererImpl, baseControlWindow.baseWindow);
+    return CONTAINING_RECORD(iface, VideoRendererImpl, baseControlWindow);
 }
 
 static inline VideoRendererImpl *impl_from_BaseRenderer(BaseRenderer *iface)
@@ -90,8 +90,8 @@ static void VideoRenderer_AutoShowWindow(VideoRendererImpl *This)
 {
     if (!This->init && (!This->WindowPos.right || !This->WindowPos.top))
     {
-        DWORD style = GetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE);
-        DWORD style_ex = GetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_EXSTYLE);
+        DWORD style = GetWindowLongW(This->baseControlWindow.hwnd, GWL_STYLE);
+        DWORD style_ex = GetWindowLongW(This->baseControlWindow.hwnd, GWL_EXSTYLE);
 
         if (!This->WindowPos.right)
         {
@@ -123,20 +123,20 @@ static void VideoRenderer_AutoShowWindow(VideoRendererImpl *This)
         AdjustWindowRectEx(&This->WindowPos, style, FALSE, style_ex);
 
         TRACE("WindowPos: %s\n", wine_dbgstr_rect(&This->WindowPos));
-        SetWindowPos(This->baseControlWindow.baseWindow.hWnd, NULL,
+        SetWindowPos(This->baseControlWindow.hwnd, NULL,
             This->WindowPos.left,
             This->WindowPos.top,
             This->WindowPos.right - This->WindowPos.left,
             This->WindowPos.bottom - This->WindowPos.top,
             SWP_NOZORDER|SWP_NOMOVE|SWP_DEFERERASE);
 
-        GetClientRect(This->baseControlWindow.baseWindow.hWnd, &This->DestRect);
+        GetClientRect(This->baseControlWindow.hwnd, &This->DestRect);
     }
     else if (!This->init)
         This->DestRect = This->WindowPos;
     This->init = TRUE;
     if (This->baseControlWindow.AutoShow)
-        ShowWindow(This->baseControlWindow.baseWindow.hWnd, SW_SHOW);
+        ShowWindow(This->baseControlWindow.hwnd, SW_SHOW);
 }
 
 static DWORD VideoRenderer_SendSampleData(VideoRendererImpl* This, LPBYTE data, DWORD size)
@@ -171,12 +171,12 @@ static DWORD VideoRenderer_SendSampleData(VideoRendererImpl* This, LPBYTE data, 
     TRACE("Src Rect: %s\n", wine_dbgstr_rect(&This->SourceRect));
     TRACE("Dst Rect: %s\n", wine_dbgstr_rect(&This->DestRect));
 
-    dc = GetDC(This->baseControlWindow.baseWindow.hWnd);
+    dc = GetDC(This->baseControlWindow.hwnd);
     StretchDIBits(dc, This->DestRect.left, This->DestRect.top, This->DestRect.right -This->DestRect.left,
                   This->DestRect.bottom - This->DestRect.top, This->SourceRect.left, This->SourceRect.top,
                   This->SourceRect.right - This->SourceRect.left, This->SourceRect.bottom - This->SourceRect.top,
                   data, (BITMAPINFO *)bmiHeader, DIB_RGB_COLORS, SRCCOPY);
-    ReleaseDC(This->baseControlWindow.baseWindow.hWnd, dc);
+    ReleaseDC(This->baseControlWindow.hwnd, dc);
 
     return S_OK;
 }
@@ -359,7 +359,7 @@ static void video_renderer_stop_stream(BaseRenderer *iface)
     SetEvent(This->hEvent);
     if (This->baseControlWindow.AutoShow)
         /* Black it out */
-        RedrawWindow(This->baseControlWindow.baseWindow.hWnd, NULL, NULL, RDW_INVALIDATE|RDW_ERASE);
+        RedrawWindow(This->baseControlWindow.hwnd, NULL, NULL, RDW_INVALIDATE|RDW_ERASE);
     ResetEvent(This->run_event);
 }
 
@@ -382,9 +382,9 @@ static void video_renderer_start_stream(BaseRenderer *iface)
     SetEvent(This->run_event);
 }
 
-static RECT WINAPI VideoRenderer_GetDefaultRect(BaseWindow *iface)
+static RECT WINAPI video_renderer_get_default_rect(BaseControlWindow *iface)
 {
-    VideoRendererImpl *This = impl_from_BaseWindow(iface);
+    VideoRendererImpl *This = impl_from_BaseControlWindow(iface);
     static RECT defRect;
 
     SetRect(&defRect, 0, 0, This->VideoWidth, This->VideoHeight);
@@ -392,12 +392,12 @@ static RECT WINAPI VideoRenderer_GetDefaultRect(BaseWindow *iface)
     return defRect;
 }
 
-static BOOL WINAPI VideoRenderer_OnSize(BaseWindow *iface, LONG Width, LONG Height)
+static BOOL WINAPI video_renderer_resize(BaseControlWindow *iface, LONG Width, LONG Height)
 {
-    VideoRendererImpl *This = impl_from_BaseWindow(iface);
+    VideoRendererImpl *This = impl_from_BaseControlWindow(iface);
 
     TRACE("WM_SIZE %d %d\n", Width, Height);
-    GetClientRect(iface->hWnd, &This->DestRect);
+    GetClientRect(iface->hwnd, &This->DestRect);
     TRACE("WM_SIZING: DestRect=(%d,%d),(%d,%d)\n",
         This->DestRect.left,
         This->DestRect.top,
@@ -421,8 +421,8 @@ static const BaseRendererFuncTable BaseFuncTable =
 };
 
 static const BaseWindowFuncTable renderer_BaseWindowFuncTable = {
-    VideoRenderer_GetDefaultRect,
-    VideoRenderer_OnSize
+    .window_get_default_rect = video_renderer_get_default_rect,
+    .window_resize = video_renderer_resize,
 };
 
 static HRESULT WINAPI VideoRenderer_GetSourceRect(BaseControlVideo* iface, RECT *pSourceRect)
@@ -550,7 +550,7 @@ static HRESULT WINAPI VideoRenderer_SetDefaultTargetRect(BaseControlVideo* iface
     VideoRendererImpl *This = impl_from_BaseControlVideo(iface);
     RECT rect;
 
-    if (!GetClientRect(This->baseControlWindow.baseWindow.hWnd, &rect))
+    if (!GetClientRect(This->baseControlWindow.hwnd, &rect))
         return E_FAIL;
 
     SetRect(&This->DestRect, 0, 0, rect.right, rect.bottom);
@@ -653,19 +653,19 @@ static HRESULT WINAPI VideoWindow_put_FullScreenMode(IVideoWindow *iface,
     FIXME("(%p/%p)->(%d): stub !!!\n", This, iface, FullScreenMode);
 
     if (FullScreenMode) {
-        This->saved_style = GetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE);
-        ShowWindow(This->baseControlWindow.baseWindow.hWnd, SW_HIDE);
-        SetParent(This->baseControlWindow.baseWindow.hWnd, 0);
-        SetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE, WS_POPUP);
-        SetWindowPos(This->baseControlWindow.baseWindow.hWnd,HWND_TOP,0,0,GetSystemMetrics(SM_CXSCREEN),GetSystemMetrics(SM_CYSCREEN),SWP_SHOWWINDOW);
-        GetWindowRect(This->baseControlWindow.baseWindow.hWnd, &This->DestRect);
+        This->saved_style = GetWindowLongW(This->baseControlWindow.hwnd, GWL_STYLE);
+        ShowWindow(This->baseControlWindow.hwnd, SW_HIDE);
+        SetParent(This->baseControlWindow.hwnd, 0);
+        SetWindowLongW(This->baseControlWindow.hwnd, GWL_STYLE, WS_POPUP);
+        SetWindowPos(This->baseControlWindow.hwnd,HWND_TOP,0,0,GetSystemMetrics(SM_CXSCREEN),GetSystemMetrics(SM_CYSCREEN),SWP_SHOWWINDOW);
+        GetWindowRect(This->baseControlWindow.hwnd, &This->DestRect);
         This->WindowPos = This->DestRect;
     } else {
-        ShowWindow(This->baseControlWindow.baseWindow.hWnd, SW_HIDE);
-        SetParent(This->baseControlWindow.baseWindow.hWnd, This->baseControlWindow.hwndOwner);
-        SetWindowLongW(This->baseControlWindow.baseWindow.hWnd, GWL_STYLE, This->saved_style);
-        GetClientRect(This->baseControlWindow.baseWindow.hWnd, &This->DestRect);
-        SetWindowPos(This->baseControlWindow.baseWindow.hWnd,0,This->DestRect.left,This->DestRect.top,This->DestRect.right,This->DestRect.bottom,SWP_NOZORDER|SWP_SHOWWINDOW);
+        ShowWindow(This->baseControlWindow.hwnd, SW_HIDE);
+        SetParent(This->baseControlWindow.hwnd, This->baseControlWindow.hwndOwner);
+        SetWindowLongW(This->baseControlWindow.hwnd, GWL_STYLE, This->saved_style);
+        GetClientRect(This->baseControlWindow.hwnd, &This->DestRect);
+        SetWindowPos(This->baseControlWindow.hwnd,0,This->DestRect.left,This->DestRect.top,This->DestRect.right,This->DestRect.bottom,SWP_NOZORDER|SWP_SHOWWINDOW);
         This->WindowPos = This->DestRect;
     }
     This->FullScreenMode = FullScreenMode;
@@ -782,7 +782,7 @@ static HRESULT WINAPI overlay_GetWindowHandle(IOverlay *iface, HWND *window)
 
     TRACE("filter %p, window %p.\n", filter, window);
 
-    *window = filter->baseControlWindow.baseWindow.hWnd;
+    *window = filter->baseControlWindow.hwnd;
     return S_OK;
 }
 
@@ -864,13 +864,6 @@ HRESULT VideoRenderer_create(IUnknown *outer, void **out)
         goto fail;
 
     pVideoRenderer->hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-
-    if (FAILED(BaseWindowImpl_PrepareWindow(&pVideoRenderer->baseControlWindow.baseWindow)))
-    {
-        CloseHandle(pVideoRenderer->hEvent);
-        goto fail;
-    }
-
     pVideoRenderer->run_event = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     *out = &pVideoRenderer->renderer.filter.IUnknown_inner;

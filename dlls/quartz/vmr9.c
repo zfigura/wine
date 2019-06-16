@@ -89,9 +89,9 @@ struct quartz_vmr
     LONG VideoHeight;
 };
 
-static inline struct quartz_vmr *impl_from_BaseWindow(BaseWindow *wnd)
+static inline struct quartz_vmr *impl_from_BaseControlWindow(BaseControlWindow *wnd)
 {
-    return CONTAINING_RECORD(wnd, struct quartz_vmr, baseControlWindow.baseWindow);
+    return CONTAINING_RECORD(wnd, struct quartz_vmr, baseControlWindow);
 }
 
 static inline struct quartz_vmr *impl_from_BaseControlVideo(BaseControlVideo *cvid)
@@ -292,7 +292,7 @@ static HRESULT WINAPI VMR9_DoRenderSample(BaseRenderer *iface, IMediaSample * pS
         info.dwFlags |= VMR9Sample_SyncPoint;
 
     /* If we render ourselves, and this is a preroll sample, discard it */
-    if (This->baseControlWindow.baseWindow.hWnd && (info.dwFlags & VMR9Sample_Preroll))
+    if (This->baseControlWindow.hwnd && (info.dwFlags & VMR9Sample_Preroll))
     {
         return S_OK;
     }
@@ -364,8 +364,9 @@ static HRESULT VMR9_maybe_init(struct quartz_vmr *This, BOOL force)
     DWORD buffers;
     HRESULT hr;
 
-    TRACE("my mode: %u, my window: %p, my last window: %p\n", This->mode, This->baseControlWindow.baseWindow.hWnd, This->hWndClippingWindow);
-    if (This->baseControlWindow.baseWindow.hWnd || !This->renderer.sink.pin.peer)
+    TRACE("my mode: %u, my window: %p, my last window: %p\n", This->mode,
+            This->baseControlWindow.hwnd, This->hWndClippingWindow);
+    if (This->baseControlWindow.hwnd || !This->renderer.sink.pin.peer)
         return S_OK;
 
     if (This->mode == VMR9Mode_Windowless && !This->hWndClippingWindow)
@@ -421,14 +422,14 @@ static void vmr_start_stream(BaseRenderer *iface)
 
     VMR9_maybe_init(This, TRUE);
     IVMRImagePresenter9_StartPresenting(This->presenter, This->cookie);
-    SetWindowPos(This->baseControlWindow.baseWindow.hWnd, NULL,
+    SetWindowPos(This->baseControlWindow.hwnd, NULL,
         This->source_rect.left,
         This->source_rect.top,
         This->source_rect.right - This->source_rect.left,
         This->source_rect.bottom - This->source_rect.top,
         SWP_NOZORDER|SWP_NOMOVE|SWP_DEFERERASE);
-    ShowWindow(This->baseControlWindow.baseWindow.hWnd, SW_SHOW);
-    GetClientRect(This->baseControlWindow.baseWindow.hWnd, &This->target_rect);
+    ShowWindow(This->baseControlWindow.hwnd, SW_SHOW);
+    GetClientRect(This->baseControlWindow.hwnd, &This->target_rect);
 }
 
 static void vmr_stop_stream(BaseRenderer *iface)
@@ -569,9 +570,9 @@ static const BaseRendererFuncTable BaseFuncTable =
     .renderer_pin_query_interface = vmr_pin_query_interface,
 };
 
-static RECT WINAPI VMR9_GetDefaultRect(BaseWindow *This)
+static RECT WINAPI vmr_get_default_rect(BaseControlWindow *This)
 {
-    struct quartz_vmr* pVMR9 = impl_from_BaseWindow(This);
+    struct quartz_vmr* pVMR9 = impl_from_BaseControlWindow(This);
     static RECT defRect;
 
     SetRect(&defRect, 0, 0, pVMR9->VideoWidth, pVMR9->VideoHeight);
@@ -579,12 +580,12 @@ static RECT WINAPI VMR9_GetDefaultRect(BaseWindow *This)
     return defRect;
 }
 
-static BOOL WINAPI VMR9_OnSize(BaseWindow *This, LONG Width, LONG Height)
+static BOOL WINAPI vmr_resize(BaseControlWindow *This, LONG Width, LONG Height)
 {
-    struct quartz_vmr* pVMR9 = impl_from_BaseWindow(This);
+    struct quartz_vmr* pVMR9 = impl_from_BaseControlWindow(This);
 
     TRACE("WM_SIZE %d %d\n", Width, Height);
-    GetClientRect(This->hWnd, &pVMR9->target_rect);
+    GetClientRect(This->hwnd, &pVMR9->target_rect);
     TRACE("WM_SIZING: DestRect=(%d,%d),(%d,%d)\n",
         pVMR9->target_rect.left,
         pVMR9->target_rect.top,
@@ -595,8 +596,8 @@ static BOOL WINAPI VMR9_OnSize(BaseWindow *This, LONG Width, LONG Height)
 }
 
 static const BaseWindowFuncTable renderer_BaseWindowFuncTable = {
-    VMR9_GetDefaultRect,
-    VMR9_OnSize,
+    .window_get_default_rect = vmr_get_default_rect,
+    .window_resize = vmr_resize,
 };
 
 static HRESULT WINAPI VMR9_GetSourceRect(BaseControlVideo* This, RECT *pSourceRect)
@@ -724,7 +725,7 @@ static HRESULT WINAPI VMR9_SetDefaultTargetRect(BaseControlVideo* This)
     RECT rect;
     struct quartz_vmr* pVMR9 = impl_from_BaseControlVideo(This);
 
-    if (!GetClientRect(pVMR9->baseControlWindow.baseWindow.hWnd, &rect))
+    if (!GetClientRect(pVMR9->baseControlWindow.hwnd, &rect))
         return E_FAIL;
 
     SetRect(&pVMR9->target_rect, 0, 0, rect.right, rect.bottom);
@@ -1516,10 +1517,10 @@ static HRESULT WINAPI VMR7WindowlessControl_SetVideoPosition(IVMRWindowlessContr
     if (dest)
     {
         This->target_rect = *dest;
-        if (This->baseControlWindow.baseWindow.hWnd)
+        if (This->baseControlWindow.hwnd)
         {
             FIXME("Output rectangle: %s\n", wine_dbgstr_rect(dest));
-            SetWindowPos(This->baseControlWindow.baseWindow.hWnd, NULL,
+            SetWindowPos(This->baseControlWindow.hwnd, NULL,
                          dest->left, dest->top, dest->right - dest->left, dest->bottom-dest->top,
                          SWP_NOACTIVATE|SWP_NOCOPYBITS|SWP_NOOWNERZORDER|SWP_NOREDRAW);
         }
@@ -1720,10 +1721,10 @@ static HRESULT WINAPI VMR9WindowlessControl_SetVideoPosition(IVMRWindowlessContr
     if (dest)
     {
         This->target_rect = *dest;
-        if (This->baseControlWindow.baseWindow.hWnd)
+        if (This->baseControlWindow.hwnd)
         {
             FIXME("Output rectangle: %s\n", wine_dbgstr_rect(dest));
-            SetWindowPos(This->baseControlWindow.baseWindow.hWnd, NULL, dest->left, dest->top, dest->right - dest->left,
+            SetWindowPos(This->baseControlWindow.hwnd, NULL, dest->left, dest->top, dest->right - dest->left,
                          dest->bottom-dest->top, SWP_NOACTIVATE|SWP_NOCOPYBITS|SWP_NOOWNERZORDER|SWP_NOREDRAW);
         }
     }
@@ -1786,7 +1787,7 @@ static HRESULT WINAPI VMR9WindowlessControl_RepaintVideo(IVMRWindowlessControl9 
     FIXME("(%p/%p)->(...) semi-stub\n", iface, This);
 
     EnterCriticalSection(&This->renderer.filter.csFilter);
-    if (hwnd != This->hWndClippingWindow && hwnd != This->baseControlWindow.baseWindow.hWnd)
+    if (hwnd != This->hWndClippingWindow && hwnd != This->baseControlWindow.hwnd)
     {
         ERR("Not handling changing windows yet!!!\n");
         LeaveCriticalSection(&This->renderer.filter.csFilter);
@@ -1801,7 +1802,7 @@ static HRESULT WINAPI VMR9WindowlessControl_RepaintVideo(IVMRWindowlessControl9 
     }
 
     /* Windowless extension */
-    hr = IDirect3DDevice9_Present(This->allocator_d3d9_dev, NULL, NULL, This->baseControlWindow.baseWindow.hWnd, NULL);
+    hr = IDirect3DDevice9_Present(This->allocator_d3d9_dev, NULL, NULL, This->baseControlWindow.hwnd, NULL);
     LeaveCriticalSection(&This->renderer.filter.csFilter);
 
     return hr;
@@ -2164,7 +2165,7 @@ static HRESULT WINAPI overlay_GetWindowHandle(IOverlay *iface, HWND *window)
 
     TRACE("filter %p, window %p.\n", filter, window);
 
-    *window = filter->baseControlWindow.baseWindow.hWnd;
+    *window = filter->baseControlWindow.hwnd;
     return S_OK;
 }
 
@@ -2255,9 +2256,6 @@ static HRESULT vmr_create(IUnknown *outer, void **out, const CLSID *clsid)
     hr = strmbase_window_init(&pVMR->baseControlWindow, &IVideoWindow_VTable,
             &pVMR->renderer.filter, &pVMR->renderer.sink.pin, &renderer_BaseWindowFuncTable);
     if (FAILED(hr))
-        goto fail;
-
-    if (FAILED(BaseWindowImpl_PrepareWindow(&pVMR->baseControlWindow.baseWindow)))
         goto fail;
 
     hr = strmbase_video_init(&pVMR->baseControlVideo, &pVMR->renderer.filter,
@@ -2454,7 +2452,7 @@ static HRESULT WINAPI VMR9_ImagePresenter_PresentImage(IVMRImagePresenter9 *ifac
     BOOL render = FALSE;
 
     TRACE("(%p/%p/%p)->(...) stub\n", iface, This, This->pVMR9);
-    GetWindowRect(This->pVMR9->baseControlWindow.baseWindow.hWnd, &output);
+    GetWindowRect(This->pVMR9->baseControlWindow.hwnd, &output);
     TRACE("Output rectangle: %s\n", wine_dbgstr_rect(&output));
 
     /* This might happen if we don't have active focus (eg on a different virtual desktop) */
@@ -2479,7 +2477,7 @@ static HRESULT WINAPI VMR9_ImagePresenter_PresentImage(IVMRImagePresenter9 *ifac
     hr = IDirect3DDevice9_EndScene(This->d3d9_dev);
     if (render && SUCCEEDED(hr))
     {
-        hr = IDirect3DDevice9_Present(This->d3d9_dev, NULL, NULL, This->pVMR9->baseControlWindow.baseWindow.hWnd, NULL);
+        hr = IDirect3DDevice9_Present(This->d3d9_dev, NULL, NULL, This->pVMR9->baseControlWindow.hwnd, NULL);
         if (FAILED(hr))
             FIXME("Presenting image: %08x\n", hr);
     }
@@ -2603,12 +2601,12 @@ static BOOL create_device(VMR9DefaultAllocatorPresenterImpl *This, VMR9Allocatio
     TRACE("(%p)->()\n", This);
 
     /* Obtain a monitor and d3d9 device */
-    d3d9_adapter = d3d9_adapter_from_hwnd(This->d3d9_ptr, This->pVMR9->baseControlWindow.baseWindow.hWnd, &This->hMon);
+    d3d9_adapter = d3d9_adapter_from_hwnd(This->d3d9_ptr, This->pVMR9->baseControlWindow.hwnd, &This->hMon);
 
     /* Now try to create the d3d9 device */
     ZeroMemory(&d3dpp, sizeof(d3dpp));
     d3dpp.Windowed = TRUE;
-    d3dpp.hDeviceWindow = This->pVMR9->baseControlWindow.baseWindow.hWnd;
+    d3dpp.hDeviceWindow = This->pVMR9->baseControlWindow.hwnd;
     d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
     d3dpp.BackBufferHeight = This->pVMR9->target_rect.bottom - This->pVMR9->target_rect.top;
     d3dpp.BackBufferWidth = This->pVMR9->target_rect.right - This->pVMR9->target_rect.left;
@@ -2682,7 +2680,7 @@ static HRESULT VMR9_SurfaceAllocator_UpdateDeviceReset(VMR9DefaultAllocatorPrese
     D3DPRESENT_PARAMETERS d3dpp;
     HRESULT hr;
 
-    if (!This->pVMR9->baseControlWindow.baseWindow.hWnd)
+    if (!This->pVMR9->baseControlWindow.hwnd)
     {
         ERR("No window\n");
         return E_FAIL;
@@ -2711,16 +2709,20 @@ static HRESULT VMR9_SurfaceAllocator_UpdateDeviceReset(VMR9DefaultAllocatorPrese
     /* Now try to create the d3d9 device */
     ZeroMemory(&d3dpp, sizeof(d3dpp));
     d3dpp.Windowed = TRUE;
-    d3dpp.hDeviceWindow = This->pVMR9->baseControlWindow.baseWindow.hWnd;
+    d3dpp.hDeviceWindow = This->pVMR9->baseControlWindow.hwnd;
     d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
 
     if (This->d3d9_dev)
         IDirect3DDevice9_Release(This->d3d9_dev);
     This->d3d9_dev = NULL;
-    hr = IDirect3D9_CreateDevice(This->d3d9_ptr, d3d9_adapter_from_hwnd(This->d3d9_ptr, This->pVMR9->baseControlWindow.baseWindow.hWnd, &This->hMon), D3DDEVTYPE_HAL, NULL, D3DCREATE_HARDWARE_VERTEXPROCESSING, &d3dpp, &This->d3d9_dev);
+    hr = IDirect3D9_CreateDevice(This->d3d9_ptr,
+            d3d9_adapter_from_hwnd(This->d3d9_ptr, This->pVMR9->baseControlWindow.hwnd, &This->hMon),
+            D3DDEVTYPE_HAL, NULL, D3DCREATE_HARDWARE_VERTEXPROCESSING, &d3dpp, &This->d3d9_dev);
     if (FAILED(hr))
     {
-        hr = IDirect3D9_CreateDevice(This->d3d9_ptr, d3d9_adapter_from_hwnd(This->d3d9_ptr, This->pVMR9->baseControlWindow.baseWindow.hWnd, &This->hMon), D3DDEVTYPE_HAL, NULL, D3DCREATE_MIXED_VERTEXPROCESSING, &d3dpp, &This->d3d9_dev);
+        hr = IDirect3D9_CreateDevice(This->d3d9_ptr,
+                d3d9_adapter_from_hwnd(This->d3d9_ptr, This->pVMR9->baseControlWindow.hwnd, &This->hMon),
+                D3DDEVTYPE_HAL, NULL, D3DCREATE_MIXED_VERTEXPROCESSING, &d3dpp, &This->d3d9_dev);
         if (FAILED(hr))
         {
             ERR("--> Creating device: %08x\n", hr);
