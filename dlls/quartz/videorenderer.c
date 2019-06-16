@@ -420,7 +420,8 @@ static BOOL WINAPI VideoRenderer_OnSize(BaseWindow *iface, LONG Width, LONG Heig
         This->DestRect.top,
         This->DestRect.right - This->DestRect.left,
         This->DestRect.bottom - This->DestRect.top);
-    return BaseWindowImpl_OnSize(iface, Width, Height);
+
+    return TRUE;
 }
 
 static const BaseRendererFuncTable BaseFuncTable =
