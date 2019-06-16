@@ -362,7 +362,6 @@ typedef struct tagBaseWindow
 	HWND hWnd;
 	LONG Width;
 	LONG Height;
-	HDC hDC;
 
 	const struct BaseWindowFuncTable* pFuncsTable;
 } BaseWindow;
