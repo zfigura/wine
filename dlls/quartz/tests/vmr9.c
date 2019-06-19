@@ -1008,13 +1008,13 @@ static void test_allocator(IMemInputPin *input)
         IMemAllocator_Release(ret_allocator);
     }
 
-    hr = IMemInputPin_NotifyAllocator(input, NULL, TRUE);
+    hr = IMemInputPin_NotifyAllocator(input, NULL, FALSE);
     todo_wine ok(hr == E_FAIL, "Got hr %#x.\n", hr);
 
     CoCreateInstance(&CLSID_MemoryAllocator, NULL, CLSCTX_INPROC_SERVER,
             &IID_IMemAllocator, (void **)&req_allocator);
 
-    hr = IMemInputPin_NotifyAllocator(input, req_allocator, TRUE);
+    hr = IMemInputPin_NotifyAllocator(input, req_allocator, FALSE);
     todo_wine ok(hr == E_FAIL, "Got hr %#x.\n", hr);
 
     IMemAllocator_Release(req_allocator);
@@ -1455,6 +1455,205 @@ static void test_connect_pin(void)
     ok(!ref, "Got outstanding refcount %d.\n", ref);
 }
 
+static IVMRSurfaceAllocator9 allocator_iface;
+static IVMRImagePresenter9 presenter_iface;
+static LONG allocator_refcount = 1;
+
+static HRESULT WINAPI presenter_QueryInterface(IVMRImagePresenter9 *iface, REFIID iid, void **out)
+{
+    return IVMRSurfaceAllocator9_QueryInterface(&allocator_iface, iid, out);
+}
+
+static ULONG WINAPI presenter_AddRef(IVMRImagePresenter9 *iface)
+{
+    return IVMRSurfaceAllocator9_AddRef(&allocator_iface);
+}
+
+static ULONG WINAPI presenter_Release(IVMRImagePresenter9 *iface)
+{
+    return IVMRSurfaceAllocator9_Release(&allocator_iface);
+}
+
+static HRESULT WINAPI presenter_StartPresenting(IVMRImagePresenter9 *iface, DWORD_PTR cookie)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI presenter_StopPresenting(IVMRImagePresenter9 *iface, DWORD_PTR cookie)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI presenter_PresentImage(IVMRImagePresenter9 *iface, DWORD_PTR cookie, VMR9PresentationInfo *info)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static const IVMRImagePresenter9Vtbl presenter_vtbl =
+{
+    presenter_QueryInterface,
+    presenter_AddRef,
+    presenter_Release,
+    presenter_StartPresenting,
+    presenter_StopPresenting,
+    presenter_PresentImage,
+};
+
+static HRESULT WINAPI allocator_QueryInterface(IVMRSurfaceAllocator9 *iface, REFIID iid, void **out)
+{
+    if (winetest_debug > 1) trace("QueryInterface(%s)\n", wine_dbgstr_guid(iid));
+
+    if (IsEqualGUID(iid, &IID_IVMRImagePresenter9))
+    {
+        *out = &presenter_iface;
+        IVMRImagePresenter9_AddRef(&presenter_iface);
+        return S_OK;
+    }
+    else if (!IsEqualGUID(iid, &IID_IVMRImagePresenterConfig9)
+            && !IsEqualGUID(iid, &IID_IVMRMonitorConfig9))
+        ok(0, "Unexpected query for %s.\n", wine_dbgstr_guid(iid));
+    *out = NULL;
+    return E_NOTIMPL;
+}
+
+static ULONG WINAPI allocator_AddRef(IVMRSurfaceAllocator9 *iface)
+{
+    return InterlockedIncrement(&allocator_refcount);
+}
+
+static ULONG WINAPI allocator_Release(IVMRSurfaceAllocator9 *iface)
+{
+    return InterlockedDecrement(&allocator_refcount);
+}
+
+static HRESULT WINAPI allocator_InitializeDevice(IVMRSurfaceAllocator9 *iface,
+        DWORD_PTR cookie, VMR9AllocationInfo *info, DWORD *buffer_count)
+{
+    ok(0, "Unexpected call.\n");
+    ok(cookie == 0xabacab, "Got unexpected cookie %#lx.\n", cookie);
+    trace("flags %#x, %dx%d, fmt %u, pool %#x, MinBuffers %u, aspect ratio %u, native size %u\n",
+            info->dwFlags, info->dwWidth, info->dwHeight, info->Format, info->Pool,
+            info->MinBuffers, info->szAspectRatio, info->szNativeSize);
+    trace("%d buffers\n", *buffer_count);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI allocator_TerminateDevice(IVMRSurfaceAllocator9 *iface, DWORD_PTR cookie)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI allocator_GetSurface(IVMRSurfaceAllocator9 *iface,
+        DWORD_PTR cookie, DWORD index, DWORD flags, IDirect3DSurface9 **surface)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI allocator_AdviseNotify(IVMRSurfaceAllocator9 *iface, IVMRSurfaceAllocatorNotify9 *notify)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static const IVMRSurfaceAllocator9Vtbl allocator_vtbl =
+{
+    allocator_QueryInterface,
+    allocator_AddRef,
+    allocator_Release,
+    allocator_InitializeDevice,
+    allocator_TerminateDevice,
+    allocator_GetSurface,
+    allocator_AdviseNotify,
+};
+
+static IVMRSurfaceAllocator9 allocator_iface = {&allocator_vtbl};
+static IVMRImagePresenter9 presenter_iface = {&presenter_vtbl};
+
+static void test_allocator_presenter(void)
+{
+    VIDEOINFOHEADER vih =
+    {
+        .bmiHeader.biSize = sizeof(BITMAPINFOHEADER),
+        .bmiHeader.biWidth = 32,
+        .bmiHeader.biHeight = 16,
+    };
+    AM_MEDIA_TYPE req_mt =
+    {
+        .majortype = MEDIATYPE_Video,
+        .subtype = MEDIASUBTYPE_RGB16_D3D_DX9_RT,
+        .formattype = FORMAT_VideoInfo,
+        .cbFormat = sizeof(vih),
+        .pbFormat = (BYTE *)&vih,
+    };
+    ALLOCATOR_PROPERTIES req_props = {1, 32 * 16 * 4, 1, 0}, ret_props;
+    IBaseFilter *filter = create_vmr9(VMR9Mode_Renderless);
+    IFilterGraph2 *graph = create_graph();
+    IVMRSurfaceAllocatorNotify9 *notify;
+    struct testfilter source;
+    IMemAllocator *allocator;
+    IMediaControl *control;
+    IMemInputPin *input;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    IBaseFilter_QueryInterface(filter, &IID_IVMRSurfaceAllocatorNotify9, (void **)&notify);
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+
+    hr = IVMRSurfaceAllocatorNotify9_AdviseSurfaceAllocator(notify, 0xabacab, &allocator_iface);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IBaseFilter_Pause(filter);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IBaseFilter_Run(filter, 0);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IBaseFilter_Stop(filter);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    testfilter_init(&source);
+    IFilterGraph2_AddFilter(graph, &source.filter.IBaseFilter_iface, NULL);
+    IFilterGraph2_AddFilter(graph, filter, NULL);
+    IBaseFilter_FindPin(filter, sink0_id, &pin);
+    hr = IFilterGraph2_ConnectDirect(graph, &source.source.pin.IPin_iface, pin, &req_mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    IPin_QueryInterface(pin, &IID_IMemInputPin, (void **)&input);
+
+    hr = IMemInputPin_GetAllocator(input, &allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IMemAllocator_SetProperties(allocator, &req_props, &ret_props);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!memcmp(&ret_props, &req_props, sizeof(req_props)), "Properties did not match.\n");
+    hr = IMemAllocator_Commit(allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    IMemAllocator_Release(allocator);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IFilterGraph2_Disconnect(graph, &source.source.pin.IPin_iface);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IFilterGraph2_Disconnect(graph, pin);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    IMediaControl_Release(control);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+    IMemInputPin_Release(input);
+    IPin_Release(pin);
+    IVMRSurfaceAllocatorNotify9_Release(notify);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+}
+
 START_TEST(vmr9)
 {
     IBaseFilter *filter;
@@ -1470,6 +1669,9 @@ START_TEST(vmr9)
     }
     IBaseFilter_Release(filter);
 
+    test_connect_pin();
+    test_allocator_presenter(); return;
+
     test_filter_config();
     test_interfaces();
     test_aggregation();
@@ -1480,6 +1682,7 @@ START_TEST(vmr9)
     test_enum_media_types();
     test_unconnected_filter_state();
     test_connect_pin();
+    test_allocator_presenter();
 
     CoUninitialize();
 }
