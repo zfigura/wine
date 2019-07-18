@@ -89,6 +89,17 @@ extern void init_user_process_params( SIZE_T data_size ) DECLSPEC_HIDDEN;
 extern void update_user_process_params( const UNICODE_STRING *image ) DECLSPEC_HIDDEN;
 
 /* server support */
+struct server_select_ctx
+{
+    const select_op_t *select_op;
+    data_size_t size;
+    UINT flags;
+    timeout_t abs_timeout;
+    unsigned int ret;
+    obj_handle_t apc_handle;
+    apc_call_t call;
+};
+
 extern timeout_t server_start_time DECLSPEC_HIDDEN;
 extern unsigned int server_cpus DECLSPEC_HIDDEN;
 extern BOOL is_wow64 DECLSPEC_HIDDEN;
@@ -103,6 +114,8 @@ extern void server_enter_uninterrupted_section( RTL_CRITICAL_SECTION *cs, sigset
 extern void server_leave_uninterrupted_section( RTL_CRITICAL_SECTION *cs, sigset_t *sigset ) DECLSPEC_HIDDEN;
 extern unsigned int server_select( const select_op_t *select_op, data_size_t size,
                                    UINT flags, const LARGE_INTEGER *timeout ) DECLSPEC_HIDDEN;
+extern void server_select_queue( struct server_select_ctx *ctx, const LARGE_INTEGER *timeout ) DECLSPEC_HIDDEN;
+extern unsigned int server_select_wait( const struct server_select_ctx *ctx ) DECLSPEC_HIDDEN;
 extern unsigned int server_queue_process_apc( HANDLE process, const apc_call_t *call, apc_result_t *result ) DECLSPEC_HIDDEN;
 extern int server_remove_fd_from_cache( HANDLE handle ) DECLSPEC_HIDDEN;
 extern int server_get_unix_fd( HANDLE handle, unsigned int access, int *unix_fd,
@@ -111,8 +124,6 @@ extern int server_pipe( int fd[2] ) DECLSPEC_HIDDEN;
 extern NTSTATUS alloc_object_attributes( const OBJECT_ATTRIBUTES *attr, struct object_attributes **ret,
                                          data_size_t *ret_len ) DECLSPEC_HIDDEN;
 extern NTSTATUS validate_open_object_attributes( const OBJECT_ATTRIBUTES *attr ) DECLSPEC_HIDDEN;
-extern int wait_select_reply( void *cookie ) DECLSPEC_HIDDEN;
-extern BOOL invoke_apc( const apc_call_t *call, apc_result_t *result ) DECLSPEC_HIDDEN;
 
 /* module handling */
 extern LIST_ENTRY tls_links DECLSPEC_HIDDEN;

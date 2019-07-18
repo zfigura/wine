@@ -2449,14 +2449,9 @@ static inline NTSTATUS fast_wake_addr( const void *addr )
 NTSTATUS WINAPI RtlWaitOnAddress( const void *addr, const void *cmp, SIZE_T size,
                                   const LARGE_INTEGER *timeout )
 {
+    struct server_select_ctx ctx;
     select_op_t select_op;
     NTSTATUS ret;
-    int cookie;
-    BOOL user_apc = FALSE;
-    obj_handle_t apc_handle = 0;
-    apc_call_t call;
-    apc_result_t result;
-    timeout_t abs_timeout = timeout ? timeout->QuadPart : TIMEOUT_INFINITE;
 
     if (size != 1 && size != 2 && size != 4 && size != 8)
         return STATUS_INVALID_PARAMETER;
@@ -2468,49 +2463,20 @@ NTSTATUS WINAPI RtlWaitOnAddress( const void *addr, const void *cmp, SIZE_T size
     select_op.keyed_event.handle = wine_server_obj_handle( keyed_event );
     select_op.keyed_event.key    = wine_server_client_ptr( addr );
 
-    memset( &result, 0, sizeof(result) );
+    ctx.select_op = &select_op;
+    ctx.size = sizeof(select_op.keyed_event);
+    ctx.flags = SELECT_INTERRUPTIBLE;
 
-    for (;;)
+    RtlEnterCriticalSection( &addr_section );
+    if (!compare_addr( addr, cmp, size ))
     {
-        RtlEnterCriticalSection( &addr_section );
-        if (!compare_addr( addr, cmp, size ))
-        {
-            RtlLeaveCriticalSection( &addr_section );
-            return STATUS_SUCCESS;
-        }
-
-        SERVER_START_REQ( select )
-        {
-            req->flags    = SELECT_INTERRUPTIBLE;
-            req->cookie   = wine_server_client_ptr( &cookie );
-            req->prev_apc = apc_handle;
-            req->timeout  = abs_timeout;
-            wine_server_add_data( req, &result, sizeof(result) );
-            wine_server_add_data( req, &select_op, sizeof(select_op.keyed_event) );
-            ret = wine_server_call( req );
-            abs_timeout = reply->timeout;
-            apc_handle  = reply->apc_handle;
-            call        = reply->call;
-        }
-        SERVER_END_REQ;
-
         RtlLeaveCriticalSection( &addr_section );
-
-        if (ret == STATUS_PENDING) ret = wait_select_reply( &cookie );
-        if (ret != STATUS_USER_APC) break;
-        if (invoke_apc( &call, &result ))
-        {
-            /* if we ran a user apc we have to check once more if additional apcs are queued,
-             * but we don't want to wait */
-            abs_timeout = 0;
-            user_apc = TRUE;
-            size = 0;
-        }
+        return STATUS_SUCCESS;
     }
+    server_select_queue( &ctx, timeout );
+    RtlLeaveCriticalSection( &addr_section );
 
-    if (ret == STATUS_TIMEOUT && user_apc) ret = STATUS_USER_APC;
-
-    return ret;
+    return server_select_wait( &ctx );
 }
 
 /***********************************************************************
