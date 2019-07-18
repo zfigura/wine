@@ -349,7 +349,7 @@ void server_leave_uninterrupted_section( RTL_CRITICAL_SECTION *cs, sigset_t *sig
  *
  * Wait for a reply on the waiting pipe of the current thread.
  */
-int wait_select_reply( void *cookie )
+static int wait_select_reply( const void *cookie )
 {
     int signaled;
     struct wake_up_reply reply;
@@ -386,7 +386,7 @@ int wait_select_reply( void *cookie )
  *
  * Invoke a single APC. Return TRUE if a user APC has been run.
  */
-BOOL invoke_apc( const apc_call_t *call, apc_result_t *result )
+static BOOL invoke_apc( const apc_call_t *call, apc_result_t *result )
 {
     BOOL user_apc = FALSE;
     SIZE_T size;
@@ -590,40 +590,42 @@ BOOL invoke_apc( const apc_call_t *call, apc_result_t *result )
     return user_apc;
 }
 
-
-/***********************************************************************
- *              server_select
- */
-unsigned int server_select( const select_op_t *select_op, data_size_t size, UINT flags,
-                            const LARGE_INTEGER *timeout )
+void server_select_queue( struct server_select_ctx *ctx, const LARGE_INTEGER *timeout )
 {
-    unsigned int ret;
-    int cookie;
-    BOOL user_apc = FALSE;
-    obj_handle_t apc_handle = 0;
-    apc_call_t call;
     apc_result_t result;
-    timeout_t abs_timeout = timeout ? timeout->QuadPart : TIMEOUT_INFINITE;
 
     memset( &result, 0, sizeof(result) );
 
+    SERVER_START_REQ( select )
+    {
+        req->flags    = ctx->flags;
+        req->cookie   = wine_server_client_ptr( ctx );
+        req->prev_apc = 0;
+        req->timeout  = timeout ? timeout->QuadPart : TIMEOUT_INFINITE;
+        wine_server_add_data( req, &result, sizeof(result) );
+        wine_server_add_data( req, ctx->select_op, ctx->size );
+        ctx->ret = wine_server_call( req );
+        ctx->abs_timeout = reply->timeout;
+        ctx->apc_handle  = reply->apc_handle;
+        ctx->call        = reply->call;
+    }
+    SERVER_END_REQ;
+}
+
+unsigned int server_select_wait( const struct server_select_ctx *ctx )
+{
+    const select_op_t *select_op = ctx->select_op;
+    data_size_t size = ctx->size;
+    unsigned int ret = ctx->ret;
+    BOOL user_apc = FALSE;
+    obj_handle_t apc_handle = ctx->apc_handle;
+    apc_call_t call = ctx->call;
+    apc_result_t result;
+    timeout_t abs_timeout = ctx->abs_timeout;
+
     for (;;)
     {
-        SERVER_START_REQ( select )
-        {
-            req->flags    = flags;
-            req->cookie   = wine_server_client_ptr( &cookie );
-            req->prev_apc = apc_handle;
-            req->timeout  = abs_timeout;
-            wine_server_add_data( req, &result, sizeof(result) );
-            wine_server_add_data( req, select_op, size );
-            ret = wine_server_call( req );
-            abs_timeout = reply->timeout;
-            apc_handle  = reply->apc_handle;
-            call        = reply->call;
-        }
-        SERVER_END_REQ;
-        if (ret == STATUS_PENDING) ret = wait_select_reply( &cookie );
+        if (ret == STATUS_PENDING) ret = wait_select_reply( ctx );
         if (ret != STATUS_USER_APC) break;
         if (invoke_apc( &call, &result ))
         {
@@ -637,6 +639,21 @@ unsigned int server_select( const select_op_t *select_op, data_size_t size, UINT
         /* don't signal multiple times */
         if (size >= sizeof(select_op->signal_and_wait) && select_op->op == SELECT_SIGNAL_AND_WAIT)
             size = offsetof( select_op_t, signal_and_wait.signal );
+
+        SERVER_START_REQ( select )
+        {
+            req->flags    = ctx->flags;
+            req->cookie   = wine_server_client_ptr( ctx );
+            req->prev_apc = apc_handle;
+            req->timeout  = abs_timeout;
+            wine_server_add_data( req, &result, sizeof(result) );
+            wine_server_add_data( req, select_op, size );
+            ret = wine_server_call( req );
+            abs_timeout = reply->timeout;
+            apc_handle  = reply->apc_handle;
+            call        = reply->call;
+        }
+        SERVER_END_REQ;
     }
 
     if (ret == STATUS_TIMEOUT && user_apc) ret = STATUS_USER_APC;
@@ -647,6 +664,22 @@ unsigned int server_select( const select_op_t *select_op, data_size_t size, UINT
     if (ret == STATUS_TIMEOUT) NtYieldExecution();
 
     return ret;
+}
+
+/***********************************************************************
+ *              server_select
+ */
+unsigned int server_select( const select_op_t *select_op, data_size_t size, UINT flags,
+                            const LARGE_INTEGER *timeout )
+{
+    struct server_select_ctx ctx;
+
+    ctx.select_op = select_op;
+    ctx.size = size;
+    ctx.flags = flags;
+
+    server_select_queue( &ctx, timeout );
+    return server_select_wait( &ctx );
 }
 
 
