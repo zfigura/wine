@@ -246,6 +246,9 @@ NTSTATUS WINAPI NtCreateSemaphore( OUT PHANDLE SemaphoreHandle,
     data_size_t len;
     struct object_attributes *objattr;
 
+    TRACE("access %#x, attr %s, initial %d, max %d.\n",
+            access, debugstr_ObjectAttributes(attr), InitialCount, MaximumCount);
+
     if (MaximumCount <= 0 || InitialCount < 0 || InitialCount > MaximumCount)
         return STATUS_INVALID_PARAMETER;
 
@@ -329,6 +332,9 @@ NTSTATUS WINAPI NtQuerySemaphore( HANDLE handle, SEMAPHORE_INFORMATION_CLASS cla
 NTSTATUS WINAPI NtReleaseSemaphore( HANDLE handle, ULONG count, PULONG previous )
 {
     NTSTATUS ret;
+
+    TRACE("handle %p, count %u, previous %p.\n", handle, count, previous);
+
     SERVER_START_REQ( release_semaphore )
     {
         req->handle = wine_server_obj_handle( handle );
@@ -356,6 +362,10 @@ NTSTATUS WINAPI NtCreateEvent( PHANDLE EventHandle, ACCESS_MASK DesiredAccess,
     NTSTATUS ret;
     data_size_t len;
     struct object_attributes *objattr;
+
+    TRACE("access %#x, attr %s, %s-reset, initial %u.\n",
+            DesiredAccess, debugstr_ObjectAttributes(attr),
+            type == NotificationEvent ? "manual" : "auto", InitialState);
 
     if ((ret = alloc_object_attributes( attr, &objattr, &len ))) return ret;
 
@@ -406,6 +416,9 @@ NTSTATUS WINAPI NtOpenEvent( HANDLE *handle, ACCESS_MASK access, const OBJECT_AT
 NTSTATUS WINAPI NtSetEvent( HANDLE handle, LONG *prev_state )
 {
     NTSTATUS ret;
+
+    TRACE("handle %p, prev_state %p.\n", handle, prev_state);
+
     SERVER_START_REQ( event_op )
     {
         req->handle = wine_server_obj_handle( handle );
@@ -423,6 +436,9 @@ NTSTATUS WINAPI NtSetEvent( HANDLE handle, LONG *prev_state )
 NTSTATUS WINAPI NtResetEvent( HANDLE handle, LONG *prev_state )
 {
     NTSTATUS ret;
+
+    TRACE("handle %p, prev_state %p.\n", handle, prev_state);
+
     SERVER_START_REQ( event_op )
     {
         req->handle = wine_server_obj_handle( handle );
@@ -454,6 +470,8 @@ NTSTATUS WINAPI NtClearEvent ( HANDLE handle )
 NTSTATUS WINAPI NtPulseEvent( HANDLE handle, LONG *prev_state )
 {
     NTSTATUS ret;
+
+    TRACE("handle %p, prev_state %p.\n", handle, prev_state);
 
     SERVER_START_REQ( event_op )
     {
@@ -518,6 +536,9 @@ NTSTATUS WINAPI NtCreateMutant(OUT HANDLE* MutantHandle,
     data_size_t len;
     struct object_attributes *objattr;
 
+    TRACE("access %#x, attr %s, initial %u.\n",
+            access, debugstr_ObjectAttributes(attr), InitialOwner);
+
     if ((status = alloc_object_attributes( attr, &objattr, &len ))) return status;
 
     SERVER_START_REQ( create_mutex )
@@ -565,6 +586,8 @@ NTSTATUS WINAPI NtOpenMutant( HANDLE *handle, ACCESS_MASK access, const OBJECT_A
 NTSTATUS WINAPI NtReleaseMutant( IN HANDLE handle, OUT PLONG prev_count OPTIONAL)
 {
     NTSTATUS    status;
+
+    TRACE("handle %p, prev_count %p.\n", handle, prev_count);
 
     SERVER_START_REQ( release_mutex )
     {
@@ -1081,6 +1104,22 @@ static NTSTATUS wait_objects( DWORD count, const HANDLE *handles,
 
     if (!count || count > MAXIMUM_WAIT_OBJECTS) return STATUS_INVALID_PARAMETER_1;
 
+    if (TRACE_ON(sync))
+    {
+        TRACE("Waiting for %s of %d handles:", wait_any ? "any" : "all", count);
+        for (i = 0; i < count; i++)
+            TRACE(" %p", handles[i]);
+
+        if (alertable)
+            TRACE(", alertable");
+
+        if (!timeout || timeout->QuadPart == TIMEOUT_INFINITE)
+            TRACE(", timeout = INFINITE.\n");
+        else
+            TRACE(", timeout = %ld.%07ld sec.\n",
+                (long) timeout->QuadPart / TICKSPERSEC, (long) timeout->QuadPart % TICKSPERSEC);
+    }
+
     if (alertable) flags |= SELECT_ALERTABLE;
     select_op.wait.op = wait_any ? SELECT_WAIT : SELECT_WAIT_ALL;
     for (i = 0; i < count; i++) select_op.wait.handles[i] = wine_server_obj_handle( handles[i] );
@@ -1116,6 +1155,8 @@ NTSTATUS WINAPI NtSignalAndWaitForSingleObject( HANDLE hSignalObject, HANDLE hWa
 {
     select_op_t select_op;
     UINT flags = SELECT_INTERRUPTIBLE;
+
+    TRACE("signal %p, wait %p, alertable %u.\n", hSignalObject, hWaitObject, alertable);
 
     if (!hSignalObject) return STATUS_INVALID_HANDLE;
 
