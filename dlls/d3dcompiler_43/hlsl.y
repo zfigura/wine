@@ -3460,6 +3460,19 @@ static void allocate_temp_registers_recurse(struct list *instrs, struct liveness
 
     LIST_FOR_EACH_ENTRY(instr, instrs, struct hlsl_ir_node, entry)
     {
+        if (!instr->reg.allocated && instr->last_read)
+        {
+            if (instr->data_type->reg_size > 1)
+                instr->reg = allocate_range(liveness, instr->index,
+                        instr->last_read, instr->data_type->reg_size);
+            else
+                instr->reg = allocate_register(liveness, instr->index,
+                        instr->last_read, instr->data_type->dimx);
+            TRACE("Allocated %s to anonymous expression @%u (liveness %u-%u).\n",
+                    debugstr_register('r', instr->reg, instr->data_type),
+                    instr->index, instr->index, instr->last_read);
+        }
+
         switch (instr->type)
         {
         case HLSL_IR_ASSIGNMENT:
