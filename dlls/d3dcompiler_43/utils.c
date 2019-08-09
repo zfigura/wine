@@ -1833,7 +1833,7 @@ static void debug_dump_deref(const struct hlsl_deref *deref)
     }
 }
 
-static void debug_dump_ir_constant(const struct hlsl_ir_constant *constant)
+void debug_dump_ir_constant(const struct hlsl_ir_constant *constant)
 {
     struct hlsl_type *type = constant->node.data_type;
     unsigned int x;

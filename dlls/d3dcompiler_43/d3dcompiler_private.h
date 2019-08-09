@@ -893,6 +893,7 @@ struct hlsl_ir_constant
         double d[4];
         BOOL b[4];
     } value;
+    struct hlsl_reg reg;
 };
 
 struct hlsl_scope
@@ -1134,6 +1135,7 @@ const char *debug_modifiers(DWORD modifiers) DECLSPEC_HIDDEN;
 const char *debug_node_type(enum hlsl_ir_node_type type) DECLSPEC_HIDDEN;
 const char *debug_writemask(DWORD writemask) DECLSPEC_HIDDEN;
 void debug_dump_ir_function_decl(const struct hlsl_ir_function_decl *func) DECLSPEC_HIDDEN;
+void debug_dump_ir_constant(const struct hlsl_ir_constant *constant) DECLSPEC_HIDDEN;
 
 void free_hlsl_type(struct hlsl_type *type) DECLSPEC_HIDDEN;
 void free_instr(struct hlsl_ir_node *node) DECLSPEC_HIDDEN;

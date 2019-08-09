@@ -3516,6 +3516,54 @@ static void allocate_temp_registers(struct hlsl_ir_function_decl *entry_func)
     allocate_temp_registers_recurse(entry_func->body, &liveness);
 }
 
+static void allocate_const_registers_recurse(struct list *instrs, struct liveness_ctx *ctx)
+{
+    struct hlsl_ir_node *instr;
+
+    LIST_FOR_EACH_ENTRY(instr, instrs, struct hlsl_ir_node, entry)
+    {
+        switch (instr->type)
+        {
+        case HLSL_IR_CONSTANT:
+        {
+            struct hlsl_ir_constant *constant = constant_from_node(instr);
+
+            if (instr->data_type->reg_size > 1)
+                constant->reg = allocate_range(ctx, 1, INT_MAX, instr->data_type->reg_size);
+            else
+                constant->reg = allocate_register(ctx, 1, INT_MAX, instr->data_type->dimx);
+            TRACE("Allocated %s to ", debugstr_register('c', constant->reg, instr->data_type));
+            if (TRACE_ON(hlsl_parser))
+                debug_dump_ir_constant(constant);
+            TRACE(".\n");
+            break;
+        }
+        case HLSL_IR_IF:
+        {
+            struct hlsl_ir_if *iff = if_from_node(instr);
+            allocate_const_registers_recurse(&iff->then_instrs, ctx);
+            allocate_const_registers_recurse(&iff->else_instrs, ctx);
+            break;
+        }
+        case HLSL_IR_LOOP:
+        {
+            struct hlsl_ir_loop *loop = loop_from_node(instr);
+            allocate_const_registers_recurse(&loop->body, ctx);
+            break;
+        }
+        default:
+            break;
+        }
+    }
+}
+
+static void allocate_const_registers(struct hlsl_ir_function_decl *entry_func)
+{
+    struct liveness_ctx ctx = {0};
+
+    allocate_const_registers_recurse(entry_func->body, &ctx);
+}
+
 HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
@@ -3599,6 +3647,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
 
     compute_liveness(entry_func);
     allocate_temp_registers(entry_func);
+    allocate_const_registers(entry_func);
 
     if (hlsl_ctx.status != PARSE_ERR)
         hr = E_NOTIMPL;
