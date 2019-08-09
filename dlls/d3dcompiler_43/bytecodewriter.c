@@ -27,7 +27,7 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(bytecodewriter);
 
-static BOOL array_reserve(void **elements, unsigned int *capacity, unsigned int count, unsigned int size)
+BOOL array_reserve(void **elements, unsigned int *capacity, unsigned int count, unsigned int size)
 {
     unsigned int max_capacity, new_capacity;
     void *new_elements;

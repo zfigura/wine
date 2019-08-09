@@ -1959,7 +1959,7 @@ static void debug_dump_ir_expr(const struct hlsl_ir_expr *expr)
     wine_dbg_printf(")");
 }
 
-static const char *debug_writemask(DWORD writemask)
+const char *debug_writemask(DWORD writemask)
 {
     static const char components[] = {'x', 'y', 'z', 'w'};
     char string[5];

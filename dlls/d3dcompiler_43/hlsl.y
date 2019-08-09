@@ -3336,6 +3336,173 @@ static void append_output_var_copy(struct list *instrs, struct hlsl_ir_var *var)
     var->modifiers &= ~HLSL_STORAGE_OUT;
 }
 
+struct liveness_ctx
+{
+    unsigned int count;
+    struct
+    {
+        /* 0 if not live yet. */
+        unsigned int last_read;
+    } *regs;
+};
+
+static unsigned char get_available_writemask(struct liveness_ctx *liveness,
+        unsigned int first_write, unsigned int index, unsigned int components)
+{
+    unsigned char i, writemask = 0, count = 0;
+
+    for (i = 0; i < 4; ++i)
+    {
+        if (liveness->regs[index + i].last_read <= first_write)
+        {
+            writemask |= 1 << i;
+            if (++count == components)
+                return writemask;
+        }
+    }
+
+    return 0;
+}
+
+static struct hlsl_reg allocate_register(struct liveness_ctx *liveness,
+        unsigned int first_write, unsigned int last_read, unsigned char components)
+{
+    struct hlsl_reg ret = {.allocated = TRUE};
+    unsigned char writemask, i;
+    unsigned int regnum;
+
+    for (regnum = 0; regnum < liveness->count; regnum += 4)
+    {
+        if ((writemask = get_available_writemask(liveness, first_write, regnum, components)))
+            break;
+    }
+    if (regnum == liveness->count)
+    {
+        if (!array_reserve((void **)&liveness->regs, &liveness->count, regnum + 4, sizeof(*liveness->regs)))
+            return ret;
+        writemask = (1 << components) - 1;
+    }
+    for (i = 0; i < 4; ++i)
+    {
+        if (writemask & (1 << i))
+            liveness->regs[regnum + i].last_read = last_read;
+    }
+    ret.reg = regnum / 4;
+    ret.writemask = writemask;
+    return ret;
+}
+
+static BOOL is_range_available(struct liveness_ctx *liveness, unsigned int first_write,
+        unsigned int index, unsigned int elements)
+{
+    unsigned int i;
+
+    for (i = 0; i < elements; i += 4)
+    {
+        if (!get_available_writemask(liveness, first_write, index + i, 4))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+/* "elements" is the total number of consecutive whole registers needed. */
+static struct hlsl_reg allocate_range(struct liveness_ctx *liveness,
+        unsigned int first_write, unsigned int last_read, unsigned int elements)
+{
+    const unsigned int components = elements * 4;
+    struct hlsl_reg ret = {.allocated = TRUE};
+    unsigned int i, regnum;
+
+    for (regnum = 0; regnum < liveness->count; regnum += 4)
+    {
+        if (is_range_available(liveness, first_write, regnum, min(components, liveness->count - regnum)))
+            break;
+    }
+    if (!array_reserve((void **)&liveness->regs, &liveness->count, regnum + components, sizeof(*liveness->regs)))
+        return ret;
+
+    for (i = 0; i < components; ++i)
+        liveness->regs[regnum + i].last_read = last_read;
+    ret.reg = regnum / 4;
+    return ret;
+}
+
+static const char *debugstr_register(char class, struct hlsl_reg reg, const struct hlsl_type *type)
+{
+    if (type->reg_size > 4)
+        return wine_dbg_sprintf("%c%u-%c%u", class, reg.reg, class,
+                reg.reg + type->reg_size - 1);
+    return wine_dbg_sprintf("%c%u%s", class, reg.reg, debug_writemask(reg.writemask));
+}
+
+static void allocate_variable_register(struct hlsl_ir_var *var, struct liveness_ctx *liveness)
+{
+    /* Variables with special register classes are not allocated here. */
+    if (var->modifiers & (HLSL_STORAGE_IN | HLSL_STORAGE_OUT | HLSL_STORAGE_UNIFORM))
+        return;
+
+    if (!var->reg.allocated && var->last_read)
+    {
+        if (var->data_type->reg_size > 1)
+            var->reg = allocate_range(liveness, var->first_write,
+                    var->last_read, var->data_type->reg_size);
+        else
+            var->reg = allocate_register(liveness, var->first_write,
+                    var->last_read, var->data_type->dimx);
+        TRACE("Allocated %s to %s (liveness %u-%u).\n", debugstr_register('r', var->reg, var->data_type),
+                var->name, var->first_write, var->last_read);
+    }
+}
+
+static void allocate_temp_registers_recurse(struct list *instrs, struct liveness_ctx *liveness)
+{
+    struct hlsl_ir_node *instr;
+
+    LIST_FOR_EACH_ENTRY(instr, instrs, struct hlsl_ir_node, entry)
+    {
+        switch (instr->type)
+        {
+        case HLSL_IR_ASSIGNMENT:
+        {
+            struct hlsl_ir_assignment *assignment = assignment_from_node(instr);
+            allocate_variable_register(assignment->lhs.var, liveness);
+            break;
+        }
+        case HLSL_IR_IF:
+        {
+            struct hlsl_ir_if *iff = if_from_node(instr);
+            allocate_temp_registers_recurse(&iff->then_instrs, liveness);
+            allocate_temp_registers_recurse(&iff->else_instrs, liveness);
+            break;
+        }
+        case HLSL_IR_LOAD:
+        {
+            struct hlsl_ir_load *load = load_from_node(instr);
+            allocate_variable_register(load->src.var, liveness);
+            break;
+        }
+        case HLSL_IR_LOOP:
+        {
+            struct hlsl_ir_loop *loop = loop_from_node(instr);
+            allocate_temp_registers_recurse(&loop->body, liveness);
+            break;
+        }
+        default:
+            break;
+        }
+    }
+}
+
+/* Simple greedy temporary register allocation pass that just assigns a unique
+ * index to all (simultaneously live) variables or intermediate values. Agnostic
+ * as to how many registers are actually available for the current backend, and
+ * does not handle constants. */
+static void allocate_temp_registers(struct hlsl_ir_function_decl *entry_func)
+{
+    struct liveness_ctx liveness = {0};
+    allocate_temp_registers_recurse(entry_func->body, &liveness);
+}
+
 HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
@@ -3418,6 +3585,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     }
 
     compute_liveness(entry_func);
+    allocate_temp_registers(entry_func);
 
     if (hlsl_ctx.status != PARSE_ERR)
         hr = E_NOTIMPL;

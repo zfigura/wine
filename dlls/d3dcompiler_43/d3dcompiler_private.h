@@ -150,7 +150,7 @@ static inline void *d3dcompiler_realloc(void *ptr, SIZE_T size)
 {
     if (!ptr)
         return d3dcompiler_alloc(size);
-    return HeapReAlloc(GetProcessHeap(), 0, ptr, size);
+    return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ptr, size);
 }
 
 static inline BOOL d3dcompiler_free(void *ptr)
@@ -172,6 +172,8 @@ static inline char *d3dcompiler_strdup(const char *string)
         memcpy(copy, string, len + 1);
     return copy;
 }
+
+BOOL array_reserve(void **elements, unsigned int *capacity, unsigned int count, unsigned int size) DECLSPEC_HIDDEN;
 
 struct asm_parser;
 
@@ -645,6 +647,13 @@ struct hlsl_struct_field
     unsigned int reg_offset;
 };
 
+struct hlsl_reg
+{
+    unsigned int reg;
+    unsigned char writemask;
+    unsigned char allocated;
+};
+
 enum hlsl_ir_node_type
 {
     HLSL_IR_ASSIGNMENT = 0,
@@ -717,6 +726,7 @@ struct hlsl_ir_var
     struct list scope_entry, param_entry;
 
     unsigned int first_write, last_read;
+    struct hlsl_reg reg;
 };
 
 struct hlsl_ir_function
@@ -1121,6 +1131,7 @@ const char *debug_base_type(const struct hlsl_type *type) DECLSPEC_HIDDEN;
 const char *debug_hlsl_type(const struct hlsl_type *type) DECLSPEC_HIDDEN;
 const char *debug_modifiers(DWORD modifiers) DECLSPEC_HIDDEN;
 const char *debug_node_type(enum hlsl_ir_node_type type) DECLSPEC_HIDDEN;
+const char *debug_writemask(DWORD writemask) DECLSPEC_HIDDEN;
 void debug_dump_ir_function_decl(const struct hlsl_ir_function_decl *func) DECLSPEC_HIDDEN;
 
 void free_hlsl_type(struct hlsl_type *type) DECLSPEC_HIDDEN;
