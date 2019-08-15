@@ -722,7 +722,7 @@ struct hlsl_ir_var
     const char *name;
     const char *semantic;
     unsigned int modifiers;
-    const struct reg_reservation *reg_reservation;
+    struct reg_reservation reg_reservation;
     struct list scope_entry, param_entry, extern_entry;
     struct hlsl_buffer *buffer;
     BOOL is_param;
@@ -909,14 +909,14 @@ struct parse_parameter
     struct hlsl_type *type;
     const char *name;
     const char *semantic;
-    const struct reg_reservation *reg_reservation;
+    struct reg_reservation reg_reservation;
     unsigned int modifiers;
 };
 
 struct parse_colon_attribute
 {
     const char *semantic;
-    struct reg_reservation *reg_reservation;
+    struct reg_reservation reg_reservation;
 };
 
 struct parse_initializer
@@ -934,7 +934,7 @@ struct parse_variable_def
     char *name;
     unsigned int array_size;
     const char *semantic;
-    struct reg_reservation *reg_reservation;
+    struct reg_reservation reg_reservation;
     struct parse_initializer initializer;
 };
 
@@ -984,7 +984,7 @@ struct hlsl_buffer
     struct source_location loc;
     enum hlsl_buffer_type type;
     const char *name;
-    const struct reg_reservation *reg_reservation;
+    struct reg_reservation reg_reservation;
     struct list entry;
 };
 

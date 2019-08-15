@@ -490,7 +490,8 @@ static struct hlsl_ir_var *new_var(const char *name, struct hlsl_type *type, con
     var->loc = loc;
     var->semantic = semantic;
     var->modifiers = modifiers;
-    var->reg_reservation = reg_reservation;
+    if (reg_reservation)
+        var->reg_reservation = *reg_reservation;
     var->buffer = hlsl_ctx.cur_buffer;
     return var;
 }
@@ -767,7 +768,6 @@ static void free_parse_variable_def(struct parse_variable_def *v)
     free_parse_initializer(&v->initializer);
     d3dcompiler_free(v->name);
     d3dcompiler_free((void *)v->semantic);
-    d3dcompiler_free(v->reg_reservation);
     d3dcompiler_free(v);
 }
 
@@ -802,7 +802,7 @@ static struct list *declare_vars(struct hlsl_type *basic_type, DWORD modifiers, 
         else
             type = basic_type;
 
-        if (!(var = new_var(v->name, type, v->loc, v->semantic, modifiers, v->reg_reservation)))
+        if (!(var = new_var(v->name, type, v->loc, v->semantic, modifiers, &v->reg_reservation)))
         {
             free_parse_variable_def(v);
             continue;
@@ -1113,7 +1113,7 @@ static BOOL add_func_parameter(struct list *list, struct parse_parameter *param,
     if (param->type->type == HLSL_CLASS_MATRIX)
         assert(param->type->modifiers & HLSL_MODIFIERS_MAJORITY_MASK);
 
-    if (!(var = new_var(param->name, param->type, loc, param->semantic, param->modifiers, param->reg_reservation)))
+    if (!(var = new_var(param->name, param->type, loc, param->semantic, param->modifiers, &param->reg_reservation)))
         return FALSE;
     var->is_param = TRUE;
 
@@ -1126,25 +1126,17 @@ static BOOL add_func_parameter(struct list *list, struct parse_parameter *param,
     return TRUE;
 }
 
-static struct reg_reservation *parse_reg_reservation(const char *reg_string)
+static struct reg_reservation parse_reg_reservation(const char *reg_string)
 {
-    struct reg_reservation *reg_res;
-    DWORD regnum = 0;
+    struct reg_reservation reg_res = {};
 
-    if (!sscanf(reg_string + 1, "%u", &regnum))
+    if (!sscanf(reg_string + 1, "%u", &reg_res.regnum))
     {
         FIXME("Unsupported register reservation syntax.\n");
-        return NULL;
+        return reg_res;
     }
 
-    reg_res = d3dcompiler_alloc(sizeof(*reg_res));
-    if (!reg_res)
-    {
-        ERR("Out of memory.\n");
-        return NULL;
-    }
-    reg_res->type = reg_string[0];
-    reg_res->regnum = regnum;
+    reg_res.type = reg_string[0];
     return reg_res;
 }
 
@@ -1313,7 +1305,7 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
     struct parse_if_body if_body;
     enum parse_unary_op unary_op;
     enum parse_assign_op assign_op;
-    struct reg_reservation *reg_reservation;
+    struct reg_reservation reg_reservation;
     struct parse_colon_attribute colon_attribute;
     enum hlsl_buffer_type buffer_type;
 }
@@ -1731,11 +1723,8 @@ func_prototype:           var_modifiers type var_identifier '(' parameters ')' c
                                             HLSL_LEVEL_ERROR, "void function with a semantic");
                                 }
 
-                                if ($7.reg_reservation)
-                                {
+                                if ($7.reg_reservation.type)
                                     FIXME("Unexpected register reservation for a function.\n");
-                                    d3dcompiler_free($7.reg_reservation);
-                                }
                                 if (!($$.decl = new_func_decl($2, $5, $7.semantic, get_location(&@3))))
                                 {
                                     ERR("Out of memory.\n");
@@ -1767,12 +1756,12 @@ var_identifier:           VAR_IDENTIFIER
 colon_attribute:          /* Empty */
                             {
                                 $$.semantic = NULL;
-                                $$.reg_reservation = NULL;
+                                $$.reg_reservation.type = 0;
                             }
                         | semantic
                             {
                                 $$.semantic = $1;
-                                $$.reg_reservation = NULL;
+                                $$.reg_reservation.type = 0;
                             }
                         | register_opt
                             {
@@ -3281,7 +3270,7 @@ static void prepend_uniform_copy(struct list *instrs, struct hlsl_ir_var *var)
     char name[28];
 
     if (!(const_var = new_var(var->name, var->data_type, var->loc, NULL,
-            var->modifiers & ~HLSL_STORAGE_IN, var->reg_reservation)))
+            var->modifiers & ~HLSL_STORAGE_IN, &var->reg_reservation)))
     {
         hlsl_ctx.status = PARSE_ERR;
         return;
