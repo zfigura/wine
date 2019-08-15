@@ -1129,27 +1129,7 @@ static BOOL add_func_parameter(struct list *list, struct parse_parameter *param,
 static struct reg_reservation *parse_reg_reservation(const char *reg_string)
 {
     struct reg_reservation *reg_res;
-    enum bwritershader_param_register_type type;
     DWORD regnum = 0;
-
-    switch (reg_string[0])
-    {
-        case 'c':
-            type = BWRITERSPR_CONST;
-            break;
-        case 'i':
-            type = BWRITERSPR_CONSTINT;
-            break;
-        case 'b':
-            type = BWRITERSPR_CONSTBOOL;
-            break;
-        case 's':
-            type = BWRITERSPR_SAMPLER;
-            break;
-        default:
-            FIXME("Unsupported register type.\n");
-            return NULL;
-     }
 
     if (!sscanf(reg_string + 1, "%u", &regnum))
     {
@@ -1163,7 +1143,7 @@ static struct reg_reservation *parse_reg_reservation(const char *reg_string)
         ERR("Out of memory.\n");
         return NULL;
     }
-    reg_res->type = type;
+    reg_res->type = reg_string[0];
     reg_res->regnum = regnum;
     return reg_res;
 }

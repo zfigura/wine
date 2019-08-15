@@ -711,7 +711,7 @@ struct hlsl_src
 
 struct reg_reservation
 {
-    enum bwritershader_param_register_type type;
+    char type;
     DWORD regnum;
 };
 
