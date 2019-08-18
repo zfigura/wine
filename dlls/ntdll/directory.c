@@ -2871,6 +2871,7 @@ NTSTATUS CDECL wine_nt_to_unix_file_name( const UNICODE_STRING *nameW, ANSI_STRI
  */
 NTSTATUS WINAPI RtlWow64EnableFsRedirection( BOOLEAN enable )
 {
+    TRACE("%u\n", enable);
     if (!is_wow64) return STATUS_NOT_IMPLEMENTED;
     ntdll_get_thread_data()->wow64_redir = enable;
     return STATUS_SUCCESS;
@@ -2882,6 +2883,7 @@ NTSTATUS WINAPI RtlWow64EnableFsRedirection( BOOLEAN enable )
  */
 NTSTATUS WINAPI RtlWow64EnableFsRedirectionEx( ULONG disable, ULONG *old_value )
 {
+    TRACE("%u\n", disable);
     if (!is_wow64) return STATUS_NOT_IMPLEMENTED;
 
     __TRY
