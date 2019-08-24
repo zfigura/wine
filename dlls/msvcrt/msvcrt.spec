@@ -1259,7 +1259,7 @@
 @ cdecl bsearch(ptr ptr long long ptr) MSVCRT_bsearch
 @ cdecl bsearch_s(ptr ptr long long ptr ptr) MSVCRT_bsearch_s
 @ cdecl btowc(long) MSVCRT_btowc
-@ cdecl calloc(long long) MSVCRT_calloc
+@ cdecl -norelay calloc(long long) MSVCRT_calloc
 @ cdecl ceil(double) MSVCRT_ceil
 @ cdecl -arch=arm,x86_64,arm64 ceilf(float) MSVCRT_ceilf
 @ cdecl clearerr(ptr) MSVCRT_clearerr
@@ -1280,7 +1280,7 @@
 @ cdecl fclose(ptr) MSVCRT_fclose
 @ cdecl feof(ptr) MSVCRT_feof
 @ cdecl ferror(ptr) MSVCRT_ferror
-@ cdecl fflush(ptr) MSVCRT_fflush
+@ cdecl -norelay fflush(ptr) MSVCRT_fflush
 @ cdecl fgetc(ptr) MSVCRT_fgetc
 @ cdecl fgetpos(ptr ptr) MSVCRT_fgetpos
 @ cdecl fgets(ptr long ptr) MSVCRT_fgets
@@ -1301,7 +1301,7 @@
 @ cdecl fputwc(long ptr) MSVCRT_fputwc
 @ cdecl fputws(wstr ptr) MSVCRT_fputws
 @ cdecl fread(ptr long long ptr) MSVCRT_fread
-@ cdecl free(ptr) MSVCRT_free
+@ cdecl -norelay free(ptr) MSVCRT_free
 @ cdecl freopen(str str ptr) MSVCRT_freopen
 @ cdecl freopen_s(ptr str str ptr) MSVCRT_freopen_s
 @ cdecl frexp(double ptr) MSVCRT_frexp
@@ -1360,7 +1360,7 @@
 @ cdecl -arch=arm,x86_64,arm64 logf(float) MSVCRT_logf
 @ cdecl -arch=arm,x86_64,arm64 log10f(float) MSVCRT_log10f
 @ cdecl -arch=i386,x86_64,arm,arm64 longjmp(ptr long) MSVCRT_longjmp
-@ cdecl malloc(long) MSVCRT_malloc
+@ cdecl -norelay malloc(long) MSVCRT_malloc
 @ cdecl mblen(ptr long) MSVCRT_mblen
 @ cdecl mbrlen(ptr long ptr) MSVCRT_mbrlen
 @ cdecl mbrtowc(ptr str long ptr) MSVCRT_mbrtowc
@@ -1371,12 +1371,12 @@
 @ cdecl mbstowcs_s(ptr ptr long str long) MSVCRT__mbstowcs_s
 @ cdecl mbtowc(ptr str long) MSVCRT_mbtowc
 @ cdecl memchr(ptr long long) MSVCRT_memchr
-@ cdecl memcmp(ptr ptr long) MSVCRT_memcmp
-@ cdecl memcpy(ptr ptr long) MSVCRT_memcpy
+@ cdecl -norelay memcmp(ptr ptr long) MSVCRT_memcmp
+@ cdecl -norelay memcpy(ptr ptr long) MSVCRT_memcpy
 @ cdecl memcpy_s(ptr long ptr long) MSVCRT_memcpy_s
-@ cdecl memmove(ptr ptr long) MSVCRT_memmove
+@ cdecl -norelay memmove(ptr ptr long) MSVCRT_memmove
 @ cdecl memmove_s(ptr long ptr long) MSVCRT_memmove_s
-@ cdecl memset(ptr long long) MSVCRT_memset
+@ cdecl -norelay memset(ptr long long) MSVCRT_memset
 @ cdecl mktime(ptr) MSVCRT_mktime
 @ cdecl modf(double ptr) MSVCRT_modf
 @ cdecl -arch=arm,x86_64,arm64 modff(float ptr) MSVCRT_modff
@@ -1386,8 +1386,8 @@
 @ varargs printf(str) MSVCRT_printf
 @ varargs printf_s(str) MSVCRT_printf_s
 @ cdecl putc(long ptr) MSVCRT_putc
-@ cdecl putchar(long) MSVCRT_putchar
-@ cdecl puts(str) MSVCRT_puts
+@ cdecl -norelay putchar(long) MSVCRT_putchar
+@ cdecl -norelay puts(str) MSVCRT_puts
 @ cdecl putwc(long ptr) MSVCRT_fputwc
 @ cdecl putwchar(long) MSVCRT__fputwchar
 @ cdecl qsort(ptr long long ptr) MSVCRT_qsort
@@ -1395,7 +1395,7 @@
 @ cdecl raise(long) MSVCRT_raise
 @ cdecl rand() MSVCRT_rand
 @ cdecl rand_s(ptr) MSVCRT_rand_s
-@ cdecl realloc(ptr long) MSVCRT_realloc
+@ cdecl -norelay realloc(ptr long) MSVCRT_realloc
 @ cdecl remove(str) MSVCRT_remove
 @ cdecl rename(str str) MSVCRT_rename
 @ cdecl rewind(ptr) MSVCRT_rewind
@@ -1420,7 +1420,7 @@
 @ cdecl strcat(str str) ntdll.strcat
 @ cdecl strcat_s(str long str) MSVCRT_strcat_s
 @ cdecl strchr(str long) MSVCRT_strchr
-@ cdecl strcmp(str str) MSVCRT_strcmp
+@ cdecl -norelay strcmp(str str) MSVCRT_strcmp
 @ cdecl strcoll(str str) MSVCRT_strcoll
 @ cdecl strcpy(ptr str) MSVCRT_strcpy
 @ cdecl strcpy_s(ptr long str) MSVCRT_strcpy_s
@@ -1428,7 +1428,7 @@
 @ cdecl strerror(long) MSVCRT_strerror
 @ cdecl strerror_s(ptr long long) MSVCRT_strerror_s
 @ cdecl strftime(ptr long str ptr) MSVCRT_strftime
-@ cdecl strlen(str) MSVCRT_strlen
+@ cdecl -norelay strlen(str) MSVCRT_strlen
 @ cdecl strncat(str str long) MSVCRT_strncat
 @ cdecl strncat_s(str long str long) MSVCRT_strncat_s
 @ cdecl strncmp(str str long) MSVCRT_strncmp
