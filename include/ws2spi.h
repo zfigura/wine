@@ -41,6 +41,7 @@ INT      WINAPI WSCEnableNSProvider(LPGUID,BOOL);
 INT      WINAPI WSCEnumProtocols(LPINT,LPWSAPROTOCOL_INFOW,LPDWORD,LPINT);
 INT      WINAPI WSCGetProviderPath(LPGUID,LPWSTR,LPINT,LPINT);
 INT      WINAPI WSCInstallNameSpace(LPWSTR,LPWSTR,DWORD,DWORD,LPGUID);
+INT      WINAPI WSCSetApplicationCategory(const WCHAR *path, DWORD path_len, const WCHAR *args, DWORD args_len, DWORD categories, DWORD *prev, INT *error);
 INT      WINAPI WSCUnInstallNameSpace(LPGUID);
 INT      WINAPI WSCUpdateProvider(LPGUID, const WCHAR *, const LPWSAPROTOCOL_INFOW, DWORD, LPINT);
 INT      WINAPI WSCWriteProviderOrder(LPDWORD,DWORD);

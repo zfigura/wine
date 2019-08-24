@@ -8195,6 +8195,16 @@ INT WINAPI WSCDeinstallProvider(LPGUID lpProviderId, LPINT lpErrno)
     return 0;
 }
 
+/***********************************************************************
+ *              WSCSetApplicationCategory             (WS2_32.@)
+ */
+INT WINAPI WSCSetApplicationCategory(const WCHAR *path, DWORD path_len,
+        const WCHAR *args, DWORD args_len, DWORD categories, DWORD *prev, INT *error)
+{
+    FIXME("path %s, args %s, categories %#x, prev %p, error %p, stub!\n",
+            debugstr_wn(path, path_len), debugstr_wn(args, args_len), categories, prev, error);
+    return 0;
+}
 
 /***********************************************************************
  *              WSAAccept                        (WS2_32.26)
