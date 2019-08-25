@@ -22,14 +22,14 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(strmbase);
 
-static inline BaseRenderer *impl_from_IBaseFilter(IBaseFilter *iface)
+static inline struct strmbase_renderer *impl_from_IBaseFilter(IBaseFilter *iface)
 {
-    return CONTAINING_RECORD(iface, BaseRenderer, filter.IBaseFilter_iface);
+    return CONTAINING_RECORD(iface, struct strmbase_renderer, filter.IBaseFilter_iface);
 }
 
-static inline BaseRenderer *impl_from_strmbase_filter(struct strmbase_filter *iface)
+static inline struct strmbase_renderer *impl_from_strmbase_filter(struct strmbase_filter *iface)
 {
-    return CONTAINING_RECORD(iface, BaseRenderer, filter);
+    return CONTAINING_RECORD(iface, struct strmbase_renderer, filter);
 }
 
 static const IQualityControlVtbl Renderer_QualityControl_Vtbl = {
@@ -40,14 +40,14 @@ static const IQualityControlVtbl Renderer_QualityControl_Vtbl = {
     QualityControlImpl_SetSink
 };
 
-static inline BaseRenderer *impl_from_IPin(IPin *iface)
+static inline struct strmbase_renderer *impl_from_IPin(IPin *iface)
 {
-    return CONTAINING_RECORD(iface, BaseRenderer, sink.pin.IPin_iface);
+    return CONTAINING_RECORD(iface, struct strmbase_renderer, sink.pin.IPin_iface);
 }
 
 static HRESULT WINAPI BaseRenderer_InputPin_QueryInterface(IPin *iface, REFIID iid, void **out)
 {
-    BaseRenderer *filter = impl_from_IPin(iface);
+    struct strmbase_renderer *filter = impl_from_IPin(iface);
     HRESULT hr;
 
     TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
@@ -61,7 +61,7 @@ static HRESULT WINAPI BaseRenderer_InputPin_QueryInterface(IPin *iface, REFIID i
 
 static HRESULT WINAPI BaseRenderer_InputPin_ReceiveConnection(IPin *iface, IPin *peer, const AM_MEDIA_TYPE *mt)
 {
-    BaseRenderer *filter = impl_from_IPin(iface);
+    struct strmbase_renderer *filter = impl_from_IPin(iface);
     HRESULT hr;
 
     TRACE("iface %p, peer %p, mt %p.\n", iface, peer, mt);
@@ -81,7 +81,7 @@ static HRESULT WINAPI BaseRenderer_InputPin_ReceiveConnection(IPin *iface, IPin 
 
 static HRESULT WINAPI BaseRenderer_InputPin_Disconnect(IPin * iface)
 {
-    BaseRenderer *filter = impl_from_IPin(iface);
+    struct strmbase_renderer *filter = impl_from_IPin(iface);
     HRESULT hr;
 
     TRACE("iface %p.\n", iface);
@@ -101,7 +101,7 @@ static HRESULT WINAPI BaseRenderer_InputPin_Disconnect(IPin * iface)
 
 static HRESULT WINAPI BaseRenderer_InputPin_EndOfStream(IPin * iface)
 {
-    BaseRenderer *pFilter = impl_from_IPin(iface);
+    struct strmbase_renderer *pFilter = impl_from_IPin(iface);
     HRESULT hr;
 
     TRACE("iface %p.\n", iface);
@@ -123,7 +123,7 @@ static HRESULT WINAPI BaseRenderer_InputPin_EndOfStream(IPin * iface)
 
 static HRESULT WINAPI BaseRenderer_InputPin_BeginFlush(IPin * iface)
 {
-    BaseRenderer *pFilter = impl_from_IPin(iface);
+    struct strmbase_renderer *pFilter = impl_from_IPin(iface);
     HRESULT hr;
 
     TRACE("iface %p.\n", iface);
@@ -140,7 +140,7 @@ static HRESULT WINAPI BaseRenderer_InputPin_BeginFlush(IPin * iface)
 
 static HRESULT WINAPI BaseRenderer_InputPin_EndFlush(IPin * iface)
 {
-    BaseRenderer *pFilter = impl_from_IPin(iface);
+    struct strmbase_renderer *pFilter = impl_from_IPin(iface);
     HRESULT hr;
 
     TRACE("iface %p.\n", iface);
@@ -184,7 +184,7 @@ static const IPinVtbl BaseRenderer_InputPin_Vtbl =
 
 static IPin *renderer_get_pin(struct strmbase_filter *iface, unsigned int index)
 {
-    BaseRenderer *filter = impl_from_strmbase_filter(iface);
+    struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
 
     if (index == 0)
         return &filter->sink.pin.IPin_iface;
@@ -193,13 +193,13 @@ static IPin *renderer_get_pin(struct strmbase_filter *iface, unsigned int index)
 
 static void renderer_destroy(struct strmbase_filter *iface)
 {
-    BaseRenderer *filter = impl_from_strmbase_filter(iface);
+    struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
     filter->pFuncsTable->renderer_destroy(filter);
 }
 
 static HRESULT renderer_query_interface(struct strmbase_filter *iface, REFIID iid, void **out)
 {
-    BaseRenderer *filter = impl_from_strmbase_filter(iface);
+    struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
     HRESULT hr;
 
     if (filter->pFuncsTable->renderer_query_interface
@@ -228,13 +228,13 @@ static const struct strmbase_filter_ops filter_ops =
 
 static HRESULT sink_query_accept(struct strmbase_pin *pin, const AM_MEDIA_TYPE *mt)
 {
-    BaseRenderer *filter = impl_from_IPin(&pin->IPin_iface);
+    struct strmbase_renderer *filter = impl_from_IPin(&pin->IPin_iface);
     return filter->pFuncsTable->pfnCheckMediaType(filter, mt);
 }
 
 static HRESULT WINAPI BaseRenderer_Receive(BaseInputPin *pin, IMediaSample *sample)
 {
-    BaseRenderer *filter = impl_from_IPin(&pin->pin.IPin_iface);
+    struct strmbase_renderer *filter = impl_from_IPin(&pin->pin.IPin_iface);
     return BaseRendererImpl_Receive(filter, sample);
 }
 
@@ -245,7 +245,7 @@ static const BaseInputPinFuncTable input_BaseInputFuncTable =
     .pfnReceive = BaseRenderer_Receive,
 };
 
-void strmbase_renderer_cleanup(BaseRenderer *filter)
+void strmbase_renderer_cleanup(struct strmbase_renderer *filter)
 {
     if (filter->sink.pin.peer)
         IPin_Disconnect(filter->sink.pin.peer);
@@ -266,7 +266,7 @@ void strmbase_renderer_cleanup(BaseRenderer *filter)
     strmbase_filter_cleanup(&filter->filter);
 }
 
-HRESULT WINAPI BaseRendererImpl_Receive(BaseRenderer *This, IMediaSample * pSample)
+HRESULT WINAPI BaseRendererImpl_Receive(struct strmbase_renderer *This, IMediaSample *pSample)
 {
     HRESULT hr = S_OK;
     REFERENCE_TIME start, stop;
@@ -368,7 +368,7 @@ HRESULT WINAPI BaseRendererImpl_Receive(BaseRenderer *This, IMediaSample * pSamp
 
 HRESULT WINAPI BaseRendererImpl_Stop(IBaseFilter * iface)
 {
-    BaseRenderer *This = impl_from_IBaseFilter(iface);
+    struct strmbase_renderer *This = impl_from_IBaseFilter(iface);
 
     TRACE("(%p)->()\n", This);
 
@@ -388,7 +388,7 @@ HRESULT WINAPI BaseRendererImpl_Stop(IBaseFilter * iface)
 
 HRESULT WINAPI BaseRendererImpl_Run(IBaseFilter * iface, REFERENCE_TIME tStart)
 {
-    BaseRenderer *This = impl_from_IBaseFilter(iface);
+    struct strmbase_renderer *This = impl_from_IBaseFilter(iface);
 
     TRACE("iface %p, start %s.\n", iface, debugstr_time(tStart));
 
@@ -422,7 +422,7 @@ out:
 
 HRESULT WINAPI BaseRendererImpl_Pause(IBaseFilter * iface)
 {
-    BaseRenderer *This = impl_from_IBaseFilter(iface);
+    struct strmbase_renderer *This = impl_from_IBaseFilter(iface);
 
     TRACE("(%p)->()\n", This);
 
@@ -454,7 +454,7 @@ HRESULT WINAPI BaseRendererImpl_Pause(IBaseFilter * iface)
 
 HRESULT WINAPI BaseRendererImpl_SetSyncSource(IBaseFilter *iface, IReferenceClock *clock)
 {
-    BaseRenderer *This = impl_from_IBaseFilter(iface);
+    struct strmbase_renderer *This = impl_from_IBaseFilter(iface);
     HRESULT hr;
 
     EnterCriticalSection(&This->filter.csFilter);
@@ -468,7 +468,7 @@ HRESULT WINAPI BaseRendererImpl_SetSyncSource(IBaseFilter *iface, IReferenceCloc
 HRESULT WINAPI BaseRendererImpl_GetState(IBaseFilter * iface, DWORD dwMilliSecsTimeout, FILTER_STATE *pState)
 {
     HRESULT hr;
-    BaseRenderer *This = impl_from_IBaseFilter(iface);
+    struct strmbase_renderer *This = impl_from_IBaseFilter(iface);
 
     TRACE("(%p)->(%d, %p)\n", This, dwMilliSecsTimeout, pState);
 
@@ -501,7 +501,7 @@ static const IBaseFilterVtbl strmbase_renderer_vtbl =
     BaseFilterImpl_QueryVendorInfo
 };
 
-HRESULT WINAPI BaseRendererImpl_EndOfStream(BaseRenderer* iface)
+HRESULT WINAPI BaseRendererImpl_EndOfStream(struct strmbase_renderer *iface)
 {
     IMediaEventSink* pEventSink;
     IFilterGraph *graph;
@@ -524,7 +524,7 @@ HRESULT WINAPI BaseRendererImpl_EndOfStream(BaseRenderer* iface)
     return hr;
 }
 
-HRESULT WINAPI BaseRendererImpl_BeginFlush(BaseRenderer* iface)
+HRESULT WINAPI BaseRendererImpl_BeginFlush(struct strmbase_renderer *iface)
 {
     TRACE("(%p)\n", iface);
     BaseRendererImpl_ClearPendingSample(iface);
@@ -532,7 +532,7 @@ HRESULT WINAPI BaseRendererImpl_BeginFlush(BaseRenderer* iface)
     return S_OK;
 }
 
-HRESULT WINAPI BaseRendererImpl_EndFlush(BaseRenderer* iface)
+HRESULT WINAPI BaseRendererImpl_EndFlush(struct strmbase_renderer *iface)
 {
     TRACE("(%p)\n", iface);
     QualityControlRender_Start(iface->qcimpl, iface->stream_start);
@@ -541,7 +541,7 @@ HRESULT WINAPI BaseRendererImpl_EndFlush(BaseRenderer* iface)
     return S_OK;
 }
 
-HRESULT WINAPI BaseRendererImpl_ClearPendingSample(BaseRenderer *iface)
+HRESULT WINAPI BaseRendererImpl_ClearPendingSample(struct strmbase_renderer *iface)
 {
     if (iface->pMediaSample)
     {
@@ -551,7 +551,7 @@ HRESULT WINAPI BaseRendererImpl_ClearPendingSample(BaseRenderer *iface)
     return S_OK;
 }
 
-HRESULT WINAPI strmbase_renderer_init(BaseRenderer *filter, IUnknown *outer,
+HRESULT WINAPI strmbase_renderer_init(struct strmbase_renderer *filter, IUnknown *outer,
         const CLSID *clsid, const WCHAR *sink_name, const BaseRendererFuncTable *func_table)
 {
     HRESULT hr;
@@ -574,7 +574,7 @@ HRESULT WINAPI strmbase_renderer_init(BaseRenderer *filter, IUnknown *outer,
     }
 
     InitializeCriticalSection(&filter->csRenderLock);
-    filter->csRenderLock.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__": BaseRenderer.csRenderLock");
+    filter->csRenderLock.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__": strmbase_renderer.csRenderLock");
     filter->state_event = CreateEventW(NULL, TRUE, TRUE, NULL);
     filter->advise_event = CreateEventW(NULL, FALSE, FALSE, NULL);
     filter->flush_event = CreateEventW(NULL, TRUE, TRUE, NULL);

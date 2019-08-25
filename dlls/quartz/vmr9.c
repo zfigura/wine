@@ -42,7 +42,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 
 struct quartz_vmr
 {
-    BaseRenderer renderer;
+    struct strmbase_renderer renderer;
     BaseControlWindow baseControlWindow;
     BaseControlVideo baseControlVideo;
 
@@ -257,7 +257,7 @@ static DWORD VMR9_SendSampleData(struct quartz_vmr *This, VMR9PresentationInfo *
     return hr;
 }
 
-static HRESULT WINAPI VMR9_DoRenderSample(BaseRenderer *iface, IMediaSample * pSample)
+static HRESULT WINAPI VMR9_DoRenderSample(struct strmbase_renderer *iface, IMediaSample *pSample)
 {
     struct quartz_vmr *This = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
     LPBYTE pbSrcStream = NULL;
@@ -322,7 +322,7 @@ static HRESULT WINAPI VMR9_DoRenderSample(BaseRenderer *iface, IMediaSample * pS
     return hr;
 }
 
-static HRESULT WINAPI VMR9_CheckMediaType(BaseRenderer *iface, const AM_MEDIA_TYPE * pmt)
+static HRESULT WINAPI VMR9_CheckMediaType(struct strmbase_renderer *iface, const AM_MEDIA_TYPE *pmt)
 {
     struct quartz_vmr *This = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
@@ -414,7 +414,7 @@ static HRESULT VMR9_maybe_init(struct quartz_vmr *This, BOOL force)
     return hr;
 }
 
-static void vmr_start_stream(BaseRenderer *iface)
+static void vmr_start_stream(struct strmbase_renderer *iface)
 {
     struct quartz_vmr *This = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
@@ -432,7 +432,7 @@ static void vmr_start_stream(BaseRenderer *iface)
     GetClientRect(This->baseControlWindow.hwnd, &This->target_rect);
 }
 
-static void vmr_stop_stream(BaseRenderer *iface)
+static void vmr_stop_stream(struct strmbase_renderer *iface)
 {
     struct quartz_vmr *This = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
@@ -442,7 +442,8 @@ static void vmr_stop_stream(BaseRenderer *iface)
         IVMRImagePresenter9_StopPresenting(This->presenter, This->cookie);
 }
 
-static HRESULT WINAPI VMR9_ShouldDrawSampleNow(BaseRenderer *This, IMediaSample *pSample, REFERENCE_TIME *pStartTime, REFERENCE_TIME *pEndTime)
+static HRESULT WINAPI VMR9_ShouldDrawSampleNow(struct strmbase_renderer *iface,
+        IMediaSample *pSample, REFERENCE_TIME *start, REFERENCE_TIME *end)
 {
     /* Preroll means the sample isn't shown, this is used for key frames and things like that */
     if (IMediaSample_IsPreroll(pSample) == S_OK)
@@ -450,7 +451,7 @@ static HRESULT WINAPI VMR9_ShouldDrawSampleNow(BaseRenderer *This, IMediaSample 
     return S_FALSE;
 }
 
-static HRESULT WINAPI VMR9_CompleteConnect(BaseRenderer *This, IPin *pReceivePin)
+static HRESULT WINAPI VMR9_CompleteConnect(struct strmbase_renderer *This, IPin *pReceivePin)
 {
     struct quartz_vmr *pVMR9 = impl_from_IBaseFilter(&This->filter.IBaseFilter_iface);
     HRESULT hr;
@@ -464,7 +465,7 @@ static HRESULT WINAPI VMR9_CompleteConnect(BaseRenderer *This, IPin *pReceivePin
     return hr;
 }
 
-static HRESULT WINAPI VMR9_BreakConnect(BaseRenderer *This)
+static HRESULT WINAPI VMR9_BreakConnect(struct strmbase_renderer *This)
 {
     struct quartz_vmr *pVMR9 = impl_from_IBaseFilter(&This->filter.IBaseFilter_iface);
     HRESULT hr = S_OK;
@@ -485,7 +486,7 @@ static HRESULT WINAPI VMR9_BreakConnect(BaseRenderer *This)
     return hr;
 }
 
-static void vmr_destroy(BaseRenderer *iface)
+static void vmr_destroy(struct strmbase_renderer *iface)
 {
     struct quartz_vmr *filter = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
@@ -508,7 +509,7 @@ static void vmr_destroy(BaseRenderer *iface)
     CoTaskMemFree(filter);
 }
 
-static HRESULT vmr_query_interface(BaseRenderer *iface, REFIID iid, void **out)
+static HRESULT vmr_query_interface(struct strmbase_renderer *iface, REFIID iid, void **out)
 {
     struct quartz_vmr *filter = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
@@ -543,7 +544,7 @@ static HRESULT vmr_query_interface(BaseRenderer *iface, REFIID iid, void **out)
     return S_OK;
 }
 
-static HRESULT vmr_pin_query_interface(BaseRenderer *iface, REFIID iid, void **out)
+static HRESULT vmr_pin_query_interface(struct strmbase_renderer *iface, REFIID iid, void **out)
 {
     struct quartz_vmr *filter = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
