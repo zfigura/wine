@@ -47,7 +47,6 @@ typedef struct VideoRendererImpl
 
     BOOL init;
 
-    HANDLE hEvent;
     RECT SourceRect;
     RECT DestRect;
     RECT WindowPos;
@@ -222,13 +221,11 @@ static HRESULT WINAPI VideoRenderer_DoRenderSample(BaseRenderer* iface, IMediaSa
     }
 #endif
 
-    SetEvent(This->hEvent);
     if (This->renderer.filter.state == State_Paused)
     {
         HANDLE handles[2] = {This->run_event, This->renderer.flush_event};
 
         VideoRenderer_SendSampleData(This, pbSrcStream, cbSrcStream);
-        SetEvent(This->hEvent);
 
         LeaveCriticalSection(&This->renderer.csRenderLock);
         WaitForMultipleObjects(ARRAY_SIZE(handles), handles, FALSE, INFINITE);
@@ -288,34 +285,12 @@ static HRESULT WINAPI VideoRenderer_CheckMediaType(BaseRenderer *iface, const AM
     return S_FALSE;
 }
 
-static HRESULT WINAPI VideoRenderer_EndFlush(BaseRenderer* iface)
-{
-    VideoRendererImpl *This = impl_from_BaseRenderer(iface);
-
-    TRACE("(%p)->()\n", iface);
-
-    if (This->renderer.pMediaSample) {
-        ResetEvent(This->hEvent);
-        LeaveCriticalSection(&iface->filter.csFilter);
-        LeaveCriticalSection(&iface->csRenderLock);
-        WaitForSingleObject(This->hEvent, INFINITE);
-        EnterCriticalSection(&iface->csRenderLock);
-        EnterCriticalSection(&iface->filter.csFilter);
-    }
-    if (This->renderer.filter.state == State_Paused) {
-        ResetEvent(This->hEvent);
-    }
-
-    return BaseRendererImpl_EndFlush(iface);
-}
-
 static void video_renderer_destroy(BaseRenderer *iface)
 {
     VideoRendererImpl *filter = impl_from_BaseRenderer(iface);
 
     BaseControlWindow_Destroy(&filter->baseControlWindow);
     BaseControlVideo_Destroy(&filter->baseControlVideo);
-    CloseHandle(filter->hEvent);
     CloseHandle(filter->run_event);
 
     strmbase_renderer_cleanup(&filter->renderer);
@@ -356,7 +331,6 @@ static void video_renderer_stop_stream(BaseRenderer *iface)
 
     TRACE("(%p)->()\n", This);
 
-    SetEvent(This->hEvent);
     if (This->baseControlWindow.AutoShow)
         /* Black it out */
         RedrawWindow(This->baseControlWindow.hwnd, NULL, NULL, RDW_INVALIDATE|RDW_ERASE);
@@ -373,10 +347,7 @@ static void video_renderer_start_stream(BaseRenderer *iface)
         && (This->renderer.filter.state == State_Stopped || !This->renderer.sink.end_of_stream))
     {
         if (This->renderer.filter.state == State_Stopped)
-        {
-            ResetEvent(This->hEvent);
             VideoRenderer_AutoShowWindow(This);
-        }
     }
 
     SetEvent(This->run_event);
@@ -414,7 +385,6 @@ static const BaseRendererFuncTable BaseFuncTable =
     .renderer_start_stream = video_renderer_start_stream,
     .renderer_stop_stream = video_renderer_stop_stream,
     .pfnShouldDrawSampleNow = VideoRenderer_ShouldDrawSampleNow,
-    .pfnEndFlush = VideoRenderer_EndFlush,
     .renderer_destroy = video_renderer_destroy,
     .renderer_query_interface = video_renderer_query_interface,
     .renderer_pin_query_interface = video_renderer_pin_query_interface,
@@ -599,7 +569,6 @@ static HRESULT WINAPI VideoRenderer_Pause(IBaseFilter * iface)
         if (This->renderer.filter.state == State_Stopped)
         {
             This->renderer.sink.end_of_stream = 0;
-            ResetEvent(This->hEvent);
             VideoRenderer_AutoShowWindow(This);
         }
 
@@ -863,7 +832,6 @@ HRESULT VideoRenderer_create(IUnknown *outer, void **out)
     if (FAILED(hr))
         goto fail;
 
-    pVideoRenderer->hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     pVideoRenderer->run_event = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     *out = &pVideoRenderer->renderer.filter.IUnknown_inner;
