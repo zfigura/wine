@@ -377,7 +377,7 @@ static BOOL WINAPI video_renderer_resize(BaseControlWindow *iface, LONG Width, L
     return TRUE;
 }
 
-static const BaseRendererFuncTable BaseFuncTable =
+static const struct strmbase_renderer_ops renderer_ops =
 {
     .pfnCheckMediaType = VideoRenderer_CheckMediaType,
     .pfnDoRenderSample = VideoRenderer_DoRenderSample,
@@ -771,7 +771,7 @@ HRESULT VideoRenderer_create(IUnknown *outer, void **out)
     pVideoRenderer->IOverlay_iface.lpVtbl = &overlay_vtbl;
 
     hr = strmbase_renderer_init(&pVideoRenderer->renderer, outer,
-            &CLSID_VideoRenderer, sink_name, &BaseFuncTable);
+            &CLSID_VideoRenderer, sink_name, &renderer_ops);
 
     if (FAILED(hr))
         goto fail;

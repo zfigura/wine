@@ -557,7 +557,7 @@ static HRESULT vmr_pin_query_interface(struct strmbase_renderer *iface, REFIID i
     return S_OK;
 }
 
-static const BaseRendererFuncTable BaseFuncTable =
+static const struct strmbase_renderer_ops renderer_ops =
 {
     .pfnCheckMediaType = VMR9_CheckMediaType,
     .pfnDoRenderSample = VMR9_DoRenderSample,
@@ -2231,7 +2231,7 @@ static HRESULT vmr_create(IUnknown *outer, void **out, const CLSID *clsid)
     pVMR->IVMRWindowlessControl9_iface.lpVtbl = &VMR9_WindowlessControl_Vtbl;
     pVMR->IOverlay_iface.lpVtbl = &overlay_vtbl;
 
-    hr = strmbase_renderer_init(&pVMR->renderer, outer, clsid, sink_name, &BaseFuncTable);
+    hr = strmbase_renderer_init(&pVMR->renderer, outer, clsid, sink_name, &renderer_ops);
     if (FAILED(hr))
         goto fail;
 
