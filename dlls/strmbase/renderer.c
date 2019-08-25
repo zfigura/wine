@@ -245,15 +245,15 @@ static const BaseInputPinFuncTable input_BaseInputFuncTable =
     .pfnReceive = BaseRenderer_Receive,
 };
 
+static const IBaseFilterVtbl strmbase_renderer_vtbl;
 
-HRESULT WINAPI strmbase_renderer_init(BaseRenderer *filter, const IBaseFilterVtbl *vtbl,
-        IUnknown *outer, const CLSID *clsid, const WCHAR *sink_name,
-        const BaseRendererFuncTable *pBaseFuncsTable)
+HRESULT WINAPI strmbase_renderer_init(BaseRenderer *filter, IUnknown *outer,
+        const CLSID *clsid, const WCHAR *sink_name, const BaseRendererFuncTable *pBaseFuncsTable)
 {
     HRESULT hr;
 
     memset(filter, 0, sizeof(*filter));
-    strmbase_filter_init(&filter->filter, vtbl, outer, clsid, &filter_ops);
+    strmbase_filter_init(&filter->filter, &strmbase_renderer_vtbl, outer, clsid, &filter_ops);
 
     filter->pFuncsTable = pBaseFuncsTable;
 
@@ -517,6 +517,25 @@ HRESULT WINAPI BaseRendererImpl_GetState(IBaseFilter * iface, DWORD dwMilliSecsT
 
     return hr;
 }
+
+static const IBaseFilterVtbl strmbase_renderer_vtbl =
+{
+    BaseFilterImpl_QueryInterface,
+    BaseFilterImpl_AddRef,
+    BaseFilterImpl_Release,
+    BaseFilterImpl_GetClassID,
+    BaseRendererImpl_Stop,
+    BaseRendererImpl_Pause,
+    BaseRendererImpl_Run,
+    BaseRendererImpl_GetState,
+    BaseRendererImpl_SetSyncSource,
+    BaseFilterImpl_GetSyncSource,
+    BaseFilterImpl_EnumPins,
+    BaseFilterImpl_FindPin,
+    BaseFilterImpl_QueryFilterInfo,
+    BaseFilterImpl_JoinFilterGraph,
+    BaseFilterImpl_QueryVendorInfo
+};
 
 HRESULT WINAPI BaseRendererImpl_EndOfStream(BaseRenderer* iface)
 {
