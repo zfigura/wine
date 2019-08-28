@@ -153,7 +153,7 @@ static void test_interfaces(void)
 
     check_interface(pin, &IID_IKsPropertySet, FALSE);
     check_interface(pin, &IID_IMediaPosition, FALSE);
-    todo_wine check_interface(pin, &IID_IMediaSeeking, FALSE);
+    check_interface(pin, &IID_IMediaSeeking, FALSE);
 
     IPin_Release(pin);
 

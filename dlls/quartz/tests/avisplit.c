@@ -145,12 +145,13 @@ static void test_interfaces(void)
     IBaseFilter_FindPin(filter, sink_name, &pin);
 
     check_interface(pin, &IID_IPin, TRUE);
+    todo_wine check_interface(pin, &IID_IQualityControl, TRUE);
     check_interface(pin, &IID_IUnknown, TRUE);
 
     check_interface(pin, &IID_IKsPropertySet, FALSE);
     check_interface(pin, &IID_IMemInputPin, FALSE);
     check_interface(pin, &IID_IMediaPosition, FALSE);
-    todo_wine check_interface(pin, &IID_IMediaSeeking, FALSE);
+    check_interface(pin, &IID_IMediaSeeking, FALSE);
 
     IPin_Release(pin);
 
@@ -159,6 +160,7 @@ static void test_interfaces(void)
     todo_wine check_interface(pin, &IID_IMediaPosition, TRUE);
     check_interface(pin, &IID_IMediaSeeking, TRUE);
     check_interface(pin, &IID_IPin, TRUE);
+    todo_wine check_interface(pin, &IID_IQualityControl, TRUE);
     check_interface(pin, &IID_IUnknown, TRUE);
 
     check_interface(pin, &IID_IAsyncReader, FALSE);
