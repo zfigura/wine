@@ -733,10 +733,6 @@ HRESULT WINAPI BaseInputPinImpl_QueryInterface(IPin * iface, REFIID riid, LPVOID
         *ppv = iface;
     else if (IsEqualIID(riid, &IID_IMemInputPin))
         *ppv = &This->IMemInputPin_iface;
-    else if (IsEqualIID(riid, &IID_IMediaSeeking))
-    {
-        return IBaseFilter_QueryInterface(&This->pin.filter->IBaseFilter_iface, &IID_IMediaSeeking, ppv);
-    }
 
     if (*ppv)
     {
