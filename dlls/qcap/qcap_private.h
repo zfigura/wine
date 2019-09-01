@@ -24,6 +24,7 @@
 
 #include <stdarg.h>
 #define COBJMACROS
+#define NONAMELESSUNION
 #include "dshow.h"
 #include "wine/debug.h"
 #include "wine/heap.h"
