@@ -19,6 +19,7 @@
 #ifndef __WINE_DXGI_PRIVATE_H
 #define __WINE_DXGI_PRIVATE_H
 
+#define NONAMELESSUNION
 #include "wine/debug.h"
 #include "wine/heap.h"
 
