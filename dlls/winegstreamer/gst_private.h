@@ -24,12 +24,8 @@
 #include <stdarg.h>
 
 #define COBJMACROS
-#include "windef.h"
-#include "winbase.h"
-#include "wtypes.h"
-#include "winuser.h"
+#define NONAMELESSUNION
 #include "dshow.h"
-#include "strmif.h"
 #include "wine/heap.h"
 #include "wine/strmbase.h"
 
