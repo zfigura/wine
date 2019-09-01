@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
+#define NONAMELESSUNION
 #include "msvcrt.h"
 #include "winnls.h"
 #include "wtypes.h"
