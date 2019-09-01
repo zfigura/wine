@@ -35,6 +35,7 @@
 #  include <zlib.h>
 #endif
 
+#define NONAMELESSUNION
 #include "winsock2.h"
 #include "ws2ipdef.h"
 

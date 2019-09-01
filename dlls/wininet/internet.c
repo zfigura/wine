@@ -36,6 +36,7 @@
 #undef LoadResource
 #endif
 
+#define NONAMELESSUNION
 #include "winsock2.h"
 #include "ws2ipdef.h"
 
