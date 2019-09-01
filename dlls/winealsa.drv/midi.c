@@ -49,7 +49,6 @@
 #include "winnls.h"
 #include "mmddk.h"
 #include "mmreg.h"
-#include "dsound.h"
 #include "wine/debug.h"
 
 #include <alsa/asoundlib.h>
