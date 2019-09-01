@@ -34,6 +34,7 @@
 #endif
 
 #include "ntstatus.h"
+#define NONAMELESSUNION
 #define WIN32_NO_STATUS
 #include "windef.h"
 #include "winbase.h"
