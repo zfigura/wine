@@ -63,6 +63,7 @@
  * FIXME: global format list needs a critical section
  */
 
+#define NONAMELESSUNION
 #include "config.h"
 #include "wine/port.h"
 
