@@ -26,6 +26,7 @@
 
 #include <stdarg.h>
 
+#define NONAMELESSUNION
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"

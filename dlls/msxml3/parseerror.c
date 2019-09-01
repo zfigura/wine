@@ -20,6 +20,7 @@
 
 
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include "config.h"
 

@@ -23,6 +23,7 @@
 #include "wine/port.h"
 
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include <stdarg.h>
 #ifdef HAVE_LIBXML2
