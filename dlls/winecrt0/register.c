@@ -21,6 +21,7 @@
 #include <stdarg.h>
 
 #define COBJMACROS
+#define NONAMELESSUNION
 #define ATL_INITGUID
 #include "windef.h"
 #include "winbase.h"
