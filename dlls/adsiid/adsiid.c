@@ -20,6 +20,7 @@
 
 #include <stdarg.h>
 
+#define NONAMELESSUNION
 #include "windef.h"
 #include "objbase.h"
 #include "initguid.h"
