@@ -21,6 +21,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <mpg123.h>
+#define NONAMELESSUNION
 #include "windef.h"
 #include "winbase.h"
 #include "wingdi.h"
