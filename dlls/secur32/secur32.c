@@ -26,7 +26,6 @@
 #include "winnls.h"
 #include "winreg.h"
 #include "winternl.h"
-#include "shlwapi.h"
 #include "sspi.h"
 #include "secur32_priv.h"
 #include "secext.h"
