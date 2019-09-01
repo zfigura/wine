@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#define NONAMELESSUNION
+
 /* Don't define those GUIDs here */
 #include "strmif.h"
 #include "mediaobj.h"
