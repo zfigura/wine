@@ -21,12 +21,8 @@
 #define COBJMACROS
 
 #include <assert.h>
-#include <stdarg.h>
 #include <math.h>
 
-#include "windef.h"
-#include "winbase.h"
-#include "wingdi.h"
 #include "dwrite_private.h"
 #include "scripts.h"
 

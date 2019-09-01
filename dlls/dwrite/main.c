@@ -20,17 +20,11 @@
 
 #define COBJMACROS
 
-#include <stdarg.h>
 #include <math.h>
-
-#include "windef.h"
-#include "winbase.h"
-#include "winuser.h"
 
 #include "initguid.h"
 
 #include "dwrite_private.h"
-#include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dwrite);
 

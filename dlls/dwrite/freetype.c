@@ -31,11 +31,8 @@
 #include FT_TRUETYPE_TABLES_H
 #endif /* HAVE_FT2BUILD_H */
 
-#include "windef.h"
-#include "wine/library.h"
-#include "wine/debug.h"
-
 #include "dwrite_private.h"
+#include "wine/library.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dwrite);
 
