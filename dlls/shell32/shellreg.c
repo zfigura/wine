@@ -29,13 +29,10 @@
 #include "shellapi.h"
 #include "wingdi.h"
 #include "winuser.h"
-#include "shlobj.h"
 #include "winreg.h"
 
-#include "undocshell.h"
-#include "shell32_main.h"
-
 #include "wine/debug.h"
+#include "wine/unicode.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 

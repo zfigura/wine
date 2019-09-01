@@ -29,6 +29,7 @@
 #include <ctype.h>
 #include <assert.h>
 
+#define NONAMELESSUNION
 #include "windef.h"
 #include "winbase.h"
 #include "winreg.h"

@@ -25,6 +25,7 @@
  */
 
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include "config.h"
 #include "wine/port.h"

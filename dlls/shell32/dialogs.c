@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#define NONAMELESSUNION
 #include "winerror.h"
 #include "windef.h"
 #include "winbase.h"

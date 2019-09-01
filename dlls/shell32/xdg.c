@@ -60,6 +60,7 @@
 #endif
 #include <errno.h>
  
+#define NONAMELESSUNION
 #include "windef.h"
 #include "winbase.h"
 #include "winreg.h"

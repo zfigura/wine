@@ -28,6 +28,7 @@
 #include <stdio.h>
 
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include "wine/debug.h"
 #include "winerror.h"

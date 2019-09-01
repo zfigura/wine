@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#define NONAMELESSUNION
 #include "windef.h"
 #include "wingdi.h"
 #include "pidl.h"

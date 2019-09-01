@@ -26,6 +26,7 @@
 #include <stdio.h>
 
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include "winerror.h"
 #include "windef.h"

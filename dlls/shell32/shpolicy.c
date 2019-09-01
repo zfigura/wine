@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define NONAMELESSUNION
 #include "windef.h"
 #include "winbase.h"
 #include "winerror.h"
