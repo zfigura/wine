@@ -18,6 +18,7 @@
 
 
 #define COBJMACROS
+#define NONAMELESSUNION
 #include "config.h"
 
 #include <stdarg.h>
