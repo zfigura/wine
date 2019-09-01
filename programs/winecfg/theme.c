@@ -36,6 +36,7 @@
 #endif
 
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include <windows.h>
 #include <commdlg.h>

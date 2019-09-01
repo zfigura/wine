@@ -25,6 +25,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include <windows.h>
 #include <shellapi.h>

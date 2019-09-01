@@ -37,14 +37,8 @@
 #include <winioctl.h>
 #include <winreg.h>
 #include <wine/debug.h>
-#include <shellapi.h>
-#include <objbase.h>
-#include <shlguid.h>
-#include <shlwapi.h>
-#include <shlobj.h>
 #define WINE_MOUNTMGR_EXTENSIONS
 #include <ddk/mountmgr.h>
-#include <wine/library.h>
 
 #include "winecfg.h"
 #include "resource.h"
