@@ -49,19 +49,8 @@
 #include <unistd.h>
 #endif
 
-#include "windef.h"
-#include "winbase.h"
-#include "wtypes.h"
-#include "wingdi.h"
-#include "winuser.h"
-#include "dshow.h"
-#include "vfwmsgs.h"
-#include "amvideo.h"
-#include "wine/debug.h"
+#include "qcap_private.h"
 #include "wine/library.h"
-
-#include "qcap_main.h"
-#include "capture.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(qcap);
 
