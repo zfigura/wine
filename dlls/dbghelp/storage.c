@@ -23,9 +23,9 @@
 #include "config.h"
 #include <assert.h>
 #include <stdlib.h>
-#include "wine/debug.h"
 
 #include "dbghelp_private.h"
+#include "wine/debug.h"
 #ifdef USE_STATS
 #include <math.h>
 #endif

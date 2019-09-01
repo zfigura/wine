@@ -49,15 +49,10 @@
 #endif
 #include <stdio.h>
 #include <assert.h>
-#include <stdarg.h>
 
 #ifdef HAVE_MACH_O_NLIST_H
 # include <mach-o/nlist.h>
 #endif
-
-#include "windef.h"
-#include "winbase.h"
-#include "winnls.h"
 
 #include "dbghelp_private.h"
 

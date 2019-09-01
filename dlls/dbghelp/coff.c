@@ -43,14 +43,9 @@
 # include <unistd.h>
 #endif
 
-#include <stdarg.h>
-#include "windef.h"
-#include "winbase.h"
-#include "winternl.h"
-
+#include "dbghelp_private.h"
 #include "wine/exception.h"
 #include "wine/debug.h"
-#include "dbghelp_private.h"
 #include "wine/mscvpdb.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dbghelp_coff);
