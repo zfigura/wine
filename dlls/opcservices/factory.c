@@ -17,6 +17,7 @@
  */
 
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include <stdarg.h>
 #include "windef.h"
