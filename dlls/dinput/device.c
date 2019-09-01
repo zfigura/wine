@@ -28,6 +28,7 @@
 
 #include <stdarg.h>
 #include <string.h>
+#define NONAMELESSUNION
 #include "wine/debug.h"
 #include "wine/unicode.h"
 #include "windef.h"

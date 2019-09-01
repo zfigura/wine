@@ -79,6 +79,7 @@
 #undef E_PENDING
 #endif /* HAVE_IOKIT_HID_IOHIDLIB_H */
 
+#define NONAMELESSUNION
 #include "wine/debug.h"
 #include "wine/unicode.h"
 #include "windef.h"

@@ -54,6 +54,7 @@
 # include <sys/poll.h>
 #endif
 
+#define NONAMELESSUNION
 #include "wine/debug.h"
 #include "wine/unicode.h"
 #include "windef.h"

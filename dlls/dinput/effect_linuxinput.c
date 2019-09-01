@@ -35,6 +35,7 @@
 #  include <unistd.h>
 #endif
 #include <math.h>
+#define NONAMELESSUNION
 #include "wine/debug.h"
 #include "wine/unicode.h"
 #include "windef.h"
