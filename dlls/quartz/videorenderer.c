@@ -783,7 +783,7 @@ HRESULT VideoRenderer_create(IUnknown *outer, void **out)
         goto fail;
 
     hr = strmbase_video_init(&pVideoRenderer->baseControlVideo,
-            &pVideoRenderer->renderer.filter, &pVideoRenderer->renderer.filter.csFilter,
+            &pVideoRenderer->renderer.filter,
             &pVideoRenderer->renderer.sink.pin, &renderer_BaseControlVideoFuncTable);
     if (FAILED(hr))
         goto fail;
