@@ -297,19 +297,6 @@ static HRESULT sink_query_accept(struct strmbase_pin *pin, const AM_MEDIA_TYPE *
     return filter->pFuncsTable->pfnCheckMediaType(filter, mt);
 }
 
-static HRESULT WINAPI BaseRenderer_Receive(BaseInputPin *pin, IMediaSample *sample)
-{
-    struct strmbase_renderer *filter = impl_from_IPin(&pin->pin.IPin_iface);
-    return BaseRendererImpl_Receive(filter, sample);
-}
-
-static const BaseInputPinFuncTable input_BaseInputFuncTable =
-{
-    .base.pin_query_accept = sink_query_accept,
-    .base.pfnGetMediaType = BasePinImpl_GetMediaType,
-    .pfnReceive = BaseRenderer_Receive,
-};
-
 void strmbase_renderer_cleanup(struct strmbase_renderer *filter)
 {
     if (filter->sink.pin.peer)
@@ -331,13 +318,12 @@ void strmbase_renderer_cleanup(struct strmbase_renderer *filter)
     strmbase_filter_cleanup(&filter->filter);
 }
 
-HRESULT WINAPI BaseRendererImpl_Receive(struct strmbase_renderer *This, IMediaSample *pSample)
+static HRESULT WINAPI sink_Receive(BaseInputPin *pin, IMediaSample *pSample)
 {
+    struct strmbase_renderer *This = impl_from_IPin(&pin->pin.IPin_iface);
     HRESULT hr = S_OK;
     REFERENCE_TIME start, stop;
     AM_MEDIA_TYPE *pmt;
-
-    TRACE("(%p)->%p\n", This, pSample);
 
     if (This->sink.end_of_stream || This->sink.flushing)
         return S_FALSE;
@@ -430,6 +416,12 @@ HRESULT WINAPI BaseRendererImpl_Receive(struct strmbase_renderer *This, IMediaSa
 
     return hr;
 }
+
+static const BaseInputPinFuncTable input_BaseInputFuncTable = {
+    .base.pin_query_accept = sink_query_accept,
+    .base.pfnGetMediaType = BasePinImpl_GetMediaType,
+    .pfnReceive = sink_Receive,
+};
 
 HRESULT WINAPI BaseRendererImpl_SetSyncSource(IBaseFilter *iface, IReferenceClock *clock)
 {
