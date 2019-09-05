@@ -457,12 +457,9 @@ HRESULT WINAPI BaseControlWindowImpl_IsCursorHidden(IVideoWindow *iface, LONG *C
 #ifdef __amvideo_h__
 typedef struct tagBaseControlVideo
 {
-	IBasicVideo IBasicVideo_iface;
-
-	struct strmbase_filter *pFilter;
-	struct strmbase_pin *pPin;
-
-	const struct BaseControlVideoFuncTable* pFuncsTable;
+    IBasicVideo IBasicVideo_iface;
+    struct strmbase_pin *pPin;
+    const struct BaseControlVideoFuncTable *pFuncsTable;
 } BaseControlVideo;
 
 typedef HRESULT (WINAPI *BaseControlVideo_GetSourceRect)(BaseControlVideo* This, RECT *pSourceRect);
@@ -490,9 +487,8 @@ typedef struct BaseControlVideoFuncTable {
 	BaseControlVideo_SetTargetRect pfnSetTargetRect;
 } BaseControlVideoFuncTable;
 
-HRESULT WINAPI strmbase_video_init(BaseControlVideo *video, struct strmbase_filter *filter,
+HRESULT WINAPI strmbase_video_init(BaseControlVideo *video,
         struct strmbase_pin *pin, const BaseControlVideoFuncTable *func_table);
-HRESULT WINAPI BaseControlVideo_Destroy(BaseControlVideo *pControlVideo);
 #endif
 #endif
 

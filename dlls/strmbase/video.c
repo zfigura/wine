@@ -62,19 +62,19 @@ static HRESULT BaseControlVideoImpl_CheckTargetRect(BaseControlVideo *This, RECT
 static HRESULT WINAPI basic_video_QueryInterface(IBasicVideo *iface, REFIID iid, void **out)
 {
     BaseControlVideo *video = impl_from_IBasicVideo(iface);
-    return IUnknown_QueryInterface(video->pFilter->outer_unk, iid, out);
+    return IUnknown_QueryInterface(video->pPin->filter->outer_unk, iid, out);
 }
 
 static ULONG WINAPI basic_video_AddRef(IBasicVideo *iface)
 {
     BaseControlVideo *video = impl_from_IBasicVideo(iface);
-    return IUnknown_AddRef(video->pFilter->outer_unk);
+    return IUnknown_AddRef(video->pPin->filter->outer_unk);
 }
 
 static ULONG WINAPI basic_video_Release(IBasicVideo *iface)
 {
     BaseControlVideo *video = impl_from_IBasicVideo(iface);
-    return IUnknown_Release(video->pFilter->outer_unk);
+    return IUnknown_Release(video->pPin->filter->outer_unk);
 }
 
 static HRESULT WINAPI basic_video_GetTypeInfoCount(IBasicVideo *iface, UINT *count)
@@ -647,11 +647,10 @@ static const IBasicVideoVtbl basic_video_vtbl =
     basic_video_IsUsingDefaultDestination
 };
 
-HRESULT WINAPI strmbase_video_init(BaseControlVideo *video, struct strmbase_filter *filter,
+HRESULT WINAPI strmbase_video_init(BaseControlVideo *video,
         struct strmbase_pin *pin, const BaseControlVideoFuncTable *func_table)
 {
     video->IBasicVideo_iface.lpVtbl = &basic_video_vtbl;
-    video->pFilter = filter;
     video->pPin = pin;
     video->pFuncsTable = func_table;
 
