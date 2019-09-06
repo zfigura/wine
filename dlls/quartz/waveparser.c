@@ -225,7 +225,7 @@ static HRESULT WINAPI WAVEParserImpl_seek(IMediaSeeking *iface)
     /* Make sure this is done while stopped, BeginFlush takes care of this */
     EnterCriticalSection(&This->Parser.filter.csFilter);
 
-    if ((peer = This->Parser.sources[0]->pin.pin.pConnectedTo))
+    if ((peer = This->Parser.sources[0]->pin.pin.peer))
         IPin_NewSegment(peer, newpos, endpos, pPin->dRate);
 
     pPin->rtStart = pPin->rtCurrent = bytepos;

@@ -377,9 +377,9 @@ HRESULT Parser_AddPin(ParserImpl *filter, const WCHAR *name,
 
 static void free_source_pin(Parser_OutputPin *pin)
 {
-    if (pin->pin.pin.pConnectedTo)
+    if (pin->pin.pin.peer)
     {
-        IPin_Disconnect(pin->pin.pin.pConnectedTo);
+        IPin_Disconnect(pin->pin.pin.peer);
         IPin_Disconnect(&pin->pin.pin.IPin_iface);
     }
 
@@ -631,7 +631,7 @@ static HRESULT WINAPI Parser_PullPin_Disconnect(IPin * iface)
     EnterCriticalSection(&This->thread_lock);
     EnterCriticalSection(&This->pin.filter->csFilter);
     {
-        if (This->pin.pConnectedTo)
+        if (This->pin.peer)
         {
             FILTER_STATE state;
             ParserImpl *Parser = impl_from_IBaseFilter(&This->pin.filter->IBaseFilter_iface);

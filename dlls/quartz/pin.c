@@ -183,7 +183,7 @@ static HRESULT PullPin_Init(const IPinVtbl *PullPin_Vtbl, struct strmbase_filter
 {
     /* Common attributes */
     pPinImpl->pin.IPin_iface.lpVtbl = PullPin_Vtbl;
-    pPinImpl->pin.pConnectedTo = NULL;
+    pPinImpl->pin.peer = NULL;
     wcscpy(pPinImpl->pin.name, name);
     pPinImpl->pin.dir = PINDIR_INPUT;
     pPinImpl->pin.filter = filter;
@@ -255,7 +255,7 @@ HRESULT WINAPI PullPin_ReceiveConnection(IPin * iface, IPin * pReceivePin, const
     dump_AM_MEDIA_TYPE(pmt);
 
     EnterCriticalSection(&This->pin.filter->csFilter);
-    if (!This->pin.pConnectedTo)
+    if (!This->pin.peer)
     {
         ALLOCATOR_PROPERTIES props;
 
@@ -310,7 +310,7 @@ HRESULT WINAPI PullPin_ReceiveConnection(IPin * iface, IPin * pReceivePin, const
         if (SUCCEEDED(hr))
         {
             CopyMediaType(&This->pin.mtCurrent, pmt);
-            This->pin.pConnectedTo = pReceivePin;
+            This->pin.peer = pReceivePin;
             IPin_AddRef(pReceivePin);
             hr = IMemAllocator_Commit(This->pAlloc);
         }
@@ -785,10 +785,10 @@ HRESULT WINAPI PullPin_Disconnect(IPin *iface)
         if (FAILED(hr = IMemAllocator_Decommit(This->pAlloc)))
             ERR("Allocator decommit failed with error %x. Possible memory leak\n", hr);
 
-        if (This->pin.pConnectedTo)
+        if (This->pin.peer)
         {
-            IPin_Release(This->pin.pConnectedTo);
-            This->pin.pConnectedTo = NULL;
+            IPin_Release(This->pin.peer);
+            This->pin.peer = NULL;
             PullPin_StopProcessing(This);
 
             FreeMediaType(&This->pin.mtCurrent);

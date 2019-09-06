@@ -466,14 +466,14 @@ static gboolean event_sink(GstPad *pad, GstObject *parent, GstEvent *event)
             if (stop > 0)
                 stop /= 100;
 
-            if (pin->pin.pin.pConnectedTo)
-                IPin_NewSegment(pin->pin.pin.pConnectedTo, pos, stop, rate*applied_rate);
+            if (pin->pin.pin.peer)
+                IPin_NewSegment(pin->pin.pin.peer, pos, stop, rate*applied_rate);
 
             return TRUE;
         }
         case GST_EVENT_EOS:
-            if (pin->pin.pin.pConnectedTo)
-                IPin_EndOfStream(pin->pin.pin.pConnectedTo);
+            if (pin->pin.pin.peer)
+                IPin_EndOfStream(pin->pin.pin.peer);
             return TRUE;
         case GST_EVENT_FLUSH_START:
             if (impl_from_strmbase_filter(pin->pin.pin.filter)->ignore_flush) {
@@ -487,13 +487,13 @@ static gboolean event_sink(GstPad *pad, GstObject *parent, GstEvent *event)
                 GST_PAD_UNSET_FLUSHING (pad);
                 return TRUE;
             }
-            if (pin->pin.pin.pConnectedTo)
-                IPin_BeginFlush(pin->pin.pin.pConnectedTo);
+            if (pin->pin.pin.peer)
+                IPin_BeginFlush(pin->pin.pin.peer);
             return TRUE;
         case GST_EVENT_FLUSH_STOP:
             gst_segment_init(pin->segment, GST_FORMAT_TIME);
-            if (pin->pin.pin.pConnectedTo)
-                IPin_EndFlush(pin->pin.pin.pConnectedTo);
+            if (pin->pin.pin.peer)
+                IPin_EndFlush(pin->pin.pin.peer);
             return TRUE;
         case GST_EVENT_CAPS: {
             GstCaps *caps;
@@ -679,7 +679,7 @@ static GstFlowReturn got_data_sink(GstPad *pad, GstObject *parent, GstBuffer *bu
     IMediaSample_SetPreroll(sample, GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_LIVE));
     IMediaSample_SetSyncPoint(sample, !GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT));
 
-    if (!pin->pin.pin.pConnectedTo)
+    if (!pin->pin.pin.peer)
         hr = VFW_E_NOT_CONNECTED;
     else
         hr = IMemInputPin_Receive(pin->pin.pMemInputPin, sample);
@@ -1295,7 +1295,7 @@ IUnknown * CALLBACK Gstreamer_Splitter_create(IUnknown *outer, HRESULT *phr)
     This->pInputPin.pin.filter = &This->filter;
     lstrcpynW(This->pInputPin.pin.name, wcsInputPinName, ARRAY_SIZE(This->pInputPin.pin.name));
     This->pInputPin.pin.IPin_iface.lpVtbl = &GST_InputPin_Vtbl;
-    This->pInputPin.pin.pConnectedTo = NULL;
+    This->pInputPin.pin.peer = NULL;
     ZeroMemory(&This->pInputPin.pin.mtCurrent, sizeof(AM_MEDIA_TYPE));
     This->pInputPin.pin.pFuncsTable = &sink_ops;
     *phr = S_OK;
@@ -1755,10 +1755,10 @@ static HRESULT WINAPI GSTOutPin_DecideAllocator(struct strmbase_source *base,
 
 static void free_source_pin(GSTOutPin *pin)
 {
-    if (pin->pin.pin.pConnectedTo)
+    if (pin->pin.pin.peer)
     {
         if (SUCCEEDED(IMemAllocator_Decommit(pin->pin.pAllocator)))
-            IPin_Disconnect(pin->pin.pin.pConnectedTo);
+            IPin_Disconnect(pin->pin.pin.peer);
         IPin_Disconnect(&pin->pin.pin.IPin_iface);
     }
 
@@ -1890,7 +1890,7 @@ static HRESULT WINAPI GSTInPin_ReceiveConnection(IPin *iface, IPin *pReceivePin,
     mark_wine_thread();
 
     EnterCriticalSection(&filter->filter.csFilter);
-    if (!This->pin.pConnectedTo) {
+    if (!This->pin.peer) {
         ALLOCATOR_PROPERTIES props;
         IMemAllocator *pAlloc = NULL;
 
@@ -1932,7 +1932,7 @@ static HRESULT WINAPI GSTInPin_ReceiveConnection(IPin *iface, IPin *pReceivePin,
             IMemAllocator_Release(pAlloc);
         if (SUCCEEDED(hr)) {
             CopyMediaType(&This->pin.mtCurrent, pmt);
-            This->pin.pConnectedTo = pReceivePin;
+            This->pin.peer = pReceivePin;
             IPin_AddRef(pReceivePin);
             hr = IMemAllocator_Commit(This->pAlloc);
             SetEvent(filter->push_event);
@@ -1965,14 +1965,14 @@ static HRESULT WINAPI GSTInPin_Disconnect(IPin *iface)
 
     hr = IBaseFilter_GetState(&filter->filter.IBaseFilter_iface, INFINITE, &state);
     EnterCriticalSection(&filter->filter.csFilter);
-    if (This->pin.pConnectedTo) {
+    if (This->pin.peer) {
         GSTImpl *Parser = impl_from_strmbase_filter(This->pin.filter);
 
         if (SUCCEEDED(hr) && state == State_Stopped) {
             IMemAllocator_Decommit(This->pAlloc);
-            IPin_Disconnect(This->pin.pConnectedTo);
-            IPin_Release(This->pin.pConnectedTo);
-            This->pin.pConnectedTo = NULL;
+            IPin_Disconnect(This->pin.peer);
+            IPin_Release(This->pin.peer);
+            This->pin.peer = NULL;
             hr = GST_RemoveOutputPins(Parser);
         } else
             hr = VFW_E_NOT_STOPPED;

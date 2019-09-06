@@ -135,7 +135,7 @@ static HRESULT AVISplitter_SendEndOfFile(AVISplitterImpl *filter, DWORD index)
 
     TRACE("End of file reached\n");
 
-    if ((peer = filter->Parser.sources[index]->pin.pin.pConnectedTo))
+    if ((peer = filter->Parser.sources[index]->pin.pin.peer))
         IPin_EndOfStream(peer);
 
     /* Force the pullpin thread to stop */

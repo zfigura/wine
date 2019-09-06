@@ -321,7 +321,7 @@ static HRESULT MPEGSplitter_process_sample(LPVOID iface, IMediaSample * pSample,
         {
             IPin *peer;
 
-            if ((peer = This->Parser.sources[i]->pin.pin.pConnectedTo))
+            if ((peer = This->Parser.sources[i]->pin.pin.peer))
                 hr = IPin_EndOfStream(peer);
             if (FAILED(hr))
                 WARN("Error sending EndOfStream to pin %u (%x)\n", i, hr);
