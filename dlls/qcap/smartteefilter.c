@@ -46,12 +46,6 @@ static inline SmartTeeFilter *impl_from_strmbase_filter(struct strmbase_filter *
     return CONTAINING_RECORD(filter, SmartTeeFilter, filter);
 }
 
-static inline SmartTeeFilter *impl_from_IBaseFilter(IBaseFilter *iface)
-{
-    struct strmbase_filter *filter = CONTAINING_RECORD(iface, struct strmbase_filter, IBaseFilter_iface);
-    return impl_from_strmbase_filter(filter);
-}
-
 static inline SmartTeeFilter *impl_from_strmbase_pin(struct strmbase_pin *pin)
 {
     return impl_from_strmbase_filter(pin->filter);
@@ -62,50 +56,14 @@ static inline SmartTeeFilter *impl_from_IPin(IPin *iface)
     return impl_from_strmbase_filter(CONTAINING_RECORD(iface, struct strmbase_pin, IPin_iface)->filter);
 }
 
-static HRESULT WINAPI SmartTeeFilter_Stop(IBaseFilter *iface)
-{
-    SmartTeeFilter *This = impl_from_IBaseFilter(iface);
-    TRACE("(%p)\n", This);
-    EnterCriticalSection(&This->filter.csFilter);
-    This->filter.state = State_Stopped;
-    LeaveCriticalSection(&This->filter.csFilter);
-    return S_OK;
-}
-
-static HRESULT WINAPI SmartTeeFilter_Pause(IBaseFilter *iface)
-{
-    SmartTeeFilter *This = impl_from_IBaseFilter(iface);
-    FIXME("(%p): stub\n", This);
-    return E_NOTIMPL;
-}
-
-static HRESULT WINAPI SmartTeeFilter_Run(IBaseFilter *iface, REFERENCE_TIME tStart)
-{
-    SmartTeeFilter *This = impl_from_IBaseFilter(iface);
-    HRESULT hr = S_OK;
-    TRACE("(%p, %s)\n", This, wine_dbgstr_longlong(tStart));
-    EnterCriticalSection(&This->filter.csFilter);
-    if(This->filter.state != State_Running) {
-        /* We share an allocator among all pins, an allocator can only get committed
-         * once, state transitions occur in upstream order, and only output pins
-         * commit allocators, so let the filter attached to the input pin worry about it. */
-        if (This->sink.pin.pConnectedTo)
-            This->filter.state = State_Running;
-        else
-            hr = VFW_E_NOT_CONNECTED;
-    }
-    LeaveCriticalSection(&This->filter.csFilter);
-    return hr;
-}
-
 static const IBaseFilterVtbl SmartTeeFilterVtbl = {
     BaseFilterImpl_QueryInterface,
     BaseFilterImpl_AddRef,
     BaseFilterImpl_Release,
     BaseFilterImpl_GetClassID,
-    SmartTeeFilter_Stop,
-    SmartTeeFilter_Pause,
-    SmartTeeFilter_Run,
+    BaseFilterImpl_Stop,
+    BaseFilterImpl_Pause,
+    BaseFilterImpl_Run,
     BaseFilterImpl_GetState,
     BaseFilterImpl_SetSyncSource,
     BaseFilterImpl_GetSyncSource,
