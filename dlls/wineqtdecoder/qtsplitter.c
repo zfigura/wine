@@ -289,7 +289,7 @@ static const struct strmbase_filter_ops filter_ops =
     .filter_destroy = qt_splitter_destroy,
 };
 
-static HRESULT WINAPI sink_CheckMediaType(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
+static HRESULT sink_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
 {
     QTInPin *pin = impl_from_IPin(&iface->IPin_iface);
 
@@ -303,7 +303,7 @@ static HRESULT WINAPI sink_CheckMediaType(struct strmbase_pin *iface, const AM_M
 
 static const BasePinFuncTable sink_ops =
 {
-    .pfnCheckMediaType = sink_CheckMediaType,
+    .pin_query_accept = sink_query_accept,
     .pfnGetMediaType = BasePinImpl_GetMediaType,
 };
 
@@ -1288,7 +1288,7 @@ static HRESULT WINAPI QTOutPin_QueryInterface(IPin *iface, REFIID riid, void **p
     return E_NOINTERFACE;
 }
 
-static HRESULT WINAPI QTOutPin_CheckMediaType(struct strmbase_pin *base, const AM_MEDIA_TYPE *amt)
+static HRESULT source_query_accept(struct strmbase_pin *base, const AM_MEDIA_TYPE *amt)
 {
     FIXME("(%p) stub\n", base);
     return S_OK;
@@ -1405,13 +1405,11 @@ static const IQualityControlVtbl QTOutPin_QualityControl_Vtbl = {
 
 static const struct strmbase_source_ops source_ops =
 {
-    {
-        QTOutPin_CheckMediaType,
-        QTOutPin_GetMediaType
-    },
-    BaseOutputPinImpl_AttemptConnection,
-    QTOutPin_DecideBufferSize,
-    QTOutPin_DecideAllocator,
+    .base.pin_query_accept = source_query_accept,
+    .base.pfnGetMediaType = QTOutPin_GetMediaType,
+    .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
+    .pfnDecideBufferSize = QTOutPin_DecideBufferSize,
+    .pfnDecideAllocator = QTOutPin_DecideAllocator,
 };
 
 static const OutputQueueFuncTable output_OutputQueueFuncTable = {

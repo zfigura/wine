@@ -43,7 +43,7 @@ static HRESULT WINAPI Parser_ChangeStop(IMediaSeeking *iface);
 static HRESULT WINAPI Parser_ChangeRate(IMediaSeeking *iface);
 static HRESULT WINAPI Parser_OutputPin_DecideBufferSize(struct strmbase_source *iface,
         IMemAllocator *allocator, ALLOCATOR_PROPERTIES *props);
-static HRESULT WINAPI Parser_OutputPin_CheckMediaType(struct strmbase_pin *pin, const AM_MEDIA_TYPE *pmt);
+static HRESULT Parser_OutputPin_query_accept(struct strmbase_pin *pin, const AM_MEDIA_TYPE *pmt);
 static HRESULT WINAPI Parser_OutputPin_GetMediaType(struct strmbase_pin *iface, int iPosition, AM_MEDIA_TYPE *pmt);
 static HRESULT WINAPI Parser_OutputPin_DecideAllocator(struct strmbase_source *iface,
         IMemInputPin *peer, IMemAllocator **allocator);
@@ -336,13 +336,11 @@ HRESULT WINAPI Parser_SetSyncSource(IBaseFilter * iface, IReferenceClock *pClock
 
 static const struct strmbase_source_ops source_ops =
 {
-    {
-        Parser_OutputPin_CheckMediaType,
-        Parser_OutputPin_GetMediaType
-    },
-    BaseOutputPinImpl_AttemptConnection,
-    Parser_OutputPin_DecideBufferSize,
-    Parser_OutputPin_DecideAllocator,
+    .base.pin_query_accept = Parser_OutputPin_query_accept,
+    .base.pfnGetMediaType = Parser_OutputPin_GetMediaType,
+    .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
+    .pfnDecideBufferSize = Parser_OutputPin_DecideBufferSize,
+    .pfnDecideAllocator = Parser_OutputPin_DecideAllocator,
 };
 
 HRESULT Parser_AddPin(ParserImpl *filter, const WCHAR *name,
@@ -564,7 +562,7 @@ static HRESULT WINAPI Parser_OutputPin_Connect(IPin * iface, IPin * pReceivePin,
     return BaseOutputPinImpl_Connect(iface, pReceivePin, pmt);
 }
 
-static HRESULT WINAPI Parser_OutputPin_CheckMediaType(struct strmbase_pin *pin, const AM_MEDIA_TYPE *pmt)
+static HRESULT Parser_OutputPin_query_accept(struct strmbase_pin *pin, const AM_MEDIA_TYPE *pmt)
 {
     Parser_OutputPin *This = (Parser_OutputPin *)pin;
 

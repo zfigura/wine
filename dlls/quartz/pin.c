@@ -164,7 +164,7 @@ static HRESULT deliver_newsegment(IPin *pin, LPVOID data)
     return IPin_NewSegment(pin, args->tStart, args->tStop, args->rate);
 }
 
-static HRESULT WINAPI PullPin_CheckMediaType(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
+static HRESULT PullPin_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
 {
     PullPin *pin = impl_PullPin_from_IPin(&iface->IPin_iface);
     return pin->fnQueryAccept(pin->pUserData, mt);
@@ -172,7 +172,7 @@ static HRESULT WINAPI PullPin_CheckMediaType(struct strmbase_pin *iface, const A
 
 static const struct BasePinFuncTable pin_ops =
 {
-    .pfnCheckMediaType = PullPin_CheckMediaType,
+    .pin_query_accept = PullPin_query_accept,
     .pfnGetMediaType = BasePinImpl_GetMediaType,
 };
 

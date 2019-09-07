@@ -1249,7 +1249,7 @@ static const struct strmbase_filter_ops filter_ops =
     .filter_destroy = gstdemux_destroy,
 };
 
-static HRESULT WINAPI sink_CheckMediaType(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
+static HRESULT sink_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
 {
     if (IsEqualGUID(&mt->majortype, &MEDIATYPE_Stream))
         return S_OK;
@@ -1258,7 +1258,7 @@ static HRESULT WINAPI sink_CheckMediaType(struct strmbase_pin *iface, const AM_M
 
 static const BasePinFuncTable sink_ops =
 {
-    .pfnCheckMediaType = sink_CheckMediaType,
+    .pin_query_accept = sink_query_accept,
     .pfnGetMediaType = BasePinImpl_GetMediaType,
 };
 
@@ -1696,7 +1696,7 @@ static HRESULT WINAPI GSTOutPin_QueryInterface(IPin *iface, REFIID riid, void **
     return E_NOINTERFACE;
 }
 
-static HRESULT WINAPI GSTOutPin_CheckMediaType(struct strmbase_pin *base, const AM_MEDIA_TYPE *amt)
+static HRESULT source_query_accept(struct strmbase_pin *base, const AM_MEDIA_TYPE *amt)
 {
     FIXME("(%p) stub\n", base);
     return S_OK;
@@ -1811,13 +1811,11 @@ static const IPinVtbl GST_OutputPin_Vtbl = {
 
 static const struct strmbase_source_ops source_ops =
 {
-    {
-        GSTOutPin_CheckMediaType,
-        GSTOutPin_GetMediaType
-    },
-    BaseOutputPinImpl_AttemptConnection,
-    GSTOutPin_DecideBufferSize,
-    GSTOutPin_DecideAllocator,
+    .base.pin_query_accept = source_query_accept,
+    .base.pfnGetMediaType = GSTOutPin_GetMediaType,
+    .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
+    .pfnDecideBufferSize = GSTOutPin_DecideBufferSize,
+    .pfnDecideAllocator = GSTOutPin_DecideAllocator,
 };
 
 static BOOL create_pin(GSTImpl *filter, const WCHAR *name, const AM_MEDIA_TYPE *mt)
