@@ -164,7 +164,17 @@ static HRESULT deliver_newsegment(IPin *pin, LPVOID data)
     return IPin_NewSegment(pin, args->tStart, args->tStop, args->rate);
 }
 
-/*** PullPin implementation ***/
+static HRESULT WINAPI PullPin_CheckMediaType(BasePin *iface, const AM_MEDIA_TYPE *mt)
+{
+    PullPin *pin = impl_PullPin_from_IPin(&iface->IPin_iface);
+    return pin->fnQueryAccept(pin->pUserData, mt);
+}
+
+static const struct BasePinFuncTable pin_ops =
+{
+    .pfnCheckMediaType = PullPin_CheckMediaType,
+    .pfnGetMediaType = BasePinImpl_GetMediaType,
+};
 
 static HRESULT PullPin_Init(const IPinVtbl *PullPin_Vtbl, struct strmbase_filter *filter,
     const WCHAR *name, SAMPLEPROC_PULL pSampleProc, void *pUserData,
@@ -178,6 +188,7 @@ static HRESULT PullPin_Init(const IPinVtbl *PullPin_Vtbl, struct strmbase_filter
     pPinImpl->pin.dir = PINDIR_INPUT;
     pPinImpl->pin.filter = filter;
     ZeroMemory(&pPinImpl->pin.mtCurrent, sizeof(AM_MEDIA_TYPE));
+    pPinImpl->pin.pFuncsTable = &pin_ops;
 
     /* Input pin attributes */
     pPinImpl->pUserData = pUserData;
@@ -681,15 +692,6 @@ HRESULT PullPin_WaitForStateChange(PullPin * This, DWORD dwMilliseconds)
     if (WaitForSingleObject(This->hEventStateChanged, dwMilliseconds) == WAIT_TIMEOUT)
         return S_FALSE;
     return S_OK;
-}
-
-HRESULT WINAPI PullPin_QueryAccept(IPin * iface, const AM_MEDIA_TYPE * pmt)
-{
-    PullPin *This = impl_PullPin_from_IPin(iface);
-
-    TRACE("(%p/%p)->(%p)\n", This, iface, pmt);
-
-    return (This->fnQueryAccept(This->pUserData, pmt) == S_OK ? S_OK : S_FALSE);
 }
 
 HRESULT WINAPI PullPin_EndOfStream(IPin * iface)

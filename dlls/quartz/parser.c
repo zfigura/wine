@@ -677,15 +677,6 @@ static HRESULT WINAPI Parser_PullPin_ReceiveConnection(IPin * iface, IPin * pRec
     return hr;
 }
 
-static HRESULT WINAPI Parser_PullPin_EnumMediaTypes(IPin *iface, IEnumMediaTypes **ppEnum)
-{
-    BasePin *This = (BasePin *)iface;
-
-    TRACE("(%p/%p)->(%p)\n", This, iface, ppEnum);
-
-    return EnumMediaTypes_Construct(This, BasePinImpl_GetMediaType, BasePinImpl_GetMediaTypeVersion, ppEnum);
-}
-
 static const IPinVtbl Parser_InputPin_Vtbl =
 {
     Parser_PullPin_QueryInterface,
@@ -699,8 +690,8 @@ static const IPinVtbl Parser_InputPin_Vtbl =
     BasePinImpl_QueryPinInfo,
     BasePinImpl_QueryDirection,
     BasePinImpl_QueryId,
-    PullPin_QueryAccept,
-    Parser_PullPin_EnumMediaTypes,
+    BasePinImpl_QueryAccept,
+    BasePinImpl_EnumMediaTypes,
     BasePinImpl_QueryInternalConnections,
     PullPin_EndOfStream,
     PullPin_BeginFlush,

@@ -116,7 +116,6 @@ HRESULT WINAPI PullPin_ReceiveConnection(IPin * iface, IPin * pReceivePin, const
 HRESULT WINAPI PullPin_Disconnect(IPin * iface);
 HRESULT WINAPI PullPin_QueryInterface(IPin * iface, REFIID riid, LPVOID * ppv);
 HRESULT WINAPI PullPin_EndOfStream(IPin * iface);
-HRESULT WINAPI PullPin_QueryAccept(IPin * iface, const AM_MEDIA_TYPE * pmt);
 HRESULT WINAPI PullPin_BeginFlush(IPin * iface);
 HRESULT WINAPI PullPin_EndFlush(IPin * iface);
 HRESULT WINAPI PullPin_NewSegment(IPin * iface, REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate);
