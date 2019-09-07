@@ -49,7 +49,7 @@ static pthread_key_t wine_gst_key;
 
 typedef struct GSTOutPin GSTOutPin;
 typedef struct GSTInPin {
-    BasePin pin;
+    struct strmbase_pin pin;
     IAsyncReader *pReader;
     IMemAllocator *pAlloc;
 } GSTInPin;
@@ -1249,7 +1249,7 @@ static const struct strmbase_filter_ops filter_ops =
     .filter_destroy = gstdemux_destroy,
 };
 
-static HRESULT WINAPI sink_CheckMediaType(BasePin *iface, const AM_MEDIA_TYPE *mt)
+static HRESULT WINAPI sink_CheckMediaType(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
 {
     if (IsEqualGUID(&mt->majortype, &MEDIATYPE_Stream))
         return S_OK;
@@ -1696,13 +1696,13 @@ static HRESULT WINAPI GSTOutPin_QueryInterface(IPin *iface, REFIID riid, void **
     return E_NOINTERFACE;
 }
 
-static HRESULT WINAPI GSTOutPin_CheckMediaType(BasePin *base, const AM_MEDIA_TYPE *amt)
+static HRESULT WINAPI GSTOutPin_CheckMediaType(struct strmbase_pin *base, const AM_MEDIA_TYPE *amt)
 {
     FIXME("(%p) stub\n", base);
     return S_OK;
 }
 
-static HRESULT WINAPI GSTOutPin_GetMediaType(BasePin *iface, int iPosition, AM_MEDIA_TYPE *pmt)
+static HRESULT WINAPI GSTOutPin_GetMediaType(struct strmbase_pin *iface, int iPosition, AM_MEDIA_TYPE *pmt)
 {
     GSTOutPin *This = impl_source_from_IPin(&iface->IPin_iface);
 

@@ -68,7 +68,7 @@ typedef HRESULT (* STOPPROCESSPROC) (LPVOID userdata);
 typedef struct PullPin
 {
 	/* inheritance C style! */
-	BasePin pin;
+	struct strmbase_pin pin;
 	LPVOID pUserData;
 
 	REFERENCE_TIME rtStart, rtCurrent, rtNext, rtStop;

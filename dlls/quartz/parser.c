@@ -43,8 +43,8 @@ static HRESULT WINAPI Parser_ChangeStop(IMediaSeeking *iface);
 static HRESULT WINAPI Parser_ChangeRate(IMediaSeeking *iface);
 static HRESULT WINAPI Parser_OutputPin_DecideBufferSize(struct strmbase_source *iface,
         IMemAllocator *allocator, ALLOCATOR_PROPERTIES *props);
-static HRESULT WINAPI Parser_OutputPin_CheckMediaType(BasePin *pin, const AM_MEDIA_TYPE *pmt);
-static HRESULT WINAPI Parser_OutputPin_GetMediaType(BasePin *iface, int iPosition, AM_MEDIA_TYPE *pmt);
+static HRESULT WINAPI Parser_OutputPin_CheckMediaType(struct strmbase_pin *pin, const AM_MEDIA_TYPE *pmt);
+static HRESULT WINAPI Parser_OutputPin_GetMediaType(struct strmbase_pin *iface, int iPosition, AM_MEDIA_TYPE *pmt);
 static HRESULT WINAPI Parser_OutputPin_DecideAllocator(struct strmbase_source *iface,
         IMemInputPin *peer, IMemAllocator **allocator);
 
@@ -490,7 +490,7 @@ static HRESULT WINAPI Parser_OutputPin_DecideBufferSize(struct strmbase_source *
     return IMemAllocator_SetProperties(pAlloc, &This->allocProps, &actual);
 }
 
-static HRESULT WINAPI Parser_OutputPin_GetMediaType(BasePin *iface, int iPosition, AM_MEDIA_TYPE *pmt)
+static HRESULT WINAPI Parser_OutputPin_GetMediaType(struct strmbase_pin *iface, int iPosition, AM_MEDIA_TYPE *pmt)
 {
     Parser_OutputPin *This = (Parser_OutputPin*)iface;
     if (iPosition < 0)
@@ -564,7 +564,7 @@ static HRESULT WINAPI Parser_OutputPin_Connect(IPin * iface, IPin * pReceivePin,
     return BaseOutputPinImpl_Connect(iface, pReceivePin, pmt);
 }
 
-static HRESULT WINAPI Parser_OutputPin_CheckMediaType(BasePin *pin, const AM_MEDIA_TYPE *pmt)
+static HRESULT WINAPI Parser_OutputPin_CheckMediaType(struct strmbase_pin *pin, const AM_MEDIA_TYPE *pmt)
 {
     Parser_OutputPin *This = (Parser_OutputPin *)pin;
 
@@ -667,11 +667,11 @@ static HRESULT WINAPI Parser_PullPin_ReceiveConnection(IPin * iface, IPin * pRec
     hr = PullPin_ReceiveConnection(iface, pReceivePin, pmt);
     if (FAILED(hr))
     {
-        BasePin *This = (BasePin *)iface;
+        PullPin *pin = impl_PullPin_from_IPin(iface);
 
-        EnterCriticalSection(&This->filter->csFilter);
-        Parser_RemoveOutputPins(impl_from_IBaseFilter(&This->filter->IBaseFilter_iface));
-        LeaveCriticalSection(&This->filter->csFilter);
+        EnterCriticalSection(&pin->pin.filter->csFilter);
+        Parser_RemoveOutputPins(impl_from_IBaseFilter(&pin->pin.filter->IBaseFilter_iface));
+        LeaveCriticalSection(&pin->pin.filter->csFilter);
     }
 
     return hr;
