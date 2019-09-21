@@ -20763,6 +20763,7 @@ wine_fn_config_makefile dlls/rasapi32/tests enable_tests
 wine_fn_config_makefile dlls/rasdlg enable_rasdlg
 wine_fn_config_makefile dlls/regapi enable_regapi
 wine_fn_config_makefile dlls/resampledmo enable_resampledmo
+wine_fn_config_makefile dlls/resampledmo/tests enable_tests
 wine_fn_config_makefile dlls/resutils enable_resutils
 wine_fn_config_makefile dlls/riched20 enable_riched20
 wine_fn_config_makefile dlls/riched20/tests enable_tests
