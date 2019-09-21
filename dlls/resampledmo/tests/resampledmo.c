@@ -23,7 +23,41 @@
 #include "objbase.h"
 #include "rpcproxy.h"
 #include "wmcodecdsp.h"
+#include "mftransform.h"
 #include "wine/test.h"
+
+#define check_interface(a, b, c) check_interface_(__LINE__, a, b, c)
+static void check_interface_(unsigned int line, void *iface_ptr, REFIID iid, BOOL supported)
+{
+    IUnknown *iface = iface_ptr;
+    HRESULT hr, expected_hr;
+    IUnknown *unk;
+
+    expected_hr = supported ? S_OK : E_NOINTERFACE;
+
+    hr = IUnknown_QueryInterface(iface, iid, (void **)&unk);
+    ok_(__FILE__, line)(hr == expected_hr, "Got hr %#x, expected %#x.\n", hr, expected_hr);
+    if (SUCCEEDED(hr))
+        IUnknown_Release(unk);
+}
+
+static void test_interfaces(void)
+{
+    IUnknown *dmo;
+    HRESULT hr;
+    ULONG ref;
+
+    hr = CoCreateInstance(&CLSID_CResamplerMediaObject, NULL,
+            CLSCTX_INPROC_SERVER, &IID_IUnknown, (void **)&dmo);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    check_interface(dmo, &IID_IMFTransform, TRUE);
+    check_interface(dmo, &IID_IUnknown, TRUE);
+    check_interface(dmo, &IID_IWMResamplerProps, TRUE);
+
+    ref = IUnknown_Release(dmo);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+}
 
 static ULONG get_refcount(void *iface)
 {
@@ -142,6 +176,7 @@ START_TEST(resampledmo)
     }
     IUnknown_Release(dmo);
 
+    test_interfaces();
     test_aggregation();
 
     CoUninitialize();

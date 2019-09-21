@@ -1,5 +1,5 @@
 MODULE    = resampledmo.dll
-IMPORTS   = uuid wmcodecdspuuid
+IMPORTS   = mfuuid uuid wmcodecdspuuid
 
 C_SRCS = \
 	resampledmo.c
