@@ -21,6 +21,18 @@ import "strmif.idl";
 
 cpp_quote("DEFINE_GUID(MEDIASUBTYPE_I420,0x30323449,0x0000,0x0010,0x80,0x00,0x00,0xaa,0x00,0x38,0x9b,0x71);")
 
+typedef float ChMtxType;
+
+[
+    object,
+    uuid(e7e9984f-f09f-4da4-903f-6e2e0efe56b5),
+]
+interface IWMResamplerProps : IUnknown
+{
+    HRESULT SetHalfFilterLength(LONG len);
+    HRESULT SetUserChannelMtx(ChMtxType *matrix);
+}
+
 [
     uuid(bbeea841-0a63-4f52-a7ab-a9b3a84ed38a)
 ]

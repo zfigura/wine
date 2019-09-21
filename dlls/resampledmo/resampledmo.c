@@ -35,6 +35,7 @@ static HINSTANCE resampledmo_instance;
 struct resampler
 {
     IUnknown IUnknown_inner;
+    IWMResamplerProps IWMResamplerProps_iface;
     IUnknown *outer_unk;
     LONG refcount;
 };
@@ -46,10 +47,14 @@ static inline struct resampler *impl_from_IUnknown(IUnknown *iface)
 
 static HRESULT WINAPI inner_QueryInterface(IUnknown *iface, REFIID iid, void **out)
 {
+    struct resampler *dmo = impl_from_IUnknown(iface);
+
     TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
 
     if (IsEqualGUID(iid, &IID_IUnknown))
         *out = iface;
+    else if (IsEqualGUID(iid, &IID_IWMResamplerProps))
+        *out = &dmo->IWMResamplerProps_iface;
     else
     {
         WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
@@ -93,6 +98,50 @@ static const IUnknownVtbl inner_vtbl =
     inner_Release,
 };
 
+static inline struct resampler *impl_from_IWMResamplerProps(IWMResamplerProps *iface)
+{
+    return CONTAINING_RECORD(iface, struct resampler, IWMResamplerProps_iface);
+}
+
+static HRESULT WINAPI resampler_props_QueryInterface(IWMResamplerProps *iface, REFIID iid, void **out)
+{
+    struct resampler *dmo = impl_from_IWMResamplerProps(iface);
+    return IUnknown_QueryInterface(dmo->outer_unk, iid, out);
+}
+
+static ULONG WINAPI resampler_props_AddRef(IWMResamplerProps *iface)
+{
+    struct resampler *dmo = impl_from_IWMResamplerProps(iface);
+    return IUnknown_AddRef(dmo->outer_unk);
+}
+
+static ULONG WINAPI resampler_props_Release(IWMResamplerProps *iface)
+{
+    struct resampler *dmo = impl_from_IWMResamplerProps(iface);
+    return IUnknown_Release(dmo->outer_unk);
+}
+
+static HRESULT WINAPI resampler_props_SetHalfFilterLength(IWMResamplerProps *iface, LONG len)
+{
+    FIXME("iface %p, len %d, stub!\n", iface, len);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI resampler_props_SetUserChannelMtx(IWMResamplerProps *iface, float *matrix)
+{
+    FIXME("iface %p, matrix %p, stub!\n", iface, matrix);
+    return E_NOTIMPL;
+}
+
+static const IWMResamplerPropsVtbl resampler_props_vtbl =
+{
+    resampler_props_QueryInterface,
+    resampler_props_AddRef,
+    resampler_props_Release,
+    resampler_props_SetHalfFilterLength,
+    resampler_props_SetUserChannelMtx,
+};
+
 static HRESULT resampler_create(IUnknown *outer, REFIID iid, void **out)
 {
     struct resampler *object;
@@ -102,6 +151,7 @@ static HRESULT resampler_create(IUnknown *outer, REFIID iid, void **out)
         return E_OUTOFMEMORY;
 
     object->IUnknown_inner.lpVtbl = &inner_vtbl;
+    object->IWMResamplerProps_iface.lpVtbl = &resampler_props_vtbl;
     object->refcount = 1;
     object->outer_unk = outer ? outer : &object->IUnknown_inner;
 
