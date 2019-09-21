@@ -1,5 +1,7 @@
 /*
- * Copyright 2018 Zebediah Figura
+ * Audio resampler DMO
+ *
+ * Copyright 2019 Zebediah Figura
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,17 +18,10 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-import "mediaobj.idl";
-import "strmif.idl";
-
-cpp_quote("DEFINE_GUID(MEDIASUBTYPE_I420,0x30323449,0x0000,0x0010,0x80,0x00,0x00,0xaa,0x00,0x38,0x9b,0x71);")
+#pragma makedep register
 
 [
-    uuid(bbeea841-0a63-4f52-a7ab-a9b3a84ed38a)
-]
-coclass CMP3DecMediaObject {}
-
-[
-    uuid(f447b69e-1884-4a7e-8055-346f74d6edb3)
+    threading(both),
+    uuid(f447b69e-1884-4a7e-8055-346f74d6edb3),
 ]
 coclass CResamplerMediaObject {}

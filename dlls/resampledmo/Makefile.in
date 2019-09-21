@@ -1,0 +1,8 @@
+MODULE    = resampledmo.dll
+IMPORTS   = uuid wmcodecdspuuid
+
+C_SRCS = \
+	resampledmo.c
+
+IDL_SRCS = \
+	resampledmo.idl
