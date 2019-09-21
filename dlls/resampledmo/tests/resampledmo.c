@@ -24,6 +24,8 @@
 #include "rpcproxy.h"
 #include "wmcodecdsp.h"
 #include "mftransform.h"
+#include "mferror.h"
+#include "mfapi.h"
 #include "wine/test.h"
 
 #define check_interface(a, b, c) check_interface_(__LINE__, a, b, c)
@@ -160,6 +162,108 @@ static void test_aggregation(void)
     ok(outer_ref == 1, "Got unexpected refcount %d.\n", outer_ref);
 }
 
+static void test_transform(void)
+{
+    DWORD input_count, output_count, input_id, output_id, flags, count;
+    DWORD input_min, input_max, output_min, output_max;
+    MFT_OUTPUT_STREAM_INFO output_info;
+    MFT_INPUT_STREAM_INFO input_info;
+    IMFTransform *transform;
+    IMFAttributes *attr;
+    UINT32 independent;
+    IMFMediaType *mt;
+    HRESULT hr;
+    ULONG ref;
+    GUID guid;
+
+    hr = CoCreateInstance(&CLSID_CResamplerMediaObject, NULL,
+            CLSCTX_INPROC_SERVER, &IID_IMFTransform, (void **)&transform);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMFTransform_GetStreamLimits(transform, &input_min, &input_max, &output_min, &output_max);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(input_min == 1, "Got input min %u.\n", input_min);
+    ok(input_max == 1, "Got input max %u.\n", input_min);
+    ok(output_min == 1, "Got output min %u.\n", output_min);
+    ok(output_max == 1, "Got output max %u.\n", output_min);
+
+    hr = IMFTransform_GetStreamCount(transform, &input_count, &output_count);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(input_count == 1, "Got %u inputs.\n", input_count);
+    ok(output_count == 1, "Got %u outputs.\n", output_count);
+
+    hr = IMFTransform_GetStreamIDs(transform, 1, &input_id, 1, &output_id);
+    ok(hr == E_NOTIMPL, "Got hr %#x.\n", hr);
+
+    hr = IMFTransform_GetInputStreamInfo(transform, 0, &input_info);
+    ok(hr == MF_E_TRANSFORM_TYPE_NOT_SET, "Got hr %#x.\n", hr);
+    hr = IMFTransform_GetOutputStreamInfo(transform, 0, &output_info);
+    ok(hr == MF_E_TRANSFORM_TYPE_NOT_SET, "Got hr %#x.\n", hr);
+
+    hr = IMFTransform_GetAttributes(transform, &attr);
+    ok(hr == E_NOTIMPL, "Got hr %#x.\n", hr);
+    hr = IMFTransform_GetInputStreamAttributes(transform, 0, &attr);
+    ok(hr == E_NOTIMPL, "Got hr %#x.\n", hr);
+    hr = IMFTransform_GetOutputStreamAttributes(transform, 0, &attr);
+    ok(hr == E_NOTIMPL, "Got hr %#x.\n", hr);
+    hr = IMFTransform_DeleteInputStream(transform, 0);
+    ok(hr == E_NOTIMPL, "Got hr %#x.\n", hr);
+    input_id = 100;
+    hr = IMFTransform_AddInputStreams(transform, 1, &input_id);
+    ok(hr == E_NOTIMPL, "Got hr %#x.\n", hr);
+
+    hr = IMFTransform_GetInputAvailableType(transform, 0, 0, &mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IMFMediaType_GetMajorType(mt, &guid);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(IsEqualGUID(&guid, &MFMediaType_Audio), "Got major type %s.\n", wine_dbgstr_guid(&guid));
+    hr = IMFMediaType_GetCount(mt, &count);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(count == 3, "Got count %u.\n", count);
+    hr = IMFMediaType_GetGUID(mt, &MF_MT_SUBTYPE, &guid);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(IsEqualGUID(&guid, &MFAudioFormat_Float), "Got subtype %s.\n", wine_dbgstr_guid(&guid));
+    hr = IMFMediaType_GetUINT32(mt, &MF_MT_ALL_SAMPLES_INDEPENDENT, &independent);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(independent == TRUE, "Got value %u.\n", independent);
+    ref = IMFMediaType_Release(mt);
+    ok(!ref, "Got unexpected refcount %d.\n", ref);
+
+    hr = IMFTransform_GetInputAvailableType(transform, 0, 1, &mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IMFMediaType_GetMajorType(mt, &guid);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(IsEqualGUID(&guid, &MFMediaType_Audio), "Got major type %s.\n", wine_dbgstr_guid(&guid));
+    hr = IMFMediaType_GetCount(mt, &count);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(count == 3, "Got count %u.\n", count);
+    hr = IMFMediaType_GetGUID(mt, &MF_MT_SUBTYPE, &guid);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(IsEqualGUID(&guid, &MFAudioFormat_PCM), "Got subtype %s.\n", wine_dbgstr_guid(&guid));
+    hr = IMFMediaType_GetUINT32(mt, &MF_MT_ALL_SAMPLES_INDEPENDENT, &independent);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(independent == TRUE, "Got value %u.\n", independent);
+    ref = IMFMediaType_Release(mt);
+    ok(!ref, "Got unexpected refcount %d.\n", ref);
+
+    hr = IMFTransform_GetInputAvailableType(transform, 0, 2, &mt);
+    ok(hr == MF_E_NO_MORE_TYPES, "Got hr %#x.\n", hr);
+
+    hr = IMFTransform_GetInputCurrentType(transform, 0, &mt);
+    ok(hr == MF_E_TRANSFORM_TYPE_NOT_SET, "Got hr %#x.\n", hr);
+    hr = IMFTransform_GetOutputCurrentType(transform, 0, &mt);
+    ok(hr == MF_E_TRANSFORM_TYPE_NOT_SET, "Got hr %#x.\n", hr);
+
+    hr = IMFTransform_GetInputStatus(transform, 0, &flags);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!flags, "Got flags %#x.\n", flags);
+    hr = IMFTransform_GetOutputStatus(transform, &flags);
+    ok(hr == E_NOTIMPL, "Got hr %#x.\n", hr);
+
+    ref = IMFTransform_Release(transform);
+    ok(!ref, "Got unexpected refcount %d.\n", ref);
+}
+
 START_TEST(resampledmo)
 {
     IUnknown *dmo;
@@ -178,6 +282,7 @@ START_TEST(resampledmo)
 
     test_interfaces();
     test_aggregation();
+    test_transform();
 
     CoUninitialize();
 }
