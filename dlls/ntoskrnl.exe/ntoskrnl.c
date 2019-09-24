@@ -3697,16 +3697,6 @@ NTSTATUS WINAPI IoCreateFile(HANDLE *handle, ACCESS_MASK access, OBJECT_ATTRIBUT
     return STATUS_NOT_IMPLEMENTED;
 }
 
-/***********************************************************************
- *           IoCreateNotificationEvent (NTOSKRNL.EXE.@)
- */
-PKEVENT WINAPI IoCreateNotificationEvent(UNICODE_STRING *name, HANDLE *handle)
-{
-    FIXME( "stub: %s %p\n", debugstr_us(name), handle );
-    return NULL;
-}
-
-
 #ifdef __x86_64__
 /**************************************************************************
  *		__chkstk (NTOSKRNL.@)

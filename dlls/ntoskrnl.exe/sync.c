@@ -214,20 +214,15 @@ static struct _OBJECT_TYPE event_type = {
 
 POBJECT_TYPE ExEventObjectType = &event_type;
 
-/***********************************************************************
- *           IoCreateSynchronizationEvent (NTOSKRNL.EXE.@)
- */
-PKEVENT WINAPI IoCreateSynchronizationEvent( UNICODE_STRING *name, HANDLE *ret_handle )
+static KEVENT *io_create_event( EVENT_TYPE type, UNICODE_STRING *name, HANDLE *ret_handle )
 {
     OBJECT_ATTRIBUTES attr;
     HANDLE handle;
     KEVENT *event;
     NTSTATUS ret;
 
-    TRACE( "(%p %p)\n", name, ret_handle );
-
     InitializeObjectAttributes( &attr, name, 0, 0, NULL );
-    ret = NtCreateEvent( &handle, EVENT_ALL_ACCESS, &attr, SynchronizationEvent, TRUE );
+    ret = NtCreateEvent( &handle, EVENT_ALL_ACCESS, &attr, type, TRUE );
     if (ret) return NULL;
 
     if (kernel_object_from_handle( handle, ExEventObjectType, (void**)&event ))
@@ -238,6 +233,24 @@ PKEVENT WINAPI IoCreateSynchronizationEvent( UNICODE_STRING *name, HANDLE *ret_h
 
     *ret_handle = handle;
     return event;
+}
+
+/***********************************************************************
+ *           IoCreateSynchronizationEvent (NTOSKRNL.EXE.@)
+ */
+PKEVENT WINAPI IoCreateSynchronizationEvent( UNICODE_STRING *name, HANDLE *handle )
+{
+    TRACE( "name %s, handle %p.\n", debugstr_us(name), handle );
+    return io_create_event( SynchronizationEvent, name, handle );
+}
+
+/***********************************************************************
+ *           IoCreateNotificationEvent (NTOSKRNL.EXE.@)
+ */
+PKEVENT WINAPI IoCreateNotificationEvent( UNICODE_STRING *name, HANDLE *handle )
+{
+    TRACE( "name %s, handle %p.\n", debugstr_us(name), handle );
+    return io_create_event( NotificationEvent, name, handle );
 }
 
 /***********************************************************************
