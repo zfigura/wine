@@ -1183,8 +1183,8 @@
 @ cdecl -arch=i386,x86_64,arm,arm64 longjmp(ptr long) ucrtbase.longjmp
 @ cdecl memchr(ptr long long) ucrtbase.memchr
 @ cdecl memcmp(ptr ptr long) ucrtbase.memcmp
-@ cdecl memcpy(ptr ptr long) ucrtbase.memcpy
-@ cdecl memmove(ptr ptr long) ucrtbase.memmove
+@ cdecl -norelay memcpy(ptr ptr long) ucrtbase.memcpy
+@ cdecl -norelay memmove(ptr ptr long) ucrtbase.memmove
 @ cdecl set_unexpected(ptr) ucrtbase.set_unexpected
 @ cdecl -arch=arm,x86_64 -norelay -private setjmp(ptr) ucrtbase.setjmp
 @ cdecl strchr(str long) ucrtbase.strchr

@@ -48,21 +48,21 @@
 @ cdecl iswgraph(long) msvcrt.iswgraph
 @ cdecl iswprint(long) msvcrt.iswprint
 @ cdecl iswspace(long) msvcrt.iswspace
-@ cdecl memcmp(ptr ptr long) msvcrt.memcmp
-@ cdecl memcpy(ptr ptr long) msvcrt.memcpy
+@ cdecl -norelay memcmp(ptr ptr long) msvcrt.memcmp
+@ cdecl -norelay memcpy(ptr ptr long) msvcrt.memcpy
 @ cdecl memcpy_s(ptr long ptr long) msvcrt.memcpy_s
-@ cdecl memmove(ptr ptr long) msvcrt.memmove
+@ cdecl -norelay memmove(ptr ptr long) msvcrt.memmove
 @ cdecl memmove_s(ptr long ptr long) msvcrt.memmove_s
-@ cdecl memset(ptr long long) msvcrt.memset
+@ cdecl -norelay memset(ptr long long) msvcrt.memset
 @ cdecl qsort_s(ptr long long ptr ptr) msvcrt.qsort_s
 @ varargs sprintf_s(ptr long str) msvcrt.sprintf_s
 @ varargs sscanf_s(str str) msvcrt.sscanf_s
 @ cdecl strcat_s(str long str) msvcrt.strcat_s
 @ cdecl strchr(str long) msvcrt.strchr
-@ cdecl strcmp(str str) msvcrt.strcmp
+@ cdecl -norelay strcmp(str str) msvcrt.strcmp
 @ cdecl strcpy_s(ptr long str) msvcrt.strcpy_s
 @ cdecl strcspn(str str) msvcrt.strcspn
-@ cdecl strlen(str) msvcrt.strlen
+@ cdecl -norelay strlen(str) msvcrt.strlen
 @ cdecl strncat_s(str long str long) msvcrt.strncat_s
 @ cdecl strncmp(str str long) msvcrt.strncmp
 @ cdecl strncpy_s(ptr long str long) msvcrt.strncpy_s

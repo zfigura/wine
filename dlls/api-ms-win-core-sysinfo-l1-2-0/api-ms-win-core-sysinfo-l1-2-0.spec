@@ -17,7 +17,7 @@
 @ stdcall GetSystemTimePreciseAsFileTime(ptr) kernel32.GetSystemTimePreciseAsFileTime
 @ stdcall GetSystemWindowsDirectoryA(ptr long) kernel32.GetSystemWindowsDirectoryA
 @ stdcall GetSystemWindowsDirectoryW(ptr long) kernel32.GetSystemWindowsDirectoryW
-@ stdcall GetTickCount() kernel32.GetTickCount
+@ stdcall -norelay GetTickCount() kernel32.GetTickCount
 @ stdcall -ret64 GetTickCount64() kernel32.GetTickCount64
 @ stdcall GetVersion() kernel32.GetVersion
 @ stdcall GetVersionExA(ptr) kernel32.GetVersionExA

@@ -1279,7 +1279,7 @@
 @ cdecl atoi(str) msvcrt.atoi
 @ cdecl atol(str) msvcrt.atol
 @ cdecl bsearch(ptr ptr long long ptr) msvcrt.bsearch
-@ cdecl calloc(long long) msvcrt.calloc
+@ cdecl -norelay calloc(long long) msvcrt.calloc
 @ cdecl ceil(double) msvcrt.ceil
 @ cdecl clearerr(ptr) msvcrt.clearerr
 @ cdecl clock() msvcrt.clock
@@ -1294,7 +1294,7 @@
 @ cdecl fclose(ptr) msvcrt.fclose
 @ cdecl feof(ptr) msvcrt.feof
 @ cdecl ferror(ptr) msvcrt.ferror
-@ cdecl fflush(ptr) msvcrt.fflush
+@ cdecl -norelay fflush(ptr) msvcrt.fflush
 @ cdecl fgetc(ptr) msvcrt.fgetc
 @ cdecl fgetpos(ptr ptr) msvcrt.fgetpos
 @ cdecl fgets(ptr long ptr) msvcrt.fgets
@@ -1309,7 +1309,7 @@
 @ cdecl fputwc(long ptr) msvcrt.fputwc
 @ cdecl fputws(wstr ptr) msvcrt.fputws
 @ cdecl fread(ptr long long ptr) msvcrt.fread
-@ cdecl free(ptr) msvcrt.free
+@ cdecl -norelay free(ptr) msvcrt.free
 @ cdecl freopen(str str ptr) msvcrt.freopen
 @ cdecl frexp(double ptr) msvcrt.frexp
 @ varargs fscanf(ptr str) msvcrt.fscanf
@@ -1360,29 +1360,29 @@
 @ cdecl log(double) msvcrt.log
 @ cdecl log10(double) msvcrt.log10
 @ cdecl -arch=i386,x86_64,arm,arm64 longjmp(ptr long) msvcrt.longjmp
-@ cdecl malloc(long) msvcrt.malloc
+@ cdecl -norelay malloc(long) msvcrt.malloc
 @ cdecl mblen(ptr long) msvcrt.mblen
 @ cdecl mbstowcs(ptr str long) msvcrt.mbstowcs
 @ cdecl mbtowc(ptr str long) msvcrt.mbtowc
 @ cdecl memchr(ptr long long) msvcrt.memchr
-@ cdecl memcmp(ptr ptr long) msvcrt.memcmp
-@ cdecl memcpy(ptr ptr long) msvcrt.memcpy
-@ cdecl memmove(ptr ptr long) msvcrt.memmove
-@ cdecl memset(ptr long long) msvcrt.memset
+@ cdecl -norelay memcmp(ptr ptr long) msvcrt.memcmp
+@ cdecl -norelay memcpy(ptr ptr long) msvcrt.memcpy
+@ cdecl -norelay memmove(ptr ptr long) msvcrt.memmove
+@ cdecl -norelay memset(ptr long long) msvcrt.memset
 @ cdecl mktime(ptr) msvcrt.mktime
 @ cdecl modf(double ptr) msvcrt.modf
 @ cdecl perror(str) msvcrt.perror
 @ cdecl pow(double double) msvcrt.pow
 @ varargs printf(str) msvcrt.printf
 @ cdecl putc(long ptr) msvcrt.putc
-@ cdecl putchar(long) msvcrt.putchar
-@ cdecl puts(str) msvcrt.puts
+@ cdecl -norelay putchar(long) msvcrt.putchar
+@ cdecl -norelay puts(str) msvcrt.puts
 @ cdecl putwc(long ptr) msvcrt.putwc
 @ cdecl putwchar(long) msvcrt.putwchar
 @ cdecl qsort(ptr long long ptr) msvcrt.qsort
 @ cdecl raise(long) msvcrt.raise
 @ cdecl rand() msvcrt.rand
-@ cdecl realloc(ptr long) msvcrt.realloc
+@ cdecl -norelay realloc(ptr long) msvcrt.realloc
 @ cdecl remove(str) msvcrt.remove
 @ cdecl rename(str str) msvcrt.rename
 @ cdecl rewind(ptr) msvcrt.rewind
@@ -1399,13 +1399,13 @@
 @ varargs sscanf(str str) msvcrt.sscanf
 @ cdecl strcat(str str) msvcrt.strcat
 @ cdecl strchr(str long) msvcrt.strchr
-@ cdecl strcmp(str str) msvcrt.strcmp
+@ cdecl -norelay strcmp(str str) msvcrt.strcmp
 @ cdecl strcoll(str str) msvcrt.strcoll
 @ cdecl strcpy(ptr str) msvcrt.strcpy
 @ cdecl strcspn(str str) msvcrt.strcspn
 @ cdecl strerror(long) msvcrt.strerror
 @ cdecl strftime(ptr long str ptr) msvcrt.strftime
-@ cdecl strlen(str) msvcrt.strlen
+@ cdecl -norelay strlen(str) msvcrt.strlen
 @ cdecl strncat(str str long) msvcrt.strncat
 @ cdecl strncmp(str str long) msvcrt.strncmp
 @ cdecl strncpy(ptr str long) msvcrt.strncpy

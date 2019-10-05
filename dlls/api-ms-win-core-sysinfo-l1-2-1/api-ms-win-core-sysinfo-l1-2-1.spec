@@ -20,7 +20,7 @@
 @ stdcall GetSystemWindowsDirectoryA(ptr long) kernel32.GetSystemWindowsDirectoryA
 @ stdcall GetSystemWindowsDirectoryW(ptr long) kernel32.GetSystemWindowsDirectoryW
 @ stdcall -ret64 GetTickCount64() kernel32.GetTickCount64
-@ stdcall GetTickCount() kernel32.GetTickCount
+@ stdcall -norelay GetTickCount() kernel32.GetTickCount
 @ stdcall GetVersion() kernel32.GetVersion
 @ stdcall GetVersionExA(ptr) kernel32.GetVersionExA
 @ stdcall GetVersionExW(ptr) kernel32.GetVersionExW
