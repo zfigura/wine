@@ -77,7 +77,7 @@ struct strmbase_source_ops
 	BaseOutputPin_DecideAllocator pfnDecideAllocator;
 };
 
-typedef struct BaseInputPin
+struct strmbase_sink
 {
     struct strmbase_pin pin;
 
@@ -87,9 +87,9 @@ typedef struct BaseInputPin
     IMemAllocator *preferred_allocator;
 
     const struct BaseInputPinFuncTable *pFuncsTable;
-} BaseInputPin;
+};
 
-typedef HRESULT (WINAPI *BaseInputPin_Receive)(BaseInputPin *This, IMediaSample *pSample);
+typedef HRESULT (WINAPI *BaseInputPin_Receive)(struct strmbase_sink *This, IMediaSample *pSample);
 
 typedef struct BaseInputPinFuncTable {
 	BasePinFuncTable base;
@@ -144,9 +144,9 @@ HRESULT WINAPI BaseInputPinImpl_BeginFlush(IPin * iface);
 HRESULT WINAPI BaseInputPinImpl_EndFlush(IPin * iface);
 HRESULT WINAPI BaseInputPinImpl_NewSegment(IPin * iface, REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate);
 
-void strmbase_sink_init(BaseInputPin *pin, const IPinVtbl *vtbl, struct strmbase_filter *filter,
+void strmbase_sink_init(struct strmbase_sink *pin, const IPinVtbl *vtbl, struct strmbase_filter *filter,
         const WCHAR *name, const BaseInputPinFuncTable *func_table, IMemAllocator *allocator);
-void strmbase_sink_cleanup(BaseInputPin *pin);
+void strmbase_sink_cleanup(struct strmbase_sink *pin);
 
 struct strmbase_filter
 {
@@ -205,7 +205,7 @@ typedef struct TransformFilter
 {
     struct strmbase_filter filter;
     struct strmbase_source source;
-    BaseInputPin sink;
+    struct strmbase_sink sink;
 
     AM_MEDIA_TYPE pmt;
     CRITICAL_SECTION csReceive;
@@ -515,7 +515,7 @@ struct strmbase_renderer
 {
     struct strmbase_filter filter;
 
-    BaseInputPin sink;
+    struct strmbase_sink sink;
     IUnknown *pPosition;
     CRITICAL_SECTION csRenderLock;
     /* Signaled when the filter has completed a state change. The filter waits
