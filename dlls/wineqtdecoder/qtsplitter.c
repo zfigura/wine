@@ -284,10 +284,46 @@ static void qt_splitter_destroy(struct strmbase_filter *iface)
     CoTaskMemFree(filter);
 }
 
+static HRESULT qt_splitter_start_stream(struct strmbase_filter *iface, REFERENCE_TIME time)
+{
+    QTSplitter *filter = impl_from_strmbase_filter(iface);
+    HRESULT hr = VFW_E_NOT_CONNECTED, pin_hr;
+
+    EnterCriticalSection(&This->csReceive);
+
+    if (filter->pVideo_Pin)
+        pin_hr = BaseOutputPinImpl_Active(&filter->pVideo_Pin->pin);
+    if (SUCCEEDED(pin_hr))
+        hr = pin_hr;
+    if (filter->pAudio_Pin)
+        pin_hr = BaseOutputPinImpl_Active(&filter->pAudio_Pin->pin);
+    if (SUCCEEDED(pin_hr))
+        hr = pin_hr;
+    SetEvent(filter->runEvent);
+
+    LeaveCriticalSection(&This->csReceive);
+
+    return hr;
+}
+
+static HRESULT qt_splitter_cleanup_stream(struct strmbase_filter *iface)
+{
+    QTSplitter *filter = impl_from_strmbase_filter(iface);
+
+    EnterCriticalSection(&This->csReceive);
+    IAsyncReader_BeginFlush(filter->pInputPin.pReader);
+    IAsyncReader_EndFlush(filter->pInputPin.pReader);
+    LeaveCriticalSection(&This->csReceive);
+
+    return S_OK;
+}
+
 static const struct strmbase_filter_ops filter_ops =
 {
     .filter_get_pin = qt_splitter_get_pin,
     .filter_destroy = qt_splitter_destroy,
+    .filter_start_stream = qt_splitter_start_stream,
+    .filter_cleanup_stream = qt_splitter_cleanup_stream,
 };
 
 static HRESULT sink_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
@@ -378,28 +414,6 @@ static HRESULT WINAPI QT_QueryInterface(IBaseFilter *iface, REFIID riid, LPVOID 
         FIXME("No interface for %s!\n", debugstr_guid(riid));
 
     return E_NOINTERFACE;
-}
-
-static HRESULT WINAPI QT_Stop(IBaseFilter *iface)
-{
-    QTSplitter *This = impl_from_IBaseFilter(iface);
-
-    TRACE("()\n");
-
-    EnterCriticalSection(&This->csReceive);
-    IAsyncReader_BeginFlush(This->pInputPin.pReader);
-    IAsyncReader_EndFlush(This->pInputPin.pReader);
-    LeaveCriticalSection(&This->csReceive);
-
-    return S_OK;
-}
-
-static HRESULT WINAPI QT_Pause(IBaseFilter *iface)
-{
-    HRESULT hr = S_OK;
-    TRACE("()\n");
-
-    return hr;
 }
 
 static OSErr QT_Create_Extract_Session(QTSplitter *filter)
@@ -744,52 +758,15 @@ audio_error:
     return hr;
 }
 
-static HRESULT WINAPI QT_Run(IBaseFilter *iface, REFERENCE_TIME tStart)
-{
-    HRESULT hr = S_OK;
-    QTSplitter *This = impl_from_IBaseFilter(iface);
-    HRESULT hr_any = VFW_E_NOT_CONNECTED;
-
-    TRACE("(%s)\n", wine_dbgstr_longlong(tStart));
-
-    EnterCriticalSection(&This->csReceive);
-
-    if (This->pVideo_Pin)
-        hr = BaseOutputPinImpl_Active(&This->pVideo_Pin->pin);
-    if (SUCCEEDED(hr))
-        hr_any = hr;
-    if (This->pAudio_Pin)
-        hr = BaseOutputPinImpl_Active(&This->pAudio_Pin->pin);
-    if (SUCCEEDED(hr))
-        hr_any = hr;
-
-    hr = hr_any;
-
-    SetEvent(This->runEvent);
-    LeaveCriticalSection(&This->csReceive);
-
-    return hr;
-}
-
-static HRESULT WINAPI QT_GetState(IBaseFilter *iface, DWORD dwMilliSecsTimeout, FILTER_STATE *pState)
-{
-    QTSplitter *This = impl_from_IBaseFilter(iface);
-    TRACE("(%d, %p)\n", dwMilliSecsTimeout, pState);
-
-    *pState = This->state;
-
-    return S_OK;
-}
-
 static const IBaseFilterVtbl QT_Vtbl = {
     QT_QueryInterface,
     BaseFilterImpl_AddRef,
     BaseFilterImpl_Release,
     BaseFilterImpl_GetClassID,
-    QT_Stop,
-    QT_Pause,
-    QT_Run,
-    QT_GetState,
+    BaseFilterImpl_Stop,
+    BaseFilterImpl_Pause,
+    BaseFilterImpl_Run,
+    BaseFilterImpl_GetState,
     BaseFilterImpl_SetSyncSource,
     BaseFilterImpl_GetSyncSource,
     BaseFilterImpl_EnumPins,
