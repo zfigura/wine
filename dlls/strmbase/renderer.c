@@ -40,67 +40,6 @@ static inline struct strmbase_renderer *impl_from_IPin(IPin *iface)
     return CONTAINING_RECORD(iface, struct strmbase_renderer, sink.pin.IPin_iface);
 }
 
-static HRESULT WINAPI BaseRenderer_InputPin_EndOfStream(IPin * iface)
-{
-    struct strmbase_renderer *pFilter = impl_from_IPin(iface);
-    HRESULT hr;
-
-    TRACE("iface %p.\n", iface);
-
-    EnterCriticalSection(&pFilter->csRenderLock);
-    EnterCriticalSection(&pFilter->filter.csFilter);
-    hr = BaseInputPinImpl_EndOfStream(iface);
-    if (SUCCEEDED(hr))
-    {
-        if (pFilter->pFuncsTable->pfnEndOfStream)
-            hr = pFilter->pFuncsTable->pfnEndOfStream(pFilter);
-        else
-            hr = BaseRendererImpl_EndOfStream(pFilter);
-    }
-    LeaveCriticalSection(&pFilter->filter.csFilter);
-    LeaveCriticalSection(&pFilter->csRenderLock);
-    return hr;
-}
-
-static HRESULT WINAPI BaseRenderer_InputPin_BeginFlush(IPin * iface)
-{
-    struct strmbase_renderer *pFilter = impl_from_IPin(iface);
-    HRESULT hr;
-
-    TRACE("iface %p.\n", iface);
-
-    EnterCriticalSection(&pFilter->csRenderLock);
-    EnterCriticalSection(&pFilter->filter.csFilter);
-    hr = BaseInputPinImpl_BeginFlush(iface);
-    if (SUCCEEDED(hr))
-        hr = BaseRendererImpl_BeginFlush(pFilter);
-    LeaveCriticalSection(&pFilter->filter.csFilter);
-    LeaveCriticalSection(&pFilter->csRenderLock);
-    return hr;
-}
-
-static HRESULT WINAPI BaseRenderer_InputPin_EndFlush(IPin * iface)
-{
-    struct strmbase_renderer *pFilter = impl_from_IPin(iface);
-    HRESULT hr;
-
-    TRACE("iface %p.\n", iface);
-
-    EnterCriticalSection(&pFilter->csRenderLock);
-    EnterCriticalSection(&pFilter->filter.csFilter);
-    hr = BaseInputPinImpl_EndFlush(iface);
-    if (SUCCEEDED(hr))
-    {
-        if (pFilter->pFuncsTable->pfnEndFlush)
-            hr = pFilter->pFuncsTable->pfnEndFlush(pFilter);
-        else
-            hr = BaseRendererImpl_EndFlush(pFilter);
-    }
-    LeaveCriticalSection(&pFilter->filter.csFilter);
-    LeaveCriticalSection(&pFilter->csRenderLock);
-    return hr;
-}
-
 static const IPinVtbl BaseRenderer_InputPin_Vtbl =
 {
     BasePinImpl_QueryInterface,
@@ -117,9 +56,9 @@ static const IPinVtbl BaseRenderer_InputPin_Vtbl =
     BasePinImpl_QueryAccept,
     BasePinImpl_EnumMediaTypes,
     BasePinImpl_QueryInternalConnections,
-    BaseRenderer_InputPin_EndOfStream,
-    BaseRenderer_InputPin_BeginFlush,
-    BaseRenderer_InputPin_EndFlush,
+    BaseInputPinImpl_EndOfStream,
+    BaseInputPinImpl_BeginFlush,
+    BaseInputPinImpl_EndFlush,
     BaseInputPinImpl_NewSegment
 };
 
@@ -279,6 +218,51 @@ static void sink_disconnect(struct strmbase_sink *iface)
         filter->pFuncsTable->pfnBreakConnect(filter);
 }
 
+static HRESULT sink_eos(struct strmbase_sink *iface)
+{
+    struct strmbase_renderer *filter = impl_from_IPin(&iface->pin.IPin_iface);
+    HRESULT hr;
+
+    EnterCriticalSection(&filter->csRenderLock);
+    EnterCriticalSection(&filter->filter.csFilter);
+    if (filter->pFuncsTable->pfnEndOfStream)
+        hr = filter->pFuncsTable->pfnEndOfStream(filter);
+    else
+        hr = BaseRendererImpl_EndOfStream(filter);
+    LeaveCriticalSection(&filter->filter.csFilter);
+    LeaveCriticalSection(&filter->csRenderLock);
+    return hr;
+}
+
+static HRESULT sink_begin_flush(struct strmbase_sink *iface)
+{
+    struct strmbase_renderer *filter = impl_from_IPin(&iface->pin.IPin_iface);
+    HRESULT hr;
+
+    EnterCriticalSection(&filter->csRenderLock);
+    EnterCriticalSection(&filter->filter.csFilter);
+    hr = BaseRendererImpl_BeginFlush(filter);
+    LeaveCriticalSection(&filter->filter.csFilter);
+    LeaveCriticalSection(&filter->csRenderLock);
+    return hr;
+}
+
+static HRESULT sink_end_flush(struct strmbase_sink *iface)
+{
+    struct strmbase_renderer *filter = impl_from_IPin(&iface->pin.IPin_iface);
+    HRESULT hr;
+
+    EnterCriticalSection(&filter->csRenderLock);
+    EnterCriticalSection(&filter->filter.csFilter);
+    if (filter->pFuncsTable->pfnEndFlush)
+        hr = filter->pFuncsTable->pfnEndFlush(filter);
+    else
+        hr = BaseRendererImpl_EndFlush(filter);
+    LeaveCriticalSection(&filter->filter.csFilter);
+    LeaveCriticalSection(&filter->csRenderLock);
+    return hr;
+}
+
 static const struct strmbase_sink_ops sink_ops =
 {
     .base.pin_query_accept = sink_query_accept,
@@ -287,6 +271,9 @@ static const struct strmbase_sink_ops sink_ops =
     .pfnReceive = BaseRenderer_Receive,
     .sink_connect = sink_connect,
     .sink_disconnect = sink_disconnect,
+    .sink_eos = sink_eos,
+    .sink_begin_flush = sink_begin_flush,
+    .sink_end_flush = sink_end_flush,
 };
 
 void strmbase_renderer_cleanup(struct strmbase_renderer *filter)
