@@ -941,8 +941,8 @@ static HRESULT WINAPI MemInputPin_Receive(IMemInputPin * iface, IMediaSample * p
     struct strmbase_sink *This = impl_from_IMemInputPin(iface);
     HRESULT hr = S_FALSE;
 
-    /* this trace commented out for performance reasons */
-    /*TRACE("(%p/%p)->(%p)\n", This, iface, pSample);*/
+    TRACE("pin %p, sample %p.\n", This, pSample);
+
     if (This->pFuncsTable->pfnReceive)
         hr = This->pFuncsTable->pfnReceive(This, pSample);
     return hr;

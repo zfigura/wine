@@ -686,11 +686,17 @@ static HRESULT testsink_get_media_type(struct strmbase_pin *iface, unsigned int 
     return VFW_S_NO_MORE_ITEMS;
 }
 
+static HRESULT WINAPI testsink_Receive(struct strmbase_sink *iface, IMediaSample *sample)
+{
+    return S_OK;
+}
+
 static const struct strmbase_sink_ops testsink_pin_ops =
 {
     .base.pin_query_interface = testsink_query_interface,
     .base.pin_query_accept = testpin_query_accept,
     .base.pin_get_media_type = testsink_get_media_type,
+    .pfnReceive = testsink_Receive,
 };
 
 static void testsink_init(struct testsink *filter)
@@ -743,7 +749,67 @@ static void test_allocator(IMemInputPin *input)
     hr = IMemAllocator_SetProperties(req_allocator, &req_props, &ret_props);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
+    hr = IMemAllocator_Commit(req_allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
     IMemAllocator_Release(req_allocator);
+}
+
+struct frame_thread_params
+{
+    IMemInputPin *sink;
+    IMediaSample *sample;
+};
+
+static DWORD WINAPI frame_thread(void *arg)
+{
+    struct frame_thread_params *params = arg;
+    HRESULT hr;
+
+    if (winetest_debug > 1) trace("%04x: Sending frame.\n", GetCurrentThreadId());
+    hr = IMemInputPin_Receive(params->sink, params->sample);
+    if (winetest_debug > 1) trace("%04x: Returned %#x.\n", GetCurrentThreadId(), hr);
+    IMediaSample_Release(params->sample);
+    free(params);
+    return hr;
+}
+
+static HRESULT send_frame(IMemInputPin *sink, const char *str)
+{
+    struct frame_thread_params *params = malloc(sizeof(params));
+    IMemAllocator *allocator;
+    REFERENCE_TIME end_time;
+    IMediaSample *sample;
+    HANDLE thread;
+    HRESULT hr;
+    BYTE *data;
+    DWORD ret;
+
+    hr = IMemInputPin_GetAllocator(sink, &allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMemAllocator_Commit(allocator);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, 0);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaSample_GetPointer(sample, &data);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    strcpy(data, str);
+
+    hr = IMediaSample_SetActualDataLength(sample, strlen(str) + 1);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    params->sink = sink;
+    params->sample = sample;
+    thread = CreateThread(NULL, 0, frame_thread, params, 0, NULL);
+    ok(!WaitForSingleObject(thread, 500), "Wait failed.\n");
+    GetExitCodeThread(thread, &ret);
+    CloseHandle(thread);
+
+    IMemAllocator_Release(allocator);
+    return ret;
 }
 
 static void test_connect_pin(void)
@@ -862,6 +928,63 @@ static void test_connect_pin(void)
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     hr = IPin_QueryAccept(source, &mt);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+{
+    ISampleGrabber *grabber;
+    IMediaControl *control;
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    IBaseFilter_QueryInterface(filter, &IID_ISampleGrabber, (void **)&grabber);
+
+    trace("...\n");
+
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(meminput, "one");
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(meminput, "two");
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = ISampleGrabber_SetOneShot(grabber, TRUE);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(meminput, "one");
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(meminput, "two");
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IFilterGraph2_RemoveFilter(graph, filter);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IFilterGraph2_AddFilter(graph, filter, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IFilterGraph2_ConnectDirect(graph, &testsource.pin.pin.IPin_iface, sink, &req_mt);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    test_allocator(meminput);
+    hr = IFilterGraph2_ConnectDirect(graph, source, &testsink.pin.pin.IPin_iface, &req_mt);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = send_frame(meminput, "one");
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    trace("... <--\n");
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    ISampleGrabber_Release(grabber);
+    IMediaControl_Release(control);
+}
 
     hr = IFilterGraph2_Disconnect(graph, source);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
