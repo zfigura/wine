@@ -492,26 +492,6 @@ static void test_media_types(void)
     ok(!ref, "Got outstanding refcount %d.\n", ref);
 }
 
-
-static const IBaseFilterVtbl testfilter_vtbl =
-{
-    BaseFilterImpl_QueryInterface,
-    BaseFilterImpl_AddRef,
-    BaseFilterImpl_Release,
-    BaseFilterImpl_GetClassID,
-    BaseFilterImpl_Stop,
-    BaseFilterImpl_Pause,
-    BaseFilterImpl_Run,
-    BaseFilterImpl_GetState,
-    BaseFilterImpl_SetSyncSource,
-    BaseFilterImpl_GetSyncSource,
-    BaseFilterImpl_EnumPins,
-    BaseFilterImpl_FindPin,
-    BaseFilterImpl_QueryFilterInfo,
-    BaseFilterImpl_JoinFilterGraph,
-    BaseFilterImpl_QueryVendorInfo,
-};
-
 struct testsource
 {
     struct strmbase_filter filter;
@@ -542,28 +522,6 @@ static const struct strmbase_filter_ops testsource_ops =
 {
     .filter_get_pin = testsource_get_pin,
     .filter_destroy = testsource_destroy,
-};
-
-static const IPinVtbl testsource_pin_vtbl =
-{
-    BasePinImpl_QueryInterface,
-    BasePinImpl_AddRef,
-    BasePinImpl_Release,
-    BaseOutputPinImpl_Connect,
-    BaseOutputPinImpl_ReceiveConnection,
-    BasePinImpl_Disconnect,
-    BasePinImpl_ConnectedTo,
-    BasePinImpl_ConnectionMediaType,
-    BasePinImpl_QueryPinInfo,
-    BasePinImpl_QueryDirection,
-    BasePinImpl_QueryId,
-    BasePinImpl_QueryAccept,
-    BasePinImpl_EnumMediaTypes,
-    BasePinImpl_QueryInternalConnections,
-    BaseOutputPinImpl_EndOfStream,
-    BaseOutputPinImpl_BeginFlush,
-    BaseOutputPinImpl_EndFlush,
-    BasePinImpl_NewSegment,
 };
 
 static HRESULT testpin_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
@@ -601,8 +559,8 @@ static const struct strmbase_source_ops testsource_pin_ops =
 static void testsource_init(struct testsource *filter)
 {
     static const GUID clsid = {0xabacab};
-    strmbase_filter_init(&filter->filter, &testfilter_vtbl, NULL, &clsid, &testsource_ops);
-    strmbase_source_init(&filter->pin, &testsource_pin_vtbl, &filter->filter, L"", &testsource_pin_ops);
+    strmbase_filter_init(&filter->filter, NULL, &clsid, &testsource_ops);
+    strmbase_source_init(&filter->pin, &filter->filter, L"", &testsource_pin_ops);
 }
 
 struct testsink
@@ -703,7 +661,7 @@ static void testsink_init(struct testsink *filter)
 {
 IMemAllocator *allocator;
     static const GUID clsid = {0xabacab};
-    strmbase_filter_init(&filter->filter, &testfilter_vtbl, NULL, &clsid, &testsink_ops);
+    strmbase_filter_init(&filter->filter, NULL, &clsid, &testsink_ops);
 CoCreateInstance(&CLSID_MemoryAllocator, NULL, CLSCTX_INPROC_SERVER, &IID_IMemAllocator, (void **)&allocator);
     strmbase_sink_init(&filter->pin, &testsink_pin_vtbl, &filter->filter, L"", &testsink_pin_ops, NULL);
     filter->expose_mt = FALSE;
@@ -778,7 +736,6 @@ static HRESULT send_frame(IMemInputPin *sink, const char *str)
 {
     struct frame_thread_params *params = malloc(sizeof(params));
     IMemAllocator *allocator;
-    REFERENCE_TIME end_time;
     IMediaSample *sample;
     HANDLE thread;
     HRESULT hr;
@@ -796,7 +753,7 @@ static HRESULT send_frame(IMemInputPin *sink, const char *str)
 
     hr = IMediaSample_GetPointer(sample, &data);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
-    strcpy(data, str);
+    strcpy((char *)data, str);
 
     hr = IMediaSample_SetActualDataLength(sample, strlen(str) + 1);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
@@ -951,10 +908,10 @@ static void test_connect_pin(void)
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = send_frame(meminput, "one");
-    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
 
     hr = send_frame(meminput, "two");
-    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
 
     hr = IMediaControl_Stop(control);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
@@ -969,13 +926,13 @@ static void test_connect_pin(void)
     ok(hr == S_OK, "Got hr %#x.\n", hr);
     test_allocator(meminput);
     hr = IFilterGraph2_ConnectDirect(graph, source, &testsink.pin.pin.IPin_iface, &req_mt);
-    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = IMediaControl_Run(control);
     ok(hr == S_OK, "Got hr %#x.\n", hr);
 
     hr = send_frame(meminput, "one");
-    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
 
     trace("... <--\n");
 
