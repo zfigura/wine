@@ -273,25 +273,25 @@ static inline struct strmbase_filter *impl_from_IBaseFilter(IBaseFilter *iface)
     return CONTAINING_RECORD(iface, struct strmbase_filter, IBaseFilter_iface);
 }
 
-HRESULT WINAPI BaseFilterImpl_QueryInterface(IBaseFilter *iface, REFIID iid, void **out)
+static HRESULT WINAPI filter_QueryInterface(IBaseFilter *iface, REFIID iid, void **out)
 {
     struct strmbase_filter *filter = impl_from_IBaseFilter(iface);
     return IUnknown_QueryInterface(filter->outer_unk, iid, out);
 }
 
-ULONG WINAPI BaseFilterImpl_AddRef(IBaseFilter *iface)
+static ULONG WINAPI filter_AddRef(IBaseFilter *iface)
 {
     struct strmbase_filter *filter = impl_from_IBaseFilter(iface);
     return IUnknown_AddRef(filter->outer_unk);
 }
 
-ULONG WINAPI BaseFilterImpl_Release(IBaseFilter *iface)
+static ULONG WINAPI filter_Release(IBaseFilter *iface)
 {
     struct strmbase_filter *filter = impl_from_IBaseFilter(iface);
     return IUnknown_Release(filter->outer_unk);
 }
 
-HRESULT WINAPI BaseFilterImpl_GetClassID(IBaseFilter * iface, CLSID * pClsid)
+static HRESULT WINAPI filter_GetClassID(IBaseFilter * iface, CLSID * pClsid)
 {
     struct strmbase_filter *This = impl_from_IBaseFilter(iface);
     TRACE("(%p)->(%p)\n", This, pClsid);
@@ -301,7 +301,7 @@ HRESULT WINAPI BaseFilterImpl_GetClassID(IBaseFilter * iface, CLSID * pClsid)
     return S_OK;
 }
 
-HRESULT WINAPI BaseFilterImpl_Stop(IBaseFilter *iface)
+static HRESULT WINAPI filter_Stop(IBaseFilter *iface)
 {
     struct strmbase_filter *filter = impl_from_IBaseFilter(iface);
     HRESULT hr = S_OK;
@@ -322,7 +322,7 @@ HRESULT WINAPI BaseFilterImpl_Stop(IBaseFilter *iface)
     return hr;
 }
 
-HRESULT WINAPI BaseFilterImpl_Pause(IBaseFilter *iface)
+static HRESULT WINAPI filter_Pause(IBaseFilter *iface)
 {
     struct strmbase_filter *filter = impl_from_IBaseFilter(iface);
     HRESULT hr = S_OK;
@@ -343,7 +343,7 @@ HRESULT WINAPI BaseFilterImpl_Pause(IBaseFilter *iface)
     return hr;
 }
 
-HRESULT WINAPI BaseFilterImpl_Run(IBaseFilter *iface, REFERENCE_TIME start)
+static HRESULT WINAPI filter_Run(IBaseFilter *iface, REFERENCE_TIME start)
 {
     struct strmbase_filter *filter = impl_from_IBaseFilter(iface);
     HRESULT hr = S_OK;
@@ -364,7 +364,7 @@ HRESULT WINAPI BaseFilterImpl_Run(IBaseFilter *iface, REFERENCE_TIME start)
     return hr;
 }
 
-HRESULT WINAPI BaseFilterImpl_GetState(IBaseFilter *iface, DWORD timeout, FILTER_STATE *state)
+static HRESULT WINAPI filter_GetState(IBaseFilter *iface, DWORD timeout, FILTER_STATE *state)
 {
     struct strmbase_filter *filter = impl_from_IBaseFilter(iface);
     HRESULT hr = S_OK;
@@ -382,7 +382,7 @@ HRESULT WINAPI BaseFilterImpl_GetState(IBaseFilter *iface, DWORD timeout, FILTER
     return hr;
 }
 
-HRESULT WINAPI BaseFilterImpl_SetSyncSource(IBaseFilter * iface, IReferenceClock *pClock)
+static HRESULT WINAPI filter_SetSyncSource(IBaseFilter * iface, IReferenceClock *pClock)
 {
     struct strmbase_filter *This = impl_from_IBaseFilter(iface);
     TRACE("(%p)->(%p)\n", This, pClock);
@@ -400,7 +400,7 @@ HRESULT WINAPI BaseFilterImpl_SetSyncSource(IBaseFilter * iface, IReferenceClock
     return S_OK;
 }
 
-HRESULT WINAPI BaseFilterImpl_GetSyncSource(IBaseFilter * iface, IReferenceClock **ppClock)
+static HRESULT WINAPI filter_GetSyncSource(IBaseFilter *iface, IReferenceClock **ppClock)
 {
     struct strmbase_filter *This = impl_from_IBaseFilter(iface);
     TRACE("(%p)->(%p)\n", This, ppClock);
@@ -416,7 +416,7 @@ HRESULT WINAPI BaseFilterImpl_GetSyncSource(IBaseFilter * iface, IReferenceClock
     return S_OK;
 }
 
-HRESULT WINAPI BaseFilterImpl_EnumPins(IBaseFilter *iface, IEnumPins **enum_pins)
+static HRESULT WINAPI filter_EnumPins(IBaseFilter *iface, IEnumPins **enum_pins)
 {
     struct strmbase_filter *filter = impl_from_IBaseFilter(iface);
 
@@ -425,7 +425,7 @@ HRESULT WINAPI BaseFilterImpl_EnumPins(IBaseFilter *iface, IEnumPins **enum_pins
     return enum_pins_create(filter, enum_pins);
 }
 
-HRESULT WINAPI BaseFilterImpl_FindPin(IBaseFilter *iface, const WCHAR *id, IPin **ret)
+static HRESULT WINAPI filter_FindPin(IBaseFilter *iface, const WCHAR *id, IPin **ret)
 {
     struct strmbase_filter *This = impl_from_IBaseFilter(iface);
     unsigned int i;
@@ -453,7 +453,7 @@ HRESULT WINAPI BaseFilterImpl_FindPin(IBaseFilter *iface, const WCHAR *id, IPin 
     return VFW_E_NOT_FOUND;
 }
 
-HRESULT WINAPI BaseFilterImpl_QueryFilterInfo(IBaseFilter * iface, FILTER_INFO *pInfo)
+static HRESULT WINAPI filter_QueryFilterInfo(IBaseFilter *iface, FILTER_INFO *pInfo)
 {
     struct strmbase_filter *This = impl_from_IBaseFilter(iface);
     TRACE("(%p)->(%p)\n", This, pInfo);
@@ -467,7 +467,7 @@ HRESULT WINAPI BaseFilterImpl_QueryFilterInfo(IBaseFilter * iface, FILTER_INFO *
     return S_OK;
 }
 
-HRESULT WINAPI BaseFilterImpl_JoinFilterGraph(IBaseFilter * iface, IFilterGraph *pGraph, LPCWSTR pName )
+static HRESULT WINAPI filter_JoinFilterGraph(IBaseFilter *iface, IFilterGraph *pGraph, const WCHAR *pName)
 {
     struct strmbase_filter *This = impl_from_IBaseFilter(iface);
 
@@ -486,23 +486,42 @@ HRESULT WINAPI BaseFilterImpl_JoinFilterGraph(IBaseFilter * iface, IFilterGraph 
     return S_OK;
 }
 
-HRESULT WINAPI BaseFilterImpl_QueryVendorInfo(IBaseFilter * iface, LPWSTR *pVendorInfo)
+static HRESULT WINAPI filter_QueryVendorInfo(IBaseFilter *iface, WCHAR **pVendorInfo)
 {
     TRACE("(%p)->(%p)\n", iface, pVendorInfo);
     return E_NOTIMPL;
 }
+
+static const IBaseFilterVtbl filter_vtbl =
+{
+    filter_QueryInterface,
+    filter_AddRef,
+    filter_Release,
+    filter_GetClassID,
+    filter_Stop,
+    filter_Pause,
+    filter_Run,
+    filter_GetState,
+    filter_SetSyncSource,
+    filter_GetSyncSource,
+    filter_EnumPins,
+    filter_FindPin,
+    filter_QueryFilterInfo,
+    filter_JoinFilterGraph,
+    filter_QueryVendorInfo,
+};
 
 VOID WINAPI BaseFilterImpl_IncrementPinVersion(struct strmbase_filter *filter)
 {
     InterlockedIncrement(&filter->pin_version);
 }
 
-void strmbase_filter_init(struct strmbase_filter *filter, const IBaseFilterVtbl *vtbl, IUnknown *outer,
+void strmbase_filter_init(struct strmbase_filter *filter, IUnknown *outer,
         const CLSID *clsid, const struct strmbase_filter_ops *ops)
 {
     memset(filter, 0, sizeof(*filter));
 
-    filter->IBaseFilter_iface.lpVtbl = vtbl;
+    filter->IBaseFilter_iface.lpVtbl = &filter_vtbl;
     filter->IUnknown_inner.lpVtbl = &filter_inner_vtbl;
     filter->outer_unk = outer ? outer : &filter->IUnknown_inner;
     filter->refcount = 1;
