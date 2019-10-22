@@ -49,89 +49,20 @@ static HRESULT updatehres( HRESULT original, HRESULT new )
     return original;
 }
 
-/** Sends a message from a pin further to other, similar pins
- * fnMiddle is called on each pin found further on the stream.
- * fnEnd (can be NULL) is called when the message can't be sent any further (this is a renderer or source)
- *
- * If the pin given is an input pin, the message will be sent downstream to other input pins
- * If the pin given is an output pin, the message will be sent upstream to other output pins
- */
-static HRESULT SendFurther( IPin *from, SendPinFunc fnMiddle, LPVOID arg, SendPinFunc fnEnd )
+static HRESULT SendFurther(struct strmbase_sink *sink, SendPinFunc fnMiddle, void *arg)
 {
-    PIN_INFO pin_info;
-    ULONG amount = 0;
     HRESULT hr = S_OK;
-    HRESULT hr_return = S_OK;
-    IEnumPins *enumpins = NULL;
-    BOOL foundend = TRUE;
-    PIN_DIRECTION from_dir;
+    unsigned int i;
+    IPin *pin;
 
-    IPin_QueryDirection( from, &from_dir );
+    for (i = 0; (pin = sink->pin.filter->ops->filter_get_pin(sink->pin.filter, i)); ++i)
+    {
+        struct strmbase_pin *basepin = CONTAINING_RECORD(pin, struct strmbase_pin, IPin_iface);
 
-    hr = IPin_QueryInternalConnections( from, NULL, &amount );
-    if (hr != E_NOTIMPL && amount)
-        FIXME("Use QueryInternalConnections!\n");
-
-    pin_info.pFilter = NULL;
-    hr = IPin_QueryPinInfo( from, &pin_info );
-    if (FAILED(hr))
-        goto out;
-
-    hr = IBaseFilter_EnumPins( pin_info.pFilter, &enumpins );
-    if (FAILED(hr))
-        goto out;
-
-    hr = IEnumPins_Reset( enumpins );
-    while (hr == S_OK) {
-        IPin *pin = NULL;
-        hr = IEnumPins_Next( enumpins, 1, &pin, NULL );
-        if (hr == VFW_E_ENUM_OUT_OF_SYNC)
-        {
-            hr = IEnumPins_Reset( enumpins );
-            continue;
-        }
-        if (pin)
-        {
-            PIN_DIRECTION dir;
-
-            IPin_QueryDirection( pin, &dir );
-            if (dir != from_dir)
-            {
-                IPin *connected = NULL;
-
-                foundend = FALSE;
-                IPin_ConnectedTo( pin, &connected );
-                if (connected)
-                {
-                    HRESULT hr_local;
-
-                    hr_local = fnMiddle( connected, arg );
-                    hr_return = updatehres( hr_return, hr_local );
-                    IPin_Release(connected);
-                }
-            }
-            IPin_Release( pin );
-        }
-        else
-        {
-            hr = S_OK;
-            break;
-        }
+        if (basepin->dir == PINDIR_OUTPUT && basepin->peer)
+            hr = updatehres(hr, fnMiddle(basepin->peer, arg));
     }
 
-    if (!foundend)
-        hr = hr_return;
-    else if (fnEnd) {
-        HRESULT hr_local;
-
-        hr_local = fnEnd( from, arg );
-        hr_return = updatehres( hr_return, hr_local );
-    }
-    IEnumPins_Release(enumpins);
-
-out:
-    if (pin_info.pFilter)
-        IBaseFilter_Release( pin_info.pFilter );
     return hr;
 }
 
@@ -816,7 +747,7 @@ HRESULT WINAPI BaseInputPinImpl_EndOfStream(IPin * iface)
     LeaveCriticalSection(&This->pin.filter->csFilter);
 
     if (hr == S_OK)
-        hr = SendFurther( iface, deliver_endofstream, NULL, NULL );
+        hr = SendFurther(This, deliver_endofstream, NULL);
     return hr;
 }
 
@@ -837,7 +768,7 @@ HRESULT WINAPI BaseInputPinImpl_BeginFlush(IPin * iface)
     EnterCriticalSection(&This->pin.filter->csFilter);
     This->flushing = TRUE;
 
-    hr = SendFurther( iface, deliver_beginflush, NULL, NULL );
+    hr = SendFurther(This, deliver_beginflush, NULL);
     LeaveCriticalSection(&This->pin.filter->csFilter);
 
     return hr;
@@ -860,7 +791,7 @@ HRESULT WINAPI BaseInputPinImpl_EndFlush(IPin * iface)
     EnterCriticalSection(&This->pin.filter->csFilter);
     This->flushing = This->end_of_stream = FALSE;
 
-    hr = SendFurther( iface, deliver_endflush, NULL, NULL );
+    hr = SendFurther(This, deliver_endflush, NULL);
     LeaveCriticalSection(&This->pin.filter->csFilter);
 
     return hr;
@@ -893,7 +824,7 @@ HRESULT WINAPI BaseInputPinImpl_NewSegment(IPin * iface, REFERENCE_TIME tStart, 
     args.tStop = This->pin.tStop = tStop;
     args.rate = This->pin.dRate = dRate;
 
-    return SendFurther( iface, deliver_newsegment, &args, NULL );
+    return SendFurther(This, deliver_newsegment, &args);
 }
 
 /*** IMemInputPin implementation ***/
