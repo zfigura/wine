@@ -805,6 +805,9 @@ HRESULT WINAPI BaseInputPinImpl_EndOfStream(IPin * iface)
 
     TRACE("(%p)->()\n", This);
 
+    if (This->pFuncsTable->sink_eos)
+        return This->pFuncsTable->sink_eos(This);
+
     EnterCriticalSection(&This->pin.filter->csFilter);
     if (This->flushing)
         hr = S_FALSE;
@@ -828,6 +831,9 @@ HRESULT WINAPI BaseInputPinImpl_BeginFlush(IPin * iface)
     HRESULT hr;
     TRACE("(%p) semi-stub\n", This);
 
+    if (This->pFuncsTable->sink_begin_flush)
+        return This->pFuncsTable->sink_begin_flush(This);
+
     EnterCriticalSection(&This->pin.filter->csFilter);
     This->flushing = TRUE;
 
@@ -847,6 +853,9 @@ HRESULT WINAPI BaseInputPinImpl_EndFlush(IPin * iface)
     struct strmbase_sink *This = impl_sink_from_IPin(iface);
     HRESULT hr;
     TRACE("(%p)->()\n", This);
+
+    if (This->pFuncsTable->sink_begin_flush)
+        return This->pFuncsTable->sink_end_flush(This);
 
     EnterCriticalSection(&This->pin.filter->csFilter);
     This->flushing = This->end_of_stream = FALSE;
@@ -876,6 +885,9 @@ HRESULT WINAPI BaseInputPinImpl_NewSegment(IPin * iface, REFERENCE_TIME tStart, 
 
     TRACE("iface %p, start %s, stop %s, rate %.16e.\n",
             iface, debugstr_time(tStart), debugstr_time(tStop), dRate);
+
+    if (This->pFuncsTable->sink_new_segment)
+        return This->pFuncsTable->sink_new_segment(This, tStart, tStop, dRate);
 
     args.tStart = This->pin.tStart = tStart;
     args.tStop = This->pin.tStop = tStop;
