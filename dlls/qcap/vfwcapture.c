@@ -99,7 +99,7 @@ static void vfw_capture_destroy(struct strmbase_filter *iface)
     if (filter->init)
     {
         if (filter->filter.state != State_Stopped)
-            qcap_driver_stop(filter->driver_info, &filter->filter.state);
+            qcap_driver_stop_stream(filter->driver_info);
         qcap_driver_destroy(filter->driver_info);
     }
 
@@ -143,7 +143,15 @@ static HRESULT WINAPI VfwCapture_Stop(IBaseFilter * iface)
     VfwCapture *This = impl_from_IBaseFilter(iface);
 
     TRACE("()\n");
-    return qcap_driver_stop(This->driver_info, &This->filter.state);
+
+    EnterCriticalSection(&This->filter.csFilter);
+
+    if (This->filter.state == State_Running)
+        qcap_driver_stop_stream(This->driver_info);
+    This->filter.state = State_Stopped;
+
+    LeaveCriticalSection(&This->filter.csFilter);
+    return S_OK;
 }
 
 static HRESULT WINAPI VfwCapture_Pause(IBaseFilter * iface)
@@ -151,14 +159,30 @@ static HRESULT WINAPI VfwCapture_Pause(IBaseFilter * iface)
     VfwCapture *This = impl_from_IBaseFilter(iface);
 
     TRACE("()\n");
-    return qcap_driver_pause(This->driver_info, &This->filter.state);
+
+    EnterCriticalSection(&This->filter.csFilter);
+
+    if (This->filter.state == State_Running)
+        qcap_driver_stop_stream(This->driver_info);
+    This->filter.state = State_Paused;
+
+    LeaveCriticalSection(&This->filter.csFilter);
+    return S_OK;
 }
 
 static HRESULT WINAPI VfwCapture_Run(IBaseFilter * iface, REFERENCE_TIME tStart)
 {
     VfwCapture *This = impl_from_IBaseFilter(iface);
     TRACE("(%s)\n", wine_dbgstr_longlong(tStart));
-    return qcap_driver_run(This->driver_info, &This->filter.state);
+
+    EnterCriticalSection(&This->filter.csFilter);
+
+    if (This->filter.state != State_Running)
+        qcap_driver_start_stream(This->driver_info);
+    This->filter.state = State_Running;
+
+    LeaveCriticalSection(&This->filter.csFilter);
+    return S_OK;
 }
 
 static const IBaseFilterVtbl VfwCapture_Vtbl =
