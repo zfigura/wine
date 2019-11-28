@@ -3829,6 +3829,99 @@ struct wined3d_texture * CDECL wined3d_device_get_texture(const struct wined3d_d
     return device->state.textures[stage];
 }
 
+void CDECL wined3d_device_apply_stateblock(struct wined3d_device *device,
+        struct wined3d_stateblock *stateblock)
+{
+    const struct wined3d_d3d_info *d3d_info = &stateblock->device->adapter->d3d_info;
+    const struct wined3d_stateblock_state *state = &stateblock->stateblock_state;
+    unsigned int i, j;
+
+    TRACE("device %p, stateblock %p.\n", device, stateblock);
+
+    wined3d_stateblock_init_contained_states(stateblock);
+
+    wined3d_device_set_vertex_shader(device, state->vs);
+    wined3d_device_set_pixel_shader(device, state->ps);
+
+    for (i = 0; i < d3d_info->limits.vs_uniform_count; ++i)
+        wined3d_device_set_vs_consts_f(device, i, 1, &state->vs_consts_f[i]);
+    for (i = 0; i < ARRAY_SIZE(state->vs_consts_i); ++i)
+        wined3d_device_set_vs_consts_i(device, i, 1, &state->vs_consts_i[i]);
+    for (i = 0; i < ARRAY_SIZE(state->vs_consts_b); ++i)
+        wined3d_device_set_vs_consts_b(device, i, 1, &state->vs_consts_b[i]);
+
+    for (i = 0; i < ARRAY_SIZE(state->ps_consts_f); ++i)
+        wined3d_device_set_ps_consts_f(device, i, 1, &state->ps_consts_f[i]);
+    for (i = 0; i < ARRAY_SIZE(state->ps_consts_i); ++i)
+        wined3d_device_set_ps_consts_i(device, i, 1, &state->ps_consts_i[i]);
+    for (i = 0; i < ARRAY_SIZE(state->ps_consts_b); ++i)
+        wined3d_device_set_ps_consts_b(device, i, 1, &state->ps_consts_b[i]);
+
+    for (i = 0; i < ARRAY_SIZE(state->light_state->light_map); ++i)
+    {
+        const struct wined3d_light_info *light;
+
+        LIST_FOR_EACH_ENTRY(light, &state->light_state->light_map[i], struct wined3d_light_info, entry)
+        {
+            wined3d_device_set_light(device, light->OriginalIndex, &light->OriginalParms);
+            wined3d_device_set_light_enable(device, light->OriginalIndex, light->glIndex != -1);
+        }
+    }
+
+    for (i = 0; i < ARRAY_SIZE(state->rs); ++i)
+    {
+        if (i == WINED3D_RS_BLENDFACTOR)
+        {
+            struct wined3d_color color;
+            wined3d_color_from_d3dcolor(&color, state->rs[i]);
+            wined3d_device_set_blend_state(device, NULL, &color);
+        }
+        else
+            wined3d_device_set_render_state(device, i, state->rs[i]);
+    }
+
+    for (i = 0; i < ARRAY_SIZE(state->texture_states); ++i)
+    {
+        for (j = 0; j < ARRAY_SIZE(state->texture_states[i]); ++j)
+            wined3d_device_set_texture_stage_state(device, i, j, state->texture_states[i][j]);
+    }
+
+    for (i = 0; i < ARRAY_SIZE(state->sampler_states); ++i)
+    {
+        DWORD stage = i;
+        if (stage >= WINED3D_MAX_FRAGMENT_SAMPLERS) stage += WINED3DVERTEXTEXTURESAMPLER0 - WINED3D_MAX_FRAGMENT_SAMPLERS;
+        for (j = 0; j < ARRAY_SIZE(state->sampler_states[j]); ++j)
+            wined3d_device_set_sampler_state(device, stage, j, state->sampler_states[i][j]);
+    }
+
+    for (i = 0; i < ARRAY_SIZE(state->transforms); ++i)
+        wined3d_device_set_transform(device, i, &state->transforms[i]);
+
+    wined3d_device_set_index_buffer(device, state->index_buffer, state->index_format, 0);
+    wined3d_device_set_base_vertex_index(device, state->base_vertex_index);
+    wined3d_device_set_vertex_declaration(device, state->vertex_declaration);
+    wined3d_device_set_material(device, &state->material);
+    wined3d_device_set_viewports(device, 1, &state->viewport);
+    wined3d_device_set_scissor_rects(device, 1, &state->scissor_rect);
+
+    for (i = 0; i < ARRAY_SIZE(state->streams); ++i)
+    {
+        wined3d_device_set_stream_source(device, i, state->streams[i].buffer,
+                state->streams[i].offset, state->streams[i].stride);
+        wined3d_device_set_stream_source_freq(device, i,
+                state->streams[i].frequency | state->streams[i].flags);
+    }
+
+    for (i = 0; i < ARRAY_SIZE(state->textures); ++i)
+        wined3d_device_set_texture(device, i < WINED3D_MAX_FRAGMENT_SAMPLERS ? i
+                : WINED3DVERTEXTEXTURESAMPLER0 + i - WINED3D_MAX_FRAGMENT_SAMPLERS, state->textures[i]);
+
+    for (i = 0; i < ARRAY_SIZE(state->clip_planes); ++i)
+        wined3d_device_set_clip_plane(device, i, &state->clip_planes[i]);
+
+    TRACE("Applied stateblock %p.\n", stateblock);
+}
+
 HRESULT CDECL wined3d_device_get_device_caps(const struct wined3d_device *device, struct wined3d_caps *caps)
 {
     TRACE("device %p, caps %p.\n", device, caps);
