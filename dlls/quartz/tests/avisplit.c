@@ -25,6 +25,8 @@
 #include "wine/strmbase.h"
 #include "wine/test.h"
 
+static const GUID testguid = {0xfacade};
+
 static IBaseFilter *create_avi_splitter(void)
 {
     IBaseFilter *filter = NULL;
@@ -1345,6 +1347,169 @@ static void test_unconnected_filter_state(void)
     ok(!ref, "Got outstanding refcount %d.\n", ref);
 }
 
+static void test_seeking(void)
+{
+    const WCHAR *filename = load_resource(L"test.avi");
+    IBaseFilter *filter = create_avi_splitter();
+    IFilterGraph2 *graph = connect_input(filter, filename);
+    LONGLONG time, current, stop, earliest, latest;
+    IMediaSeeking *seeking;
+    unsigned int i;
+    double rate;
+    GUID format;
+    HRESULT hr;
+    DWORD caps;
+    ULONG ref;
+    IPin *pin;
+    BOOL ret;
+
+    static const struct
+    {
+        const GUID *guid;
+        HRESULT hr;
+    }
+    format_tests[] =
+    {
+        {&TIME_FORMAT_MEDIA_TIME, S_OK},
+        {&TIME_FORMAT_FRAME, S_OK},
+
+        {&TIME_FORMAT_BYTE, S_FALSE},
+        {&TIME_FORMAT_NONE, S_FALSE},
+        {&TIME_FORMAT_SAMPLE, S_FALSE},
+        {&TIME_FORMAT_FIELD, S_FALSE},
+        {&testguid, S_FALSE},
+    };
+
+    IBaseFilter_FindPin(filter, L"Stream 00", &pin);
+    IPin_QueryInterface(pin, &IID_IMediaSeeking, (void **)&seeking);
+
+    hr = IMediaSeeking_GetCapabilities(seeking, &caps);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(caps == (AM_SEEKING_CanSeekAbsolute | AM_SEEKING_CanSeekForwards
+            | AM_SEEKING_CanSeekBackwards | AM_SEEKING_CanGetStopPos
+            | AM_SEEKING_CanGetDuration), "Got caps %#x.\n", caps);
+
+    caps = AM_SEEKING_CanSeekAbsolute | AM_SEEKING_CanSeekForwards;
+    hr = IMediaSeeking_CheckCapabilities(seeking, &caps);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(caps == (AM_SEEKING_CanSeekAbsolute | AM_SEEKING_CanSeekForwards), "Got caps %#x.\n", caps);
+
+    caps = AM_SEEKING_CanSeekAbsolute | AM_SEEKING_CanGetCurrentPos;
+    hr = IMediaSeeking_CheckCapabilities(seeking, &caps);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    ok(caps == AM_SEEKING_CanSeekAbsolute, "Got caps %#x.\n", caps);
+
+    caps = AM_SEEKING_CanGetCurrentPos;
+    hr = IMediaSeeking_CheckCapabilities(seeking, &caps);
+    ok(hr == E_FAIL, "Got hr %#x.\n", hr);
+    ok(!caps, "Got caps %#x.\n", caps);
+
+    caps = 0;
+    hr = IMediaSeeking_CheckCapabilities(seeking, &caps);
+    ok(hr == E_FAIL, "Got hr %#x.\n", hr);
+    ok(!caps, "Got caps %#x.\n", caps);
+
+    for (i = 0; i < ARRAY_SIZE(format_tests); ++i)
+    {
+        hr = IMediaSeeking_IsFormatSupported(seeking, format_tests[i].guid);
+        todo_wine_if(i == 1) ok(hr == format_tests[i].hr, "Got hr %#x for format %s.\n",
+                hr, wine_dbgstr_guid(format_tests[i].guid));
+    }
+
+    hr = IMediaSeeking_QueryPreferredFormat(seeking, &format);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(IsEqualGUID(&format, &TIME_FORMAT_MEDIA_TIME), "Got format %s.\n", wine_dbgstr_guid(&format));
+
+    hr = IMediaSeeking_GetTimeFormat(seeking, &format);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(IsEqualGUID(&format, &TIME_FORMAT_MEDIA_TIME), "Got format %s.\n", wine_dbgstr_guid(&format));
+
+    hr = IMediaSeeking_IsUsingTimeFormat(seeking, &TIME_FORMAT_MEDIA_TIME);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    hr = IMediaSeeking_IsUsingTimeFormat(seeking, &TIME_FORMAT_FRAME);
+    ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+
+    hr = IMediaSeeking_SetTimeFormat(seeking, &TIME_FORMAT_SAMPLE);
+    ok(hr == E_INVALIDARG, "Got hr %#x.\n", hr);
+    hr = IMediaSeeking_SetTimeFormat(seeking, &TIME_FORMAT_FRAME);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaSeeking_GetTimeFormat(seeking, &format);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    todo_wine ok(IsEqualGUID(&format, &TIME_FORMAT_FRAME), "Got format %s.\n", wine_dbgstr_guid(&format));
+
+    hr = IMediaSeeking_IsUsingTimeFormat(seeking, &TIME_FORMAT_MEDIA_TIME);
+    todo_wine ok(hr == S_FALSE, "Got hr %#x.\n", hr);
+    hr = IMediaSeeking_IsUsingTimeFormat(seeking, &TIME_FORMAT_FRAME);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    hr = IMediaSeeking_SetTimeFormat(seeking, &TIME_FORMAT_MEDIA_TIME);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+
+    time = 0xdeadbeef;
+    hr = IMediaSeeking_GetDuration(seeking, &time);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(time == 10000000, "Got time %s.\n", wine_dbgstr_longlong(time));
+
+    stop = current = 0xdeadbeef;
+    hr = IMediaSeeking_GetStopPosition(seeking, &stop);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(stop == 10000000, "Got time %s.\n", wine_dbgstr_longlong(stop));
+    hr = IMediaSeeking_GetCurrentPosition(seeking, &current);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!current, "Got time %s.\n", wine_dbgstr_longlong(current));
+    stop = current = 0xdeadbeef;
+    hr = IMediaSeeking_GetPositions(seeking, &current, &stop);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!current, "Got time %s.\n", wine_dbgstr_longlong(current));
+    ok(stop == 10000000, "Got time %s.\n", wine_dbgstr_longlong(stop));
+
+    time = 0xdeadbeef;
+    hr = IMediaSeeking_ConvertTimeFormat(seeking, &time, &TIME_FORMAT_MEDIA_TIME, 0x123456789a, NULL);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(time == 0x123456789a, "Got time %s.\n", wine_dbgstr_longlong(time));
+    time = 0xdeadbeef;
+    hr = IMediaSeeking_ConvertTimeFormat(seeking, &time, NULL, 0x123456789a, &TIME_FORMAT_MEDIA_TIME);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(time == 0x123456789a, "Got time %s.\n", wine_dbgstr_longlong(time));
+    time = 0xdeadbeef;
+    hr = IMediaSeeking_ConvertTimeFormat(seeking, &time, NULL, 123, &TIME_FORMAT_FRAME);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+    todo_wine ok(time == 123 * 10000000, "Got time %s.\n", wine_dbgstr_longlong(time));
+
+    earliest = latest = 0xdeadbeef;
+    hr = IMediaSeeking_GetAvailable(seeking, &earliest, &latest);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(!earliest, "Got time %s.\n", wine_dbgstr_longlong(earliest));
+    ok(latest == 10000000, "Got time %s.\n", wine_dbgstr_longlong(latest));
+
+    rate = 0;
+    hr = IMediaSeeking_GetRate(seeking, &rate);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    ok(rate == 1.0, "Got rate %.16e.\n", rate);
+
+    hr = IMediaSeeking_SetRate(seeking, 200.0);
+    todo_wine ok(hr == S_OK, "Got hr %#x.\n", hr);
+    rate = 0;
+    hr = IMediaSeeking_GetRate(seeking, &rate);
+    ok(hr == S_OK, "Got hr %#x.\n", hr);
+    todo_wine ok(rate == 200.0, "Got rate %.16e.\n", rate);
+
+    hr = IMediaSeeking_SetRate(seeking, -1.0);
+    todo_wine ok(hr == E_INVALIDARG, "Got hr %#x.\n", hr);
+
+    hr = IMediaSeeking_GetPreroll(seeking, &time);
+    todo_wine ok(hr == E_NOTIMPL, "Got hr %#x.\n", hr);
+
+    IMediaSeeking_Release(seeking);
+    IPin_Release(pin);
+    IFilterGraph2_Release(graph);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %d.\n", ref);
+    ret = DeleteFileW(filename);
+    ok(ret, "Failed to delete file, error %u.\n", GetLastError());
+}
+
 START_TEST(avisplit)
 {
     IBaseFilter *filter;
@@ -1368,6 +1533,7 @@ START_TEST(avisplit)
     test_enum_media_types();
     test_unconnected_filter_state();
     test_connect_pin();
+    test_seeking();
 
     CoUninitialize();
 }
