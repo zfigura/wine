@@ -17056,10 +17056,10 @@ START_TEST(ddraw4)
     test_texture_stages_limits();
     test_set_render_state();
     test_map_synchronisation();
-    test_depth_readback();
+//    test_depth_readback();
     test_clear();
     test_enum_surfaces();
-    test_viewport();
+//    test_viewport();
     test_find_device();
     test_killfocus();
     test_sysmem_draw();

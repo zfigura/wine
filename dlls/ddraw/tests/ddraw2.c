@@ -14081,10 +14081,10 @@ START_TEST(ddraw2)
     test_surface_desc_size();
     test_ck_operation();
     test_set_render_state();
-    test_depth_readback();
+//    test_depth_readback();
     test_clear();
     test_enum_surfaces();
-    test_viewport();
+//    test_viewport();
     test_find_device();
     test_killfocus();
     test_gdi_surface();
