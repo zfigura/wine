@@ -319,33 +319,24 @@ static HRESULT WINAPI source_Connect(IPin *iface, IPin *pReceivePin, const AM_ME
 
             IEnumMediaTypes * pEnumCandidates;
             AM_MEDIA_TYPE * pmtCandidate = NULL; /* Candidate media type */
+            AM_MEDIA_TYPE mt;
+            unsigned int i;
 
-            if (SUCCEEDED(hr = IPin_EnumMediaTypes(iface, &pEnumCandidates)))
+            for (i = 0; This->pFuncsTable->base.pin_get_media_type(&This->pin, i, &mt) == S_OK; ++i)
             {
-                hr = VFW_E_NO_ACCEPTABLE_TYPES; /* Assume the worst, but set to S_OK if connected successfully */
-
-                /* try this filter's media types first */
-                while (S_OK == IEnumMediaTypes_Next(pEnumCandidates, 1, &pmtCandidate, NULL))
+                strmbase_dump_media_type(&mt);
+                if (CompareMediaTypes(pmt, &mt, TRUE)
+                        && This->pFuncsTable->pfnAttemptConnection(This, pReceivePin, &mt) == S_OK)
                 {
-                    assert(pmtCandidate);
-                    if (!IsEqualGUID(&FORMAT_None, &pmtCandidate->formattype)
-                        && !IsEqualGUID(&GUID_NULL, &pmtCandidate->formattype))
-                        assert(pmtCandidate->pbFormat);
-                    if ((!pmt || CompareMediaTypes(pmt, pmtCandidate, TRUE))
-                            && This->pFuncsTable->pfnAttemptConnection(This, pReceivePin, pmtCandidate) == S_OK)
-                    {
-                        hr = S_OK;
-                        DeleteMediaType(pmtCandidate);
-                        break;
-                    }
-                    DeleteMediaType(pmtCandidate);
-                    pmtCandidate = NULL;
+                    FreeMediaType(&mt);
+                    LeaveCriticalSection(&This->pin.filter->csFilter);
+                    return S_OK;
                 }
-                IEnumMediaTypes_Release(pEnumCandidates);
+                FreeMediaType(&mt);
             }
 
             /* then try receiver filter's media types */
-            if (hr != S_OK && SUCCEEDED(hr = IPin_EnumMediaTypes(pReceivePin, &pEnumCandidates))) /* if we haven't already connected successfully */
+            if (SUCCEEDED(hr = IPin_EnumMediaTypes(pReceivePin, &pEnumCandidates)))
             {
                 ULONG fetched;
 
