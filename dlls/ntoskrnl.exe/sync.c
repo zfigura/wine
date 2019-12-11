@@ -724,6 +724,51 @@ void FASTCALL ExReleaseFastMutexUnsafe( FAST_MUTEX *mutex )
         KeSetEvent( &mutex->Event, IO_NO_INCREMENT, FALSE );
 }
 
+/***********************************************************************
+ *           InterlockedCompareExchange   (NTOSKRNL.EXE.@)
+ */
+DEFINE_FASTCALL_WRAPPER( NTOSKRNL_InterlockedCompareExchange, 12 )
+LONG FASTCALL NTOSKRNL_InterlockedCompareExchange( LONG volatile *dest, LONG xchg, LONG compare )
+{
+    return InterlockedCompareExchange( dest, xchg, compare );
+}
+
+/***********************************************************************
+ *           InterlockedDecrement   (NTOSKRNL.EXE.@)
+ */
+DEFINE_FASTCALL1_WRAPPER( NTOSKRNL_InterlockedDecrement )
+LONG FASTCALL NTOSKRNL_InterlockedDecrement( LONG volatile *dest )
+{
+    return InterlockedDecrement( dest );
+}
+
+/***********************************************************************
+ *           InterlockedExchange   (NTOSKRNL.EXE.@)
+ */
+DEFINE_FASTCALL_WRAPPER( NTOSKRNL_InterlockedExchange, 8 )
+LONG FASTCALL NTOSKRNL_InterlockedExchange( LONG volatile *dest, LONG val )
+{
+    return InterlockedExchange( dest, val );
+}
+
+/***********************************************************************
+ *           InterlockedExchangeAdd   (NTOSKRNL.EXE.@)
+ */
+DEFINE_FASTCALL_WRAPPER( NTOSKRNL_InterlockedExchangeAdd, 8 )
+LONG FASTCALL NTOSKRNL_InterlockedExchangeAdd( LONG volatile *dest, LONG incr )
+{
+    return InterlockedExchangeAdd( dest, incr );
+}
+
+/***********************************************************************
+ *           InterlockedIncrement   (NTOSKRNL.EXE.@)
+ */
+DEFINE_FASTCALL1_WRAPPER( NTOSKRNL_InterlockedIncrement )
+LONG FASTCALL NTOSKRNL_InterlockedIncrement( LONG volatile *dest )
+{
+    return InterlockedIncrement( dest );
+}
+
 #ifndef __i386__
 
 /***********************************************************************
