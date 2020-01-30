@@ -9918,7 +9918,7 @@ START_TEST(device)
     test_checkdevicemultisampletype();
     test_invalid_multisample();
     test_cursor();
-    test_cursor_pos();
+//    test_cursor_pos();
     test_states();
     test_reset();
     test_scene();
