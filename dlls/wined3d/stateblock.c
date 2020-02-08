@@ -1710,7 +1710,7 @@ static void init_default_render_states(DWORD rs[WINEHIGHEST_RENDER_STATE + 1], c
     rs[WINED3D_RS_POINTSCALE_B] = tmpfloat.d;
     tmpfloat.f = 0.0f;
     rs[WINED3D_RS_POINTSCALE_C] = tmpfloat.d;
-    rs[WINED3D_RS_MULTISAMPLEANTIALIAS] = TRUE;
+    rs[WINED3D_RS_MULTISAMPLEANTIALIAS] = FALSE;
     rs[WINED3D_RS_MULTISAMPLEMASK] = 0xffffffff;
     rs[WINED3D_RS_PATCHEDGESTYLE] = WINED3D_PATCH_EDGE_DISCRETE;
     tmpfloat.f = 1.0f;

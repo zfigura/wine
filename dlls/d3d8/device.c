@@ -830,6 +830,14 @@ static HRESULT WINAPI d3d8_device_CreateAdditionalSwapChain(IDirect3DDevice8 *if
     return hr;
 }
 
+static void set_default_states(struct d3d8_device *device, BOOL enable_depth)
+{
+    wined3d_stateblock_set_render_state(device->state, WINED3D_RS_ZENABLE, enable_depth);
+    wined3d_stateblock_set_render_state(device->state, WINED3D_RS_POINTSIZE_MIN, 0);
+    wined3d_stateblock_set_render_state(device->state, WINED3D_RS_MULTISAMPLEANTIALIAS, TRUE);
+    device_reset_viewport_state(device);
+}
+
 static HRESULT CDECL reset_enum_callback(struct wined3d_resource *resource)
 {
     struct d3d8_vertexbuffer *vertex_buffer;
@@ -925,10 +933,7 @@ static HRESULT WINAPI d3d8_device_Reset(IDirect3DDevice8 *iface,
         implicit_swapchain = wined3d_swapchain_get_parent(device->implicit_swapchain);
         implicit_swapchain->swap_interval
                 = wined3dswapinterval_from_d3d(present_parameters->FullScreen_PresentationInterval);
-        wined3d_stateblock_set_render_state(device->state, WINED3D_RS_POINTSIZE_MIN, 0);
-        wined3d_stateblock_set_render_state(device->state, WINED3D_RS_ZENABLE,
-                !!swapchain_desc.enable_auto_depth_stencil);
-        device_reset_viewport_state(device);
+        set_default_states(device, !!swapchain_desc.enable_auto_depth_stencil);
         device->device_state = D3D8_DEVICE_STATE_OK;
     }
     else
@@ -3759,10 +3764,7 @@ HRESULT device_init(struct d3d8_device *device, struct d3d8 *parent, struct wine
     wined3d_swapchain_incref(wined3d_swapchain);
     IDirect3DSwapChain8_Release(&d3d_swapchain->IDirect3DSwapChain8_iface);
 
-    wined3d_stateblock_set_render_state(device->state, WINED3D_RS_ZENABLE,
-            !!swapchain_desc.enable_auto_depth_stencil);
-    wined3d_stateblock_set_render_state(device->state, WINED3D_RS_POINTSIZE_MIN, 0);
-    device_reset_viewport_state(device);
+    set_default_states(device, !!swapchain_desc.enable_auto_depth_stencil);
     wined3d_mutex_unlock();
 
     present_parameters_from_wined3d_swapchain_desc(parameters,
