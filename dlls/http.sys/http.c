@@ -1428,6 +1428,29 @@ static NTSTATUS WINAPI dispatch_close(DEVICE_OBJECT *device, IRP *irp)
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS WINAPI dispatch_cleanup(DEVICE_OBJECT *device, IRP *irp)
+{
+    IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(irp);
+    struct request_queue *queue = stack->FileObject->FsContext;
+    LIST_ENTRY *entry;
+
+    TRACE("Cleaning up queue %p.\n", queue);
+
+    EnterCriticalSection(&http_cs);
+
+    while ((entry = queue->irp_queue.Flink) != &queue->irp_queue)
+    {
+        IRP *queued_irp = CONTAINING_RECORD(entry, IRP, Tail.Overlay.ListEntry);
+        IoCancelIrp(queued_irp);
+    }
+
+    LeaveCriticalSection(&http_cs);
+
+    irp->IoStatus.Status = STATUS_SUCCESS;
+    IoCompleteRequest(irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+
 static void WINAPI unload(DRIVER_OBJECT *driver)
 {
     struct request_queue *queue, *queue_next;
@@ -1482,6 +1505,7 @@ NTSTATUS WINAPI DriverEntry(DRIVER_OBJECT *driver, UNICODE_STRING *path)
     driver->MajorFunction[IRP_MJ_CREATE] = dispatch_create;
     driver->MajorFunction[IRP_MJ_CLOSE] = dispatch_close;
     driver->MajorFunction[IRP_MJ_DEVICE_CONTROL] = dispatch_ioctl;
+    driver->MajorFunction[IRP_MJ_CLEANUP] = dispatch_cleanup;
     driver->DriverUnload = unload;
 
     WSAStartup(MAKEWORD(1,1), &wsadata);
