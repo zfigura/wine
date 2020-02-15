@@ -381,6 +381,29 @@ static void format_date(char *buffer)
             date.wYear, date.wHour, date.wMinute, date.wSecond);
 }
 
+static ULONG sync_read(HANDLE file, void *buffer, ULONGLONG offset, DWORD size)
+{
+    OVERLAPPED ovl = {.Offset = offset, .OffsetHigh = offset >> 32};
+    DWORD ret_size;
+
+    ovl.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+    if (!ReadFile(file, buffer, size, &ret_size, &ovl)
+            && (GetLastError() != ERROR_IO_PENDING
+            || !GetOverlappedResult(file, &ovl, &ret_size, TRUE)))
+    {
+        ERR("Failed to read file, error %u.\n", GetLastError());
+        CloseHandle(ovl.hEvent);
+        return GetLastError();
+    }
+
+    if (ret_size < size)
+        ERR("Short read, %u/%u bytes.\n", ret_size, size);
+
+    CloseHandle(ovl.hEvent);
+    return ERROR_SUCCESS;
+}
+
 /***********************************************************************
  *        HttpSendHttpResponse     (HTTPAPI.@)
  */
@@ -422,10 +445,10 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
         "WWW-Authenticate",
     };
 
+    unsigned int len, body_len = 0;
     struct http_response *buffer;
     OVERLAPPED dummy_ovl = {};
     ULONG ret = ERROR_SUCCESS;
-    int len, body_len = 0;
     char *p, dummy[12];
     USHORT i;
 
@@ -446,12 +469,30 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
     len = 12 + sprintf(dummy, "%hu", response->s.StatusCode) + response->s.ReasonLength;
     for (i = 0; i < response->s.EntityChunkCount; ++i)
     {
-        if (response->s.pEntityChunks[i].DataChunkType != HttpDataChunkFromMemory)
+        const HTTP_DATA_CHUNK *chunk = &response->s.pEntityChunks[i];
+
+        if (chunk->DataChunkType == HttpDataChunkFromMemory)
+            body_len += chunk->FromMemory.BufferLength;
+        else if (chunk->DataChunkType == HttpDataChunkFromFileHandle)
+        {
+            if (chunk->FromFileHandle.ByteRange.Length.QuadPart == HTTP_BYTE_RANGE_TO_EOF)
+            {
+                DWORD size;
+                if (!(size = GetFileSize(chunk->FromFileHandle.FileHandle, NULL)))
+                {
+                    ERR("Failed to get file size, error %u.\n", GetLastError());
+                    return GetLastError();
+                }
+                body_len += size - chunk->FromFileHandle.ByteRange.StartingOffset.QuadPart;
+            }
+            else
+                body_len += chunk->FromFileHandle.ByteRange.Length.QuadPart;
+        }
+        else
         {
             FIXME("Unhandled data chunk type %u.\n", response->s.pEntityChunks[i].DataChunkType);
             return ERROR_CALL_NOT_IMPLEMENTED;
         }
-        body_len += response->s.pEntityChunks[i].FromMemory.BufferLength;
     }
     len += body_len;
     for (i = 0; i < HttpHeaderResponseMaximum; ++i)
@@ -504,8 +545,29 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
     for (i = 0; i < response->s.EntityChunkCount; ++i)
     {
         const HTTP_DATA_CHUNK *chunk = &response->s.pEntityChunks[i];
-        memcpy(p, chunk->FromMemory.pBuffer, chunk->FromMemory.BufferLength);
-        p += chunk->FromMemory.BufferLength;
+
+        if (chunk->DataChunkType == HttpDataChunkFromMemory)
+        {
+            memcpy(p, chunk->FromMemory.pBuffer, chunk->FromMemory.BufferLength);
+            p += chunk->FromMemory.BufferLength;
+        }
+        else if (chunk->DataChunkType == HttpDataChunkFromFileHandle)
+        {
+            ULONGLONG offset = chunk->FromFileHandle.ByteRange.StartingOffset.QuadPart;
+            DWORD size = chunk->FromFileHandle.ByteRange.Length.QuadPart;
+
+            TRACE("offset %I64x, size %I64x\n", offset, chunk->FromFileHandle.ByteRange.Length.QuadPart);
+
+            if (chunk->FromFileHandle.ByteRange.Length.QuadPart == HTTP_BYTE_RANGE_TO_EOF)
+                size = GetFileSize(chunk->FromFileHandle.FileHandle, NULL) - offset;
+
+            if ((ret = sync_read(chunk->FromFileHandle.FileHandle, p, offset, size)))
+            {
+                heap_free(buffer);
+                return ret;
+            }
+            p += size;
+        }
     }
 
     if (!ovl)
