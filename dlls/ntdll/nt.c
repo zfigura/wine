@@ -374,7 +374,7 @@ NTSTATUS WINAPI NtQueryInformationToken(
         0,    /* TokenVirtualizationAllowed */
         sizeof(DWORD), /* TokenVirtualizationEnabled */
         sizeof(TOKEN_MANDATORY_LABEL) + sizeof(SID), /* TokenIntegrityLevel [sizeof(SID) includes one SubAuthority] */
-        0,    /* TokenUIAccess */
+        sizeof(DWORD), /* TokenUIAccess */
         0,    /* TokenMandatoryPolicy */
         0,    /* TokenLogonSid */
         sizeof(DWORD), /* TokenIsAppContainer */
@@ -650,6 +650,12 @@ NTSTATUS WINAPI NtQueryInformationToken(
             *(DWORD*)tokeninfo = 0;
             break;
         }
+    case TokenUIAccess:
+        {
+            *((DWORD*)tokeninfo) = 0;
+            FIXME("QueryInformationToken( ..., TokenUIAccess, ...) semi-stub\n");
+        }
+        break;
     case TokenLogonSid:
         SERVER_START_REQ( get_token_sid )
         {
