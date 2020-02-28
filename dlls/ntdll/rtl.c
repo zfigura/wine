@@ -46,6 +46,7 @@
 #include "ntdll_misc.h"
 #include "inaddr.h"
 #include "in6addr.h"
+#include "dpfilter.h"
 #include "ddk/ntddk.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ntdll);
@@ -302,16 +303,13 @@ void WINAPI RtlDumpResource(LPRTL_RWLOCK rwl)
  */
 NTSTATUS WINAPIV DbgPrint(LPCSTR fmt, ...)
 {
-  char buf[512];
-  __ms_va_list args;
+    NTSTATUS ret;
+    __ms_va_list args;
 
-  __ms_va_start(args, fmt);
-  NTDLL__vsnprintf(buf, sizeof(buf), fmt, args);
-  __ms_va_end(args);
-
-  MESSAGE("DbgPrint says: %s",buf);
-  /* hmm, raise exception? */
-  return STATUS_SUCCESS;
+    __ms_va_start(args, fmt);
+    ret = vDbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_INFO_LEVEL, fmt, args);
+    __ms_va_end(args);
+    return ret;
 }
 
 
