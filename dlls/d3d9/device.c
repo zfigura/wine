@@ -920,13 +920,6 @@ static UINT WINAPI d3d9_device_GetNumberOfSwapChains(IDirect3DDevice9Ex *iface)
     return count;
 }
 
-static void set_default_states(struct d3d9_device *device, BOOL enable_depth)
-{
-    wined3d_stateblock_set_render_state(device->state, WINED3D_RS_ZENABLE, enable_depth);
-    wined3d_stateblock_set_render_state(device->state, WINED3D_RS_MULTISAMPLEANTIALIAS, TRUE);
-    device_reset_viewport_state(device);
-}
-
 static HRESULT CDECL reset_enum_callback(struct wined3d_resource *resource)
 {
     struct d3d9_vertexbuffer *vertex_buffer;
@@ -1054,7 +1047,9 @@ static HRESULT d3d9_device_reset(struct d3d9_device *device,
         if (!extended)
         {
             device->auto_mipmaps = 0;
-            set_default_states(device, !!swapchain_desc.enable_auto_depth_stencil);
+            wined3d_stateblock_set_render_state(device->state, WINED3D_RS_ZENABLE,
+                    !!swapchain_desc.enable_auto_depth_stencil);
+            device_reset_viewport_state(device);
         }
 
         if (FAILED(hr = d3d9_device_get_swapchains(device)))
@@ -4741,7 +4736,9 @@ HRESULT device_init(struct d3d9_device *device, struct d3d9 *parent, struct wine
     wined3d_swapchain_incref(d3d_swapchain->wined3d_swapchain);
     IDirect3DSwapChain9Ex_Release(&d3d_swapchain->IDirect3DSwapChain9Ex_iface);
 
-    set_default_states(device, !!swapchain_desc->enable_auto_depth_stencil);
+    wined3d_stateblock_set_render_state(device->state, WINED3D_RS_ZENABLE,
+            !!swapchain_desc->enable_auto_depth_stencil);
+    device_reset_viewport_state(device);
 
     if (FAILED(hr = d3d9_device_get_swapchains(device)))
     {
