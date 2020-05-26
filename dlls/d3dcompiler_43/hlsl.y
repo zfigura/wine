@@ -2958,6 +2958,30 @@ static BOOL split_struct_copies(struct hlsl_ir_node *instr, void *context)
     return TRUE;
 }
 
+/* Lower DIV to RCP + MUL. */
+static BOOL lower_division(struct hlsl_ir_node *instr, void *context)
+{
+    struct hlsl_ir_expr *expr;
+    struct hlsl_ir_node *rcp;
+
+    if (instr->type != HLSL_IR_EXPR)
+        return FALSE;
+    expr = expr_from_node(instr);
+    if (expr->op != HLSL_IR_BINOP_DIV)
+        return FALSE;
+
+    if (!(rcp = new_unary_expr(HLSL_IR_UNOP_RCP, expr->operands[1].node, instr->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return FALSE;
+    }
+    list_add_before(&expr->node.entry, &rcp->entry);
+    expr->op = HLSL_IR_BINOP_MUL;
+    hlsl_src_remove(&expr->operands[1]);
+    hlsl_src_from_node(&expr->operands[1], rcp);
+    return TRUE;
+}
+
 static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
 {
     struct hlsl_ir_constant *arg1, *arg2 = NULL, *res;
@@ -4674,6 +4698,9 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     transform_ir(fold_ident, entry_func->body, NULL);
     while (transform_ir(split_struct_copies, entry_func->body, NULL));
     while (transform_ir(fold_constants, entry_func->body, NULL));
+
+    if (major < 4)
+        transform_ir(lower_division, entry_func->body, NULL);
 
     do
         compute_liveness(entry_func);
