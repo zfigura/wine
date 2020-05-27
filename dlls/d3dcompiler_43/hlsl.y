@@ -1329,6 +1329,7 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
     enum parse_assign_op assign_op;
     struct reg_reservation *reg_reservation;
     struct parse_colon_attribute colon_attribute;
+    enum hlsl_buffer_type buffer_type;
 }
 
 %token KW_BLENDSTATE
@@ -1494,6 +1495,7 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
 %type <assign_op> assign_op
 %type <modifiers> input_mods
 %type <modifiers> input_mod
+%type <buffer_type> buffer_type
 %%
 
 hlsl_prog:                /* empty */
@@ -1527,6 +1529,7 @@ hlsl_prog:                /* empty */
                                 TRACE("Adding function '%s' to the function list.\n", $2.name);
                                 add_function_decl(&hlsl_ctx.functions, $2.name, $2.decl, FALSE);
                             }
+                        | hlsl_prog buffer_declaration
                         | hlsl_prog declaration_statement
                             {
                                 TRACE("Declaration statement parsed.\n");
@@ -1542,6 +1545,41 @@ hlsl_prog:                /* empty */
                             {
                                 TRACE("Skipping stray semicolon.\n");
                             }
+
+buffer_declaration:
+
+      buffer_type any_identifier colon_attribute '{' declaration_statement_list '}'
+        {
+            struct hlsl_buffer *buffer;
+
+            if ($3.semantic)
+                hlsl_report_message(get_location(&@3), HLSL_LEVEL_WARNING,
+                        "semantics are not allowed on buffers");
+
+            if (!(buffer = d3dcompiler_alloc(sizeof(*buffer))))
+                YYABORT;
+            buffer->loc = get_location(&@2);
+            buffer->type = $1;
+            buffer->name = $2;
+            buffer->reg_reservation = $3.reg_reservation;
+            list_add_tail(&hlsl_ctx.buffers, &buffer->entry);
+        }
+
+buffer_type:
+
+      KW_CBUFFER
+        {
+            $$ = HLSL_BUFFER_CONSTANT;
+        }
+    | KW_TBUFFER
+        {
+            $$ = HLSL_BUFFER_TEXTURE;
+        }
+
+declaration_statement_list:
+
+      declaration_statement
+    | declaration_statement_list declaration_statement
 
 preproc_directive:        PRE_LINE STRING
                             {
@@ -4658,6 +4696,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
     struct hlsl_ir_function_decl *entry_func;
+    struct hlsl_buffer *buffer, *next_buffer;
     struct hlsl_scope *scope, *next_scope;
     struct hlsl_type *hlsl_type, *next_type;
     struct hlsl_ir_var *var, *next_var;
@@ -4682,6 +4721,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     init_functions_tree(&hlsl_ctx.functions);
     list_init(&hlsl_ctx.static_initializers);
     list_init(&hlsl_ctx.extern_vars);
+    list_init(&hlsl_ctx.buffers);
 
     push_scope(&hlsl_ctx);
     hlsl_ctx.globals = hlsl_ctx.cur_scope;
@@ -4795,6 +4835,12 @@ out:
     LIST_FOR_EACH_ENTRY_SAFE(hlsl_type, next_type, &hlsl_ctx.types, struct hlsl_type, entry)
     {
         free_hlsl_type(hlsl_type);
+    }
+
+    LIST_FOR_EACH_ENTRY_SAFE(buffer, next_buffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        d3dcompiler_free((void *)buffer->name);
+        d3dcompiler_free(buffer);
     }
 
     return hr;

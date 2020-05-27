@@ -971,6 +971,21 @@ enum parse_assign_op
     ASSIGN_OP_XOR,
 };
 
+enum hlsl_buffer_type
+{
+    HLSL_BUFFER_CONSTANT,
+    HLSL_BUFFER_TEXTURE,
+};
+
+struct hlsl_buffer
+{
+    struct source_location loc;
+    enum hlsl_buffer_type type;
+    const char *name;
+    const struct reg_reservation *reg_reservation;
+    struct list entry;
+};
+
 struct hlsl_parse_ctx
 {
     const char **source_files;
@@ -988,6 +1003,8 @@ struct hlsl_parse_ctx
     struct hlsl_scope *globals;
     struct list scopes;
     struct list extern_vars; /* For varyings and uniforms. */
+
+    struct list buffers;
 
     struct list types;
     struct wine_rb_tree functions;
