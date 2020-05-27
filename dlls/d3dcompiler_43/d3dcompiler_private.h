@@ -723,6 +723,7 @@ struct hlsl_ir_var
     unsigned int modifiers;
     const struct reg_reservation *reg_reservation;
     struct list scope_entry, param_entry, extern_entry;
+    struct hlsl_buffer *buffer;
     BOOL is_param;
 
     unsigned int first_write, last_read;
@@ -1004,6 +1005,7 @@ struct hlsl_parse_ctx
     struct list scopes;
     struct list extern_vars; /* For varyings and uniforms. */
 
+    struct hlsl_buffer *cur_buffer, *globals_buffer;
     struct list buffers;
 
     struct list types;

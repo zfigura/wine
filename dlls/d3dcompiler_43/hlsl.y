@@ -97,7 +97,7 @@ void WINAPIV hlsl_report_message(const struct source_location loc,
         set_parse_status(&hlsl_ctx.status, PARSE_WARN);
 }
 
-static void hlsl_error(const char *s)
+static struct source_location get_current_loc(void)
 {
     const struct source_location loc =
     {
@@ -105,7 +105,12 @@ static void hlsl_error(const char *s)
         .line = hlsl_ctx.line_no,
         .col = hlsl_ctx.column,
     };
-    hlsl_report_message(loc, HLSL_LEVEL_ERROR, "%s", s);
+    return loc;
+}
+
+static void hlsl_error(const char *s)
+{
+    hlsl_report_message(get_current_loc(), HLSL_LEVEL_ERROR, "%s", s);
 }
 
 static void debug_dump_decl(struct hlsl_type *type, DWORD modifiers, const char *declname, unsigned int line_no)
@@ -486,6 +491,7 @@ static struct hlsl_ir_var *new_var(const char *name, struct hlsl_type *type, con
     var->semantic = semantic;
     var->modifiers = modifiers;
     var->reg_reservation = reg_reservation;
+    var->buffer = hlsl_ctx.cur_buffer;
     return var;
 }
 
@@ -1546,23 +1552,33 @@ hlsl_prog:                /* empty */
                                 TRACE("Skipping stray semicolon.\n");
                             }
 
-buffer_declaration:
+buffer_start:
 
-      buffer_type any_identifier colon_attribute '{' declaration_statement_list '}'
+      /* Empty */
         {
             struct hlsl_buffer *buffer;
+
+            if (!(buffer = d3dcompiler_alloc(sizeof(*buffer))))
+                YYABORT;
+            hlsl_ctx.cur_buffer = buffer;
+        }
+
+buffer_declaration:
+
+      buffer_type any_identifier colon_attribute '{' buffer_start declaration_statement_list '}'
+        {
+            struct hlsl_buffer *buffer = hlsl_ctx.cur_buffer;
 
             if ($3.semantic)
                 hlsl_report_message(get_location(&@3), HLSL_LEVEL_WARNING,
                         "semantics are not allowed on buffers");
 
-            if (!(buffer = d3dcompiler_alloc(sizeof(*buffer))))
-                YYABORT;
             buffer->loc = get_location(&@2);
             buffer->type = $1;
             buffer->name = $2;
             buffer->reg_reservation = $3.reg_reservation;
             list_add_tail(&hlsl_ctx.buffers, &buffer->entry);
+            hlsl_ctx.cur_buffer = hlsl_ctx.globals_buffer;
         }
 
 buffer_type:
@@ -3291,6 +3307,7 @@ static void prepend_uniform_copy(struct list *instrs, struct hlsl_ir_var *var)
         return;
     }
     const_var->is_param = var->is_param;
+    const_var->buffer = var->buffer;
     list_add_before(&var->scope_entry, &const_var->scope_entry);
     list_add_tail(&hlsl_ctx.extern_vars, &const_var->extern_entry);
     var->modifiers &= ~(HLSL_STORAGE_UNIFORM | HLSL_STORAGE_IN);
@@ -4721,7 +4738,16 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     init_functions_tree(&hlsl_ctx.functions);
     list_init(&hlsl_ctx.static_initializers);
     list_init(&hlsl_ctx.extern_vars);
+
     list_init(&hlsl_ctx.buffers);
+    if ((hlsl_ctx.globals_buffer = d3dcompiler_alloc(sizeof(*hlsl_ctx.globals_buffer))))
+    {
+        hlsl_ctx.globals_buffer->type = HLSL_BUFFER_CONSTANT;
+        hlsl_ctx.globals_buffer->loc = get_current_loc();
+        hlsl_ctx.globals_buffer->name = d3dcompiler_strdup("$Globals");
+        list_add_tail(&hlsl_ctx.buffers, &hlsl_ctx.globals_buffer->entry);
+    }
+    hlsl_ctx.cur_buffer = hlsl_ctx.globals_buffer;
 
     push_scope(&hlsl_ctx);
     hlsl_ctx.globals = hlsl_ctx.cur_scope;
