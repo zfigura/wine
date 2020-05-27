@@ -673,7 +673,7 @@ static struct hlsl_ir_load *add_record_load(struct list *instrs, struct hlsl_ir_
 {
     struct hlsl_ir_constant *c;
 
-    if (!(c = new_uint_constant(field->reg_offset * 4, loc)))
+    if (!(c = new_uint_constant(field->reg_offset, loc)))
         return NULL;
     list_add_tail(instrs, &c->node.entry);
 
@@ -709,7 +709,7 @@ static struct hlsl_ir_load *add_array_load(struct list *instrs, struct hlsl_ir_n
         return NULL;
     }
 
-    if (!(c = new_uint_constant(data_type->reg_size * 4, loc)))
+    if (!(c = new_uint_constant(data_type->reg_size, loc)))
         return NULL;
     list_add_tail(instrs, &c->node.entry);
     if (!(mul = new_binary_expr(HLSL_IR_BINOP_MUL, index, &c->node)))
@@ -748,7 +748,7 @@ static void struct_var_initializer(struct list *list, struct hlsl_ir_var *var,
 
         if (components_count_type(field->type) == components_count_type(node->data_type))
         {
-            if (!(c = new_uint_constant(field->reg_offset * 4, node->loc)))
+            if (!(c = new_uint_constant(field->reg_offset, node->loc)))
                 break;
             list_add_tail(list, &c->node.entry);
 
@@ -976,7 +976,7 @@ static struct hlsl_type *apply_type_modifiers(struct hlsl_type *type,
     *modifiers &= ~HLSL_TYPE_MODIFIERS_MASK;
 
     if (new_type->type == HLSL_CLASS_MATRIX)
-        new_type->reg_size = is_row_major(new_type) ? new_type->dimy : new_type->dimx;
+        new_type->reg_size = (is_row_major(new_type) ? new_type->dimy : new_type->dimx) * 4;
     return new_type;
 }
 
@@ -1088,7 +1088,7 @@ static BOOL add_typedef(DWORD modifiers, struct hlsl_type *orig_type, struct lis
         if (type->type != HLSL_CLASS_MATRIX)
             check_invalid_matrix_modifiers(type->modifiers, v->loc);
         else
-            type->reg_size = is_row_major(type) ? type->dimy : type->dimx;
+            type->reg_size = (is_row_major(type) ? type->dimy : type->dimx) * 4;
 
         if ((type->modifiers & HLSL_MODIFIER_COLUMN_MAJOR)
                 && (type->modifiers & HLSL_MODIFIER_ROW_MAJOR))
@@ -2913,7 +2913,7 @@ static BOOL split_struct_copies(struct hlsl_ir_node *instr, void *context)
         struct hlsl_ir_load *field_load;
         struct hlsl_ir_constant *c;
 
-        if (!(c = new_uint_constant(field->reg_offset * 4, instr->loc)))
+        if (!(c = new_uint_constant(field->reg_offset, instr->loc)))
         {
             hlsl_ctx.status = PARSE_ERR;
             return FALSE;
@@ -3509,9 +3509,8 @@ static BOOL is_range_available(struct liveness_ctx *liveness, unsigned int first
 
 /* "elements" is the total number of consecutive whole registers needed. */
 static struct hlsl_reg allocate_range(struct liveness_ctx *liveness,
-        unsigned int first_write, unsigned int last_read, unsigned int elements)
+        unsigned int first_write, unsigned int last_read, unsigned int components)
 {
-    const unsigned int components = elements * 4;
     struct hlsl_reg ret = {.allocated = TRUE};
     unsigned int i, regnum;
 
@@ -3533,7 +3532,7 @@ static const char *debugstr_register(char class, struct hlsl_reg reg, const stru
 {
     if (type->reg_size > 4)
         return wine_dbg_sprintf("%c%u-%c%u", class, reg.reg, class,
-                reg.reg + type->reg_size - 1);
+                reg.reg + (type->reg_size / 4) - 1);
     return wine_dbg_sprintf("%c%u%s", class, reg.reg, debug_writemask(reg.writemask));
 }
 
@@ -3545,7 +3544,7 @@ static void allocate_variable_register(struct hlsl_ir_var *var, struct liveness_
 
     if (!var->reg.allocated && var->last_read)
     {
-        if (var->data_type->reg_size > 1)
+        if (var->data_type->reg_size > 4)
             var->reg = allocate_range(liveness, var->first_write,
                     var->last_read, var->data_type->reg_size);
         else
@@ -3564,7 +3563,7 @@ static void allocate_temp_registers_recurse(struct list *instrs, struct liveness
     {
         if (!instr->reg.allocated && instr->last_read)
         {
-            if (instr->data_type->reg_size > 1)
+            if (instr->data_type->reg_size > 4)
                 instr->reg = allocate_range(liveness, instr->index,
                         instr->last_read, instr->data_type->reg_size);
             else
@@ -3644,7 +3643,7 @@ static void allocate_const_registers_recurse(struct list *instrs, struct livenes
             const struct hlsl_type *type = instr->data_type;
             unsigned int reg_size = type->reg_size, x, y, i, writemask;
 
-            if (reg_size > 1)
+            if (reg_size > 4)
                 constant->reg = allocate_range(ctx, 1, INT_MAX, reg_size);
             else
                 constant->reg = allocate_register(ctx, 1, INT_MAX, type->dimx);
@@ -3654,12 +3653,12 @@ static void allocate_const_registers_recurse(struct list *instrs, struct livenes
             TRACE(".\n");
 
             if (!array_reserve((void **)&defs->values, &defs->size,
-                    constant->reg.reg + reg_size, sizeof(*defs->values)))
+                    constant->reg.reg + reg_size / 4, sizeof(*defs->values)))
             {
                 hlsl_ctx.status = PARSE_ERR;
                 return;
             }
-            defs->count = constant->reg.reg + reg_size;
+            defs->count = constant->reg.reg + reg_size / 4;
 
             assert(type->type <= HLSL_CLASS_LAST_NUMERIC);
 
@@ -3734,7 +3733,7 @@ static struct constant_defs allocate_const_registers(struct hlsl_ir_function_dec
     {
         if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->last_read)
         {
-            if (var->data_type->reg_size > 1)
+            if (var->data_type->reg_size > 4)
                 var->reg = allocate_range(&ctx, 1, INT_MAX, var->data_type->reg_size);
             else
             {
@@ -4168,7 +4167,7 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
         {
             put_dword(buffer, 0); /* name */
             put_dword(buffer, D3DXRS_FLOAT4 | (var->reg.reg << 16));
-            put_dword(buffer, var->data_type->reg_size);
+            put_dword(buffer, var->data_type->reg_size / 4);
             put_dword(buffer, 0); /* type */
             put_dword(buffer, 0); /* FIXME: default value */
         }

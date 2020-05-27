@@ -611,9 +611,9 @@ struct hlsl_type *new_hlsl_type(const char *name, enum hlsl_type_class type_clas
     type->dimx = dimx;
     type->dimy = dimy;
     if (type_class == HLSL_CLASS_MATRIX)
-        type->reg_size = is_row_major(type) ? dimy : dimx;
+        type->reg_size = (is_row_major(type) ? dimy : dimx) * 4;
     else
-        type->reg_size = 1;
+        type->reg_size = 4;
 
     list_add_tail(&hlsl_ctx.types, &type->entry);
 
@@ -802,11 +802,11 @@ struct hlsl_type *clone_hlsl_type(struct hlsl_type *old, unsigned int default_ma
         }
 
         case HLSL_CLASS_MATRIX:
-            type->reg_size = is_row_major(type) ? type->dimy : type->dimx;
+            type->reg_size = (is_row_major(type) ? type->dimy : type->dimx) * 4;
             break;
 
         default:
-            type->reg_size = 1;
+            type->reg_size = 4;
             break;
     }
 
