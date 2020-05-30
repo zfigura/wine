@@ -224,7 +224,7 @@ HRESULT dxbc_init(struct dxbc *dxbc, unsigned int size)
 
 HRESULT dxbc_parse(const char *data, SIZE_T data_size, struct dxbc *dxbc)
 {
-    DWORD tag, total_size, chunk_count;
+    DWORD tag, total_size, chunk_count, version;
     const char *ptr = data;
     unsigned int i;
     HRESULT hr;
@@ -247,7 +247,13 @@ HRESULT dxbc_parse(const char *data, SIZE_T data_size, struct dxbc *dxbc)
     WARN("Ignoring DXBC checksum.\n");
     skip_dword_unknown(&ptr, 4);
 
-    skip_dword_unknown(&ptr, 1);
+    read_dword(&ptr, &version);
+    TRACE("Version: %#x.\n", version);
+    if (version != 1)
+    {
+        WARN("Got unexpected DXBC version %#x.\n", version);
+        return E_INVALIDARG;
+    }
 
     read_dword(&ptr, &total_size);
     TRACE("Total size: %#x.\n", total_size);
