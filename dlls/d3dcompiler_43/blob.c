@@ -451,12 +451,6 @@ void skip_dword_unknown(const char **ptr, unsigned int count)
     }
 }
 
-static void write_dword_unknown(char **ptr, DWORD d)
-{
-    FIXME("Writing unknown DWORD 0x%08x.\n", d);
-    write_dword(ptr, d);
-}
-
 HRESULT dxbc_add_section(struct dxbc *dxbc, DWORD tag, const char *data, DWORD data_size)
 {
     TRACE("dxbc %p, tag %s, size %#x.\n", dxbc, debugstr_an((const char *)&tag, 4), data_size);
@@ -601,7 +595,7 @@ HRESULT dxbc_write_blob(struct dxbc *dxbc, ID3DBlob **blob)
     write_dword(&ptr, 0);
 
     /* Version. */
-    write_dword_unknown(&ptr, 1);
+    write_dword(&ptr, 1);
 
     write_dword(&ptr, size);
     write_dword(&ptr, dxbc->count);
