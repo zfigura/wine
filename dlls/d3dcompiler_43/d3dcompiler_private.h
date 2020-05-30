@@ -36,6 +36,7 @@
 #include "d3dx9shader.h"
 
 #include <assert.h>
+#include <stdint.h>
 
 /* TRACE helper functions */
 const char *debug_d3dcompiler_d3d_blob_part(D3D_BLOB_PART part) DECLSPEC_HIDDEN;
