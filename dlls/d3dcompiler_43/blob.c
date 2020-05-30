@@ -1,5 +1,5 @@
 /*
- * Direct3D blob file
+ * Blob and DXBC functions.
  *
  * Copyright 2010 Rico Schüller
  *
@@ -159,6 +159,186 @@ HRESULT WINAPI D3DCreateBlob(SIZE_T data_size, ID3DBlob **blob)
 
     TRACE("Created ID3DBlob %p\n", *blob);
 
+    return S_OK;
+}
+
+void skip_dword_unknown(const char **ptr, unsigned int count)
+{
+    unsigned int i;
+    DWORD d;
+
+    FIXME("Skipping %u unknown DWORDs:\n", count);
+    for (i = 0; i < count; ++i)
+    {
+        read_dword(ptr, &d);
+        FIXME("\t0x%08x\n", d);
+    }
+}
+
+static void write_dword_unknown(char **ptr, DWORD d)
+{
+    FIXME("Writing unknown DWORD 0x%08x.\n", d);
+    write_dword(ptr, d);
+}
+
+HRESULT dxbc_add_section(struct dxbc *dxbc, DWORD tag, const char *data, DWORD data_size)
+{
+    TRACE("dxbc %p, tag %s, size %#x.\n", dxbc, debugstr_an((const char *)&tag, 4), data_size);
+
+    if (dxbc->count >= dxbc->size)
+    {
+        struct dxbc_section *new_sections;
+        DWORD new_size = dxbc->size << 1;
+
+        new_sections = HeapReAlloc(GetProcessHeap(), 0, dxbc->sections, new_size * sizeof(*dxbc->sections));
+        if (!new_sections)
+            return E_OUTOFMEMORY;
+
+        dxbc->sections = new_sections;
+        dxbc->size = new_size;
+    }
+
+    dxbc->sections[dxbc->count].tag = tag;
+    dxbc->sections[dxbc->count].data_size = data_size;
+    dxbc->sections[dxbc->count].data = data;
+    ++dxbc->count;
+
+    return S_OK;
+}
+
+HRESULT dxbc_init(struct dxbc *dxbc, unsigned int size)
+{
+    TRACE("dxbc %p, size %u.\n", dxbc, size);
+
+    if (!size) size = 2;
+
+    dxbc->sections = HeapAlloc(GetProcessHeap(), 0, size * sizeof(*dxbc->sections));
+    if (!dxbc->sections)
+        return E_OUTOFMEMORY;
+
+    dxbc->size = size;
+    dxbc->count = 0;
+
+    return S_OK;
+}
+
+HRESULT dxbc_parse(const char *data, SIZE_T data_size, struct dxbc *dxbc)
+{
+    DWORD tag, total_size, chunk_count;
+    const char *ptr = data;
+    unsigned int i;
+    HRESULT hr;
+
+    if (!data)
+    {
+        WARN("No data supplied.\n");
+        return E_FAIL;
+    }
+
+    read_dword(&ptr, &tag);
+    TRACE("Tag: %s.\n", debugstr_an((const char *)&tag, 4));
+
+    if (tag != TAG_DXBC)
+    {
+        WARN("Wrong tag %s.\n", debugstr_an((const char *)&tag, 4));
+        return E_FAIL;
+    }
+
+    WARN("Ignoring DXBC checksum.\n");
+    skip_dword_unknown(&ptr, 4);
+
+    skip_dword_unknown(&ptr, 1);
+
+    read_dword(&ptr, &total_size);
+    TRACE("Total size: %#x.\n", total_size);
+
+    if (data_size != total_size)
+    {
+        WARN("Wrong size supplied.\n");
+        return D3DERR_INVALIDCALL;
+    }
+
+    read_dword(&ptr, &chunk_count);
+    TRACE("Chunk count: %#x.\n", chunk_count);
+
+    if (FAILED(hr = dxbc_init(dxbc, chunk_count)))
+        return hr;
+
+    for (i = 0; i < chunk_count; ++i)
+    {
+        DWORD chunk_tag, chunk_size;
+        const char *chunk_ptr;
+        DWORD chunk_offset;
+
+        read_dword(&ptr, &chunk_offset);
+        TRACE("Chunk %u at offset %#x.\n", i, chunk_offset);
+
+        chunk_ptr = data + chunk_offset;
+
+        read_dword(&chunk_ptr, &chunk_tag);
+        read_dword(&chunk_ptr, &chunk_size);
+
+        if (FAILED(hr = dxbc_add_section(dxbc, chunk_tag, chunk_ptr, chunk_size)))
+            return hr;
+    }
+
+    return hr;
+}
+
+void dxbc_destroy(struct dxbc *dxbc)
+{
+    TRACE("dxbc %p.\n", dxbc);
+
+    HeapFree(GetProcessHeap(), 0, dxbc->sections);
+}
+
+HRESULT dxbc_write_blob(struct dxbc *dxbc, ID3DBlob **blob)
+{
+    DWORD size = 32, offset = size + 4 * dxbc->count;
+    ID3DBlob *object;
+    unsigned int i;
+    HRESULT hr;
+    char *ptr;
+
+    TRACE("dxbc %p, blob %p.\n", dxbc, blob);
+
+    for (i = 0; i < dxbc->count; ++i)
+        size += 12 + dxbc->sections[i].data_size;
+
+    if (FAILED(hr = D3DCreateBlob(size, &object)))
+        return hr;
+
+    ptr = ID3D10Blob_GetBufferPointer(object);
+
+    write_dword(&ptr, TAG_DXBC);
+
+    /* Checksum. */
+    write_dword_unknown(&ptr, 0);
+    write_dword_unknown(&ptr, 0);
+    write_dword_unknown(&ptr, 0);
+    write_dword_unknown(&ptr, 0);
+
+    /* Version. */
+    write_dword_unknown(&ptr, 1);
+
+    write_dword(&ptr, size);
+    write_dword(&ptr, dxbc->count);
+
+    for (i = 0; i < dxbc->count; ++i)
+    {
+        write_dword(&ptr, offset);
+        offset += 8 + dxbc->sections[i].data_size;
+    }
+
+    for (i = 0; i < dxbc->count; ++i)
+    {
+        write_dword(&ptr, dxbc->sections[i].tag);
+        write_dword(&ptr, dxbc->sections[i].data_size);
+        memcpy(ptr, dxbc->sections[i].data, dxbc->sections[i].data_size);
+        ptr += dxbc->sections[i].data_size;
+    }
+
+    *blob = object;
     return S_OK;
 }
 
