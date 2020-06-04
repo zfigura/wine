@@ -2897,6 +2897,89 @@ static BOOL fold_ident(struct hlsl_ir_node *instr, void *context)
     return FALSE;
 }
 
+static BOOL split_struct_copies(struct hlsl_ir_node *instr, void *context)
+{
+    const struct hlsl_struct_field *field;
+    const struct hlsl_ir_load *rhs_load;
+    struct hlsl_ir_assignment *assign;
+    const struct hlsl_ir_node *rhs;
+    const struct hlsl_type *type;
+
+    if (instr->type != HLSL_IR_ASSIGNMENT)
+        return FALSE;
+
+    assign = assignment_from_node(instr);
+    rhs = assign->rhs.node;
+    type = rhs->data_type;
+    if (type->type != HLSL_CLASS_STRUCT)
+        return FALSE;
+
+    rhs_load = load_from_node(rhs);
+
+    LIST_FOR_EACH_ENTRY(field, type->e.elements, struct hlsl_struct_field, entry)
+    {
+        struct hlsl_ir_node *offset, *add;
+        struct hlsl_ir_assignment *store;
+        struct hlsl_ir_load *field_load;
+        struct hlsl_ir_constant *c;
+
+        if (!(c = new_uint_constant(field->reg_offset * 4, instr->loc)))
+        {
+            hlsl_ctx.status = PARSE_ERR;
+            return FALSE;
+        }
+        list_add_before(&instr->entry, &c->node.entry);
+
+        offset = &c->node;
+        if (rhs_load->src.offset.node)
+        {
+            if (!(add = new_binary_expr(HLSL_IR_BINOP_ADD, rhs_load->src.offset.node, &c->node)))
+            {
+                hlsl_ctx.status = PARSE_ERR;
+                return FALSE;
+            }
+            list_add_before(&instr->entry, &add->entry);
+            offset = add;
+        }
+        if (!(field_load = d3dcompiler_alloc(sizeof(*field_load))))
+        {
+            hlsl_ctx.status = PARSE_ERR;
+            return FALSE;
+        }
+        init_node(&field_load->node, HLSL_IR_LOAD, field->type, instr->loc);
+        field_load->src.var = rhs_load->src.var;
+        hlsl_src_from_node(&field_load->src.offset, offset);
+        list_add_before(&instr->entry, &field_load->node.entry);
+
+        offset = &c->node;
+        if (assign->lhs.offset.node)
+        {
+            if (!(add = new_binary_expr(HLSL_IR_BINOP_ADD, assign->lhs.offset.node, &c->node)))
+            {
+                hlsl_ctx.status = PARSE_ERR;
+                return FALSE;
+            }
+            list_add_before(&instr->entry, &add->entry);
+            offset = add;
+        }
+
+        if (!(store = new_assignment(assign->lhs.var, offset, &field_load->node, 0, instr->loc)))
+        {
+            hlsl_ctx.status = PARSE_ERR;
+            return FALSE;
+        }
+        list_add_before(&instr->entry, &store->node.entry);
+    }
+
+    /* Remove the assignment instruction, so that we can split structs
+     * which contain other structs. Although assignment instructions
+     * produce a value, we don't allow HLSL_IR_ASSIGNMENT to be used as
+     * a source. */
+    list_remove(&assign->node.entry);
+    free_instr(&assign->node);
+    return TRUE;
+}
+
 static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
 {
     struct hlsl_ir_constant *arg1, *arg2 = NULL, *res;
@@ -3156,6 +3239,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     list_move_head(entry_func->body, &hlsl_ctx.static_initializers);
 
     transform_ir(fold_ident, entry_func->body, NULL);
+    while (transform_ir(split_struct_copies, entry_func->body, NULL));
     while (transform_ir(fold_constants, entry_func->body, NULL));
     while (transform_ir(dce, entry_func->body, NULL));
 
