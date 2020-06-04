@@ -1448,6 +1448,7 @@ struct hlsl_ir_node *add_assignment(struct list *instrs, struct hlsl_ir_node *lh
 {
     struct hlsl_ir_assignment *assign = d3dcompiler_alloc(sizeof(*assign));
     struct hlsl_type *lhs_type;
+    struct hlsl_ir_node *copy;
     DWORD writemask = 0;
 
     lhs_type = lhs->data_type;
@@ -1511,7 +1512,7 @@ struct hlsl_ir_node *add_assignment(struct list *instrs, struct hlsl_ir_node *lh
         lhs = lhs_inner;
     }
 
-    init_node(&assign->node, HLSL_IR_ASSIGNMENT, lhs_type, lhs->loc);
+    init_node(&assign->node, HLSL_IR_ASSIGNMENT, NULL, lhs->loc);
     assign->writemask = writemask;
     assign->lhs.var = load_from_node(lhs)->src.var;
     hlsl_src_from_node(&assign->lhs.offset, load_from_node(lhs)->src.offset.node);
@@ -1528,7 +1529,14 @@ struct hlsl_ir_node *add_assignment(struct list *instrs, struct hlsl_ir_node *lh
     hlsl_src_from_node(&assign->rhs, rhs);
     list_add_tail(instrs, &assign->node.entry);
 
-    return &assign->node;
+    /* Don't use the instruction itself as a source, as this makes structure
+     * splitting easier. Instead copy it here. Since we retrieve sources from
+     * the last instruction in the list, we do need to copy. */
+
+    if (!(copy = new_unary_expr(HLSL_IR_UNOP_IDENT, rhs, lhs->loc)))
+        return NULL;
+    list_add_tail(instrs, &copy->entry);
+    return copy;
 }
 
 static int compare_hlsl_types_rb(const void *key, const struct wine_rb_entry *entry)
@@ -1888,6 +1896,8 @@ static const char *debug_expr_op(const struct hlsl_ir_expr *expr)
         "pre--",
         "post++",
         "post--",
+
+        "",
 
         "+",
         "-",
