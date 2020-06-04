@@ -2834,6 +2834,105 @@ static void dump_function(struct wine_rb_entry *entry, void *context)
     wine_rb_for_each_entry(&func->overloads, dump_function_decl, NULL);
 }
 
+static BOOL transform_ir(BOOL (*func)(struct hlsl_ir_node *, void *), struct list *instrs, void *context)
+{
+    struct hlsl_ir_node *instr, *next;
+    BOOL progress = 0;
+
+    LIST_FOR_EACH_ENTRY_SAFE(instr, next, instrs, struct hlsl_ir_node, entry)
+    {
+        if (instr->type == HLSL_IR_IF)
+        {
+            struct hlsl_ir_if *iff = if_from_node(instr);
+
+            progress |= transform_ir(func, &iff->then_instrs, context);
+            progress |= transform_ir(func, &iff->else_instrs, context);
+        }
+        else if (instr->type == HLSL_IR_LOOP)
+            progress |= transform_ir(func, &loop_from_node(instr)->body, context);
+
+        progress |= func(instr, context);
+    }
+
+    return progress;
+}
+
+static void replace_node(struct hlsl_ir_node *old, struct hlsl_ir_node *new)
+{
+    struct hlsl_src *src, *next;
+
+    LIST_FOR_EACH_ENTRY_SAFE(src, next, &old->uses, struct hlsl_src, entry)
+    {
+        hlsl_src_remove(src);
+        hlsl_src_from_node(src, new);
+    }
+    list_add_before(&old->entry, &new->entry);
+    list_remove(&old->entry);
+    free_instr(old);
+}
+
+static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
+{
+    struct hlsl_ir_constant *arg1, *arg2 = NULL, *res;
+    struct hlsl_ir_expr *expr;
+    unsigned int i;
+
+    if (instr->type != HLSL_IR_EXPR)
+        return FALSE;
+    expr = expr_from_node(instr);
+
+    for (i = 0; i < ARRAY_SIZE(expr->operands); ++i)
+    {
+        if (expr->operands[i].node && expr->operands[i].node->type != HLSL_IR_CONSTANT)
+            return FALSE;
+    }
+    arg1 = constant_from_node(expr->operands[0].node);
+    if (expr->operands[1].node)
+        arg2 = constant_from_node(expr->operands[1].node);
+
+    if (!(res = d3dcompiler_alloc(sizeof(*res))))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return FALSE;
+    }
+    init_node(&res->node, HLSL_IR_CONSTANT, instr->data_type, instr->loc);
+
+    switch (instr->data_type->base_type)
+    {
+        case HLSL_TYPE_UINT:
+        {
+            unsigned int i;
+
+            switch (expr->op)
+            {
+                case HLSL_IR_BINOP_ADD:
+                    for (i = 0; i < instr->data_type->dimx; ++i)
+                        res->value.u[i] = arg1->value.u[i] + arg2->value.u[i];
+                    break;
+
+                case HLSL_IR_BINOP_MUL:
+                    for (i = 0; i < instr->data_type->dimx; ++i)
+                        res->value.u[i] = arg1->value.u[i] * arg2->value.u[i];
+                    break;
+
+                default:
+                    FIXME("Fold uint expr %#x.\n", expr->op);
+                    d3dcompiler_free(res);
+                    return FALSE;
+            }
+            break;
+        }
+
+        default:
+            FIXME("Fold %s expr %#x.\n", debug_base_type(instr->data_type), expr->op);
+            d3dcompiler_free(res);
+            return FALSE;
+    }
+
+    replace_node(&expr->node, &res->node);
+    return TRUE;
+}
+
 /* Allocate a unique, ordered index to each instruction, which will be used for
  * computing liveness ranges. */
 static unsigned int index_instructions(struct list *instrs, unsigned int index)
@@ -3002,6 +3101,8 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     }
 
     list_move_head(entry_func->body, &hlsl_ctx.static_initializers);
+
+    while (transform_ir(fold_constants, entry_func->body, NULL));
 
     /* Index 0 means unused; index 1 means function entry, so start at 2. */
     index_instructions(entry_func->body, 2);
