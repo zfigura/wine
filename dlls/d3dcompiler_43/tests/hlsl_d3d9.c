@@ -292,8 +292,8 @@ static void test_swizzle(void)
     static const D3DXVECTOR4 color = {0.0303f, 0.0f, 0.0f, 0.0202f};
     struct test_context test_context;
     ID3DXConstantTable *constants;
-    ID3D10Blob *ps_code = NULL;
     IDirect3DDevice9 *device;
+    ID3D10Blob *ps_code;
     unsigned int i;
     struct vec4 v;
     HRESULT hr;
@@ -392,25 +392,25 @@ static void test_swizzle(void)
 
     for (i = 0; i < ARRAY_SIZE(tests); ++i)
     {
-        todo_wine ps_code = compile_shader(tests[i].source, "ps_2_0");
-        if (ps_code)
+        ps_code = compile_shader(tests[i].source, "ps_2_0");
+        if (i == 0)
         {
-            if (i == 0)
+            hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
+            todo_wine ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
+            if (hr == S_OK)
             {
-                hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
-                ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
                 hr = ID3DXConstantTable_SetVector(constants, device, "color", &color);
                 ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
                 ID3DXConstantTable_Release(constants);
             }
-            draw_quad(device, ps_code);
-
-            v = get_color_vec4(device, 0, 0);
-            ok(compare_vec4(&v, tests[i].color.x, tests[i].color.y, tests[i].color.z, tests[i].color.w, 0),
-                    "Test %u: Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", i, v.x, v.y, v.z, v.w);
-
-            ID3D10Blob_Release(ps_code);
         }
+        draw_quad(device, ps_code);
+
+        v = get_color_vec4(device, 0, 0);
+        todo_wine ok(compare_vec4(&v, tests[i].color.x, tests[i].color.y, tests[i].color.z, tests[i].color.w, 0),
+                "Test %u: Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", i, v.x, v.y, v.z, v.w);
+
+        ID3D10Blob_Release(ps_code);
     }
 
     release_test_context(&test_context);
@@ -420,8 +420,8 @@ static void test_math(void)
 {
     struct test_context test_context;
     ID3DXConstantTable *constants;
-    ID3D10Blob *ps_code = NULL;
     IDirect3DDevice9 *device;
+    ID3D10Blob *ps_code;
     struct vec4 v;
     HRESULT hr;
 
@@ -439,11 +439,11 @@ static void test_math(void)
         return;
     device = test_context.device;
 
-    todo_wine ps_code = compile_shader(ps_source, "ps_2_0");
-    if (ps_code)
+    ps_code = compile_shader(ps_source, "ps_2_0");
+    hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
+    todo_wine ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
+    if (hr == S_OK)
     {
-        hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
-        ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
         hr = ID3DXConstantTable_SetFloat(constants, device, "$u", 2.5f);
         ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
         hr = ID3DXConstantTable_SetFloat(constants, device, "$v", 0.3f);
@@ -457,24 +457,24 @@ static void test_math(void)
         hr = ID3DXConstantTable_SetFloat(constants, device, "$z", 1.5f);
         ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
         ID3DXConstantTable_Release(constants);
-
-        draw_quad(device, ps_code);
-
-        v = get_color_vec4(device, 0, 0);
-        ok(compare_vec4(&v, -12.43f, 9.833333f, 1.6f, 35.0f, 1),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
-
-        ID3D10Blob_Release(ps_code);
     }
+
+    draw_quad(device, ps_code);
+
+    v = get_color_vec4(device, 0, 0);
+    todo_wine ok(compare_vec4(&v, -12.43f, 9.833333f, 1.6f, 35.0f, 1),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+
+    ID3D10Blob_Release(ps_code);
     release_test_context(&test_context);
 }
 
 static void test_conditionals(void)
 {
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
     IDirect3DDevice9 *device;
     const struct vec4 *v;
+    ID3D10Blob *ps_code;
     struct readback rb;
     unsigned int i;
 
@@ -497,53 +497,47 @@ static void test_conditionals(void)
         return;
     device = test_context.device;
 
-    todo_wine ps_code = compile_shader(ps_if_source, "ps_2_0");
-    if (ps_code)
+    ps_code = compile_shader(ps_if_source, "ps_2_0");
+    draw_quad(device, ps_code);
+    init_readback(device, &rb);
+
+    for (i = 0; i < 200; i += 40)
     {
-        draw_quad(device, ps_code);
-        init_readback(device, &rb);
-
-        for (i = 0; i < 200; i += 40)
-        {
-            v = get_readback_vec4(&rb, i, 0);
-            ok(compare_vec4(v, 0.9f, 0.8f, 0.7f, 0.6f, 0),
-                    "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
-        }
-
-        for (i = 240; i < 640; i += 40)
-        {
-            v = get_readback_vec4(&rb, i, 0);
-            ok(compare_vec4(v, 0.1f, 0.2f, 0.3f, 0.4f, 0),
-                    "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
-        }
-
-        release_readback(&rb);
-        ID3D10Blob_Release(ps_code);
+        v = get_readback_vec4(&rb, i, 0);
+        todo_wine ok(compare_vec4(v, 0.9f, 0.8f, 0.7f, 0.6f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
     }
 
-    todo_wine ps_code = compile_shader(ps_ternary_source, "ps_2_0");
-    if (ps_code)
+    for (i = 240; i < 640; i += 40)
     {
-        draw_quad(device, ps_code);
-        init_readback(device, &rb);
-
-        for (i = 0; i < 320; i += 40)
-        {
-            v = get_readback_vec4(&rb, i, 0);
-            ok(compare_vec4(v, 0.5f, 0.25f, 0.5f, 0.75f, 0),
-                    "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
-        }
-
-        for (i = 360; i < 640; i += 40)
-        {
-            v = get_readback_vec4(&rb, i, 0);
-            ok(compare_vec4(v, 0.6f, 0.8f, 0.1f, 0.2f, 0),
-                    "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
-        }
-
-        release_readback(&rb);
-        ID3D10Blob_Release(ps_code);
+        v = get_readback_vec4(&rb, i, 0);
+        todo_wine ok(compare_vec4(v, 0.1f, 0.2f, 0.3f, 0.4f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
     }
+
+    release_readback(&rb);
+    ID3D10Blob_Release(ps_code);
+
+    ps_code = compile_shader(ps_ternary_source, "ps_2_0");
+    draw_quad(device, ps_code);
+    init_readback(device, &rb);
+
+    for (i = 0; i < 320; i += 40)
+    {
+        v = get_readback_vec4(&rb, i, 0);
+        todo_wine ok(compare_vec4(v, 0.5f, 0.25f, 0.5f, 0.75f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
+    }
+
+    for (i = 360; i < 640; i += 40)
+    {
+        v = get_readback_vec4(&rb, i, 0);
+        todo_wine ok(compare_vec4(v, 0.6f, 0.8f, 0.1f, 0.2f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
+    }
+
+    release_readback(&rb);
+    ID3D10Blob_Release(ps_code);
 
     release_test_context(&test_context);
 }
@@ -662,7 +656,7 @@ static void test_trig(void)
 static void test_comma(void)
 {
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
+    ID3D10Blob *ps_code;
     struct vec4 v;
 
     static const char ps_source[] =
@@ -675,24 +669,21 @@ static void test_comma(void)
     if (!init_test_context(&test_context))
         return;
 
-    todo_wine ps_code = compile_shader(ps_source, "ps_2_0");
-    if (ps_code)
-    {
-        draw_quad(test_context.device, ps_code);
+    ps_code = compile_shader(ps_source, "ps_2_0");
+    draw_quad(test_context.device, ps_code);
 
-        v = get_color_vec4(test_context.device, 0, 0);
-        ok(compare_vec4(&v, 0.6f, 0.7f, 0.8f, 0.9f, 0),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(test_context.device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.6f, 0.7f, 0.8f, 0.9f, 0),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D10Blob_Release(ps_code);
     release_test_context(&test_context);
 }
 
 static void test_return(void)
 {
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
+    ID3D10Blob *ps_code;
     struct vec4 v;
 
     static const char *void_source =
@@ -712,29 +703,23 @@ static void test_return(void)
     if (!init_test_context(&test_context))
         return;
 
-    todo_wine ps_code = compile_shader(void_source, "ps_2_0");
-    if (ps_code)
-    {
-        draw_quad(test_context.device, ps_code);
+    ps_code = compile_shader(void_source, "ps_2_0");
+    draw_quad(test_context.device, ps_code);
 
-        v = get_color_vec4(test_context.device, 0, 0);
-        ok(compare_vec4(&v, 0.1f, 0.2f, 0.3f, 0.4f, 0),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(test_context.device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.1f, 0.2f, 0.3f, 0.4f, 0),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D10Blob_Release(ps_code);
 
-    todo_wine ps_code = compile_shader(implicit_conversion_source, "ps_2_0");
-    if (ps_code)
-    {
-        draw_quad(test_context.device, ps_code);
+    ps_code = compile_shader(implicit_conversion_source, "ps_2_0");
+    draw_quad(test_context.device, ps_code);
 
-        v = get_color_vec4(test_context.device, 0, 0);
-        ok(compare_vec4(&v, 0.4f, 0.3f, 0.2f, 0.1f, 0),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(test_context.device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.4f, 0.3f, 0.2f, 0.1f, 0),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D10Blob_Release(ps_code);
 
     release_test_context(&test_context);
 }
@@ -862,7 +847,7 @@ static void test_majority(void)
 static void test_struct_assignment(void)
 {
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
+    ID3D10Blob *ps_code;
     struct vec4 v;
 
     static const char ps_source[] =
@@ -886,24 +871,21 @@ static void test_struct_assignment(void)
     if (!init_test_context(&test_context))
         return;
 
-    todo_wine ps_code = compile_shader(ps_source, "ps_2_0");
-    if (ps_code)
-    {
-        draw_quad(test_context.device, ps_code);
+    ps_code = compile_shader(ps_source, "ps_2_0");
+    draw_quad(test_context.device, ps_code);
 
-        v = get_color_vec4(test_context.device, 0, 0);
-        ok(compare_vec4(&v, 0.6f, 0.3f, 0.7f, 0.9f, 1),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(test_context.device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.6f, 0.3f, 0.7f, 0.9f, 1),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D10Blob_Release(ps_code);
     release_test_context(&test_context);
 }
 
 static void test_struct_semantics(void)
 {
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
+    ID3D10Blob *ps_code;
     struct vec4 v;
 
     static const char ps_source[] =
@@ -931,20 +913,17 @@ static void test_struct_semantics(void)
     if (!init_test_context(&test_context))
         return;
 
-    todo_wine ps_code = compile_shader(ps_source, "ps_2_0");
-    if (ps_code)
-    {
-        draw_quad(test_context.device, ps_code);
+    ps_code = compile_shader(ps_source, "ps_2_0");
+    draw_quad(test_context.device, ps_code);
 
-        v = get_color_vec4(test_context.device, 64, 48);
-        todo_wine ok(compare_vec4(&v, 0.1f, 0.1f, 0.0f, 0.0f, 4096),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
-        v = get_color_vec4(test_context.device, 320, 240);
-        todo_wine ok(compare_vec4(&v, 0.5f, 0.5f, 0.0f, 0.0f, 4096),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(test_context.device, 64, 48);
+    todo_wine ok(compare_vec4(&v, 0.1f, 0.1f, 0.0f, 0.0f, 4096),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(test_context.device, 320, 240);
+    todo_wine ok(compare_vec4(&v, 0.5f, 0.5f, 0.0f, 0.0f, 4096),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D10Blob_Release(ps_code);
     release_test_context(&test_context);
 }
 
@@ -993,7 +972,7 @@ static void test_global_initializer(void)
 static void test_const_initializer(void)
 {
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
+    ID3D10Blob *ps_code;
     struct vec4 v;
 
     static const char ps_const_source[] =
@@ -1014,29 +993,23 @@ static void test_const_initializer(void)
     if (!init_test_context(&test_context))
         return;
 
-    todo_wine ps_code = compile_shader(ps_const_source, "ps_2_0");
-    if (ps_code)
-    {
-        draw_quad(test_context.device, ps_code);
+    ps_code = compile_shader(ps_const_source, "ps_2_0");
+    draw_quad(test_context.device, ps_code);
 
-        v = get_color_vec4(test_context.device, 0, 0);
-        todo_wine ok(compare_vec4(&v, 0.5f, 0.5f, 0.5f, 0.5f, 0),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(test_context.device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.5f, 0.5f, 0.5f, 0.5f, 0),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D10Blob_Release(ps_code);
 
-    todo_wine ps_code = compile_shader(ps_mut_source, "ps_2_0");
-    if (ps_code)
-    {
-        draw_quad(test_context.device, ps_code);
+    ps_code = compile_shader(ps_mut_source, "ps_2_0");
+    draw_quad(test_context.device, ps_code);
 
-        v = get_color_vec4(test_context.device, 0, 0);
-        todo_wine ok(compare_vec4(&v, 0.0f, 0.0f, 1.0f, 0.0f, 0),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(test_context.device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.0f, 0.0f, 1.0f, 0.0f, 0),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D10Blob_Release(ps_code);
 
     release_test_context(&test_context);
 }
@@ -1087,9 +1060,9 @@ static void test_constant_table(void)
 
     D3DXCONSTANTTABLE_DESC table_desc;
     ID3DXConstantTable *constants;
-    ID3D10Blob *ps_code = NULL;
     D3DXHANDLE handle, field;
     D3DXCONSTANT_DESC desc;
+    ID3D10Blob *ps_code;
     unsigned int i, j;
     HRESULT hr;
     UINT count;
@@ -1120,12 +1093,14 @@ static void test_constant_table(void)
     static const D3DXCONSTANT_DESC expect_fields_j =
         {"a", D3DXRS_FLOAT4, 0, 3, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 3, 3, 1, 0, 36};
 
-    todo_wine ps_code = compile_shader(source, "ps_2_0");
-    if (!ps_code)
-        return;
-
+    ps_code = compile_shader(source, "ps_2_0");
     hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
-    ok(hr == D3D_OK, "Got hr %#x.\n", hr);
+    todo_wine ok(hr == D3D_OK, "Got hr %#x.\n", hr);
+    if (hr != D3D_OK)
+    {
+        ID3D10Blob_Release(ps_code);
+        return;
+    }
 
     hr = ID3DXConstantTable_GetDesc(constants, &table_desc);
     ok(hr == D3D_OK, "Got hr %#x.\n", hr);

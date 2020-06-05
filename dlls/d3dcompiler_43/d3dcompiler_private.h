@@ -984,6 +984,9 @@ struct hlsl_parse_ctx
     enum parse_status status;
     struct compilation_messages messages;
 
+    enum shader_type shader_type;
+    unsigned int major_version, minor_version;
+
     struct hlsl_scope *cur_scope;
     struct hlsl_scope *globals;
     struct list scopes;

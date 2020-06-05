@@ -25,6 +25,7 @@
 #include <stdio.h>
 
 #include "d3dcompiler_private.h"
+#include "d3d9types.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(hlsl_parser);
 
@@ -3581,6 +3582,52 @@ static void allocate_const_registers(struct hlsl_ir_function_decl *entry_func)
     allocate_const_registers_recurse(entry_func->body, &ctx);
 }
 
+struct bytecode_buffer
+{
+    DWORD *data;
+    unsigned int count, size;
+    HRESULT status;
+};
+
+static void put_dword(struct bytecode_buffer *buffer, DWORD value)
+{
+    if (buffer->status)
+        return;
+
+    if (!array_reserve((void **)&buffer->data, &buffer->size, buffer->count + 1, sizeof(*buffer->data)))
+    {
+        buffer->status = E_OUTOFMEMORY;
+        return;
+    }
+    buffer->data[buffer->count++] = value;
+}
+
+static DWORD sm1_version(enum shader_type type, unsigned int major, unsigned int minor)
+{
+    if (type == ST_VERTEX)
+        return D3DVS_VERSION(major, minor);
+    else
+        return D3DPS_VERSION(major, minor);
+}
+
+static HRESULT write_sm1_shader(struct hlsl_ir_function_decl *entry_func, ID3D10Blob **shader_blob)
+{
+    struct bytecode_buffer buffer = {0};
+    HRESULT hr;
+
+    put_dword(&buffer, sm1_version(hlsl_ctx.shader_type, hlsl_ctx.major_version, hlsl_ctx.minor_version));
+
+    put_dword(&buffer, D3DSIO_END);
+
+    if (SUCCEEDED(hr = buffer.status))
+    {
+        if (SUCCEEDED(hr = D3DCreateBlob(buffer.count * sizeof(DWORD), shader_blob)))
+            memcpy(ID3D10Blob_GetBufferPointer(*shader_blob), buffer.data, buffer.count * sizeof(DWORD));
+    }
+    d3dcompiler_free(buffer.data);
+    return hr;
+}
+
 HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
@@ -3591,6 +3638,9 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     HRESULT hr = E_FAIL;
     unsigned int i;
 
+    hlsl_ctx.shader_type = type;
+    hlsl_ctx.major_version = major;
+    hlsl_ctx.minor_version = minor;
     hlsl_ctx.status = PARSE_SUCCESS;
     hlsl_ctx.messages.size = hlsl_ctx.messages.capacity = 0;
     hlsl_ctx.line_no = hlsl_ctx.column = 1;
@@ -3666,7 +3716,12 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     allocate_temp_registers(entry_func);
     allocate_const_registers(entry_func);
 
-    if (hlsl_ctx.status != PARSE_ERR)
+    if (hlsl_ctx.status == PARSE_ERR)
+        goto out;
+
+    if (major < 4)
+        hr = write_sm1_shader(entry_func, shader_blob);
+    else
         hr = E_NOTIMPL;
 
 out:
