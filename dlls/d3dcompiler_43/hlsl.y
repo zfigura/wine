@@ -969,17 +969,14 @@ static struct hlsl_type *apply_type_modifiers(struct hlsl_type *type,
     if (!default_majority && !(*modifiers & HLSL_TYPE_MODIFIERS_MASK))
         return type;
 
-    if (!(new_type = clone_hlsl_type(type, default_majority)))
+    if (!(new_type = clone_hlsl_type(type, default_majority, *modifiers)))
         return NULL;
 
-    new_type->modifiers |= *modifiers;
     *modifiers &= ~HLSL_TYPE_MODIFIERS_MASK;
 
     if ((new_type->modifiers & HLSL_MODIFIER_ROW_MAJOR) && (new_type->modifiers & HLSL_MODIFIER_COLUMN_MAJOR))
         hlsl_report_message(loc, HLSL_LEVEL_ERROR, "more than one matrix majority keyword");
 
-    if (new_type->type == HLSL_CLASS_MATRIX)
-        new_type->reg_size = (is_row_major(new_type) ? new_type->dimy : new_type->dimx) * 4;
     return new_type;
 }
 
@@ -1078,7 +1075,7 @@ static BOOL add_typedef(DWORD modifiers, struct hlsl_type *orig_type, struct lis
         if (v->array_size)
             type = new_array_type(orig_type, v->array_size);
         else
-            type = clone_hlsl_type(orig_type, 0);
+            type = clone_hlsl_type(orig_type, 0, modifiers);
         if (!type)
         {
             ERR("Out of memory\n");
@@ -1086,12 +1083,9 @@ static BOOL add_typedef(DWORD modifiers, struct hlsl_type *orig_type, struct lis
         }
         d3dcompiler_free((void *)type->name);
         type->name = v->name;
-        type->modifiers |= modifiers;
 
         if (type->type != HLSL_CLASS_MATRIX)
             check_invalid_matrix_modifiers(type->modifiers, v->loc);
-        else
-            type->reg_size = (is_row_major(type) ? type->dimy : type->dimx) * 4;
 
         if ((type->modifiers & HLSL_MODIFIER_COLUMN_MAJOR)
                 && (type->modifiers & HLSL_MODIFIER_ROW_MAJOR))
@@ -2364,8 +2358,7 @@ postfix_expr:             primary_expr
                                 }
                                 inc = new_unary_expr(HLSL_IR_UNOP_POSTINC, node_from_list($1), loc);
                                 /* Post increment/decrement expressions are considered const */
-                                inc->data_type = clone_hlsl_type(inc->data_type, 0);
-                                inc->data_type->modifiers |= HLSL_MODIFIER_CONST;
+                                inc->data_type = clone_hlsl_type(inc->data_type, 0, HLSL_MODIFIER_CONST);
                                 $$ = append_unop($1, inc);
                             }
                         | postfix_expr OP_DEC
@@ -2381,8 +2374,7 @@ postfix_expr:             primary_expr
                                 }
                                 inc = new_unary_expr(HLSL_IR_UNOP_POSTDEC, node_from_list($1), loc);
                                 /* Post increment/decrement expressions are considered const */
-                                inc->data_type = clone_hlsl_type(inc->data_type, 0);
-                                inc->data_type->modifiers |= HLSL_MODIFIER_CONST;
+                                inc->data_type = clone_hlsl_type(inc->data_type, 0, HLSL_MODIFIER_CONST);
                                 $$ = append_unop($1, inc);
                             }
                         | postfix_expr '.' any_identifier

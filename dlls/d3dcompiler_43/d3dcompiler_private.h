@@ -1135,7 +1135,8 @@ void free_declaration(struct hlsl_ir_var *decl) DECLSPEC_HIDDEN;
 struct hlsl_type *new_hlsl_type(const char *name, enum hlsl_type_class type_class,
         enum hlsl_base_type base_type, unsigned dimx, unsigned dimy) DECLSPEC_HIDDEN;
 struct hlsl_type *new_array_type(struct hlsl_type *basic_type, unsigned int array_size) DECLSPEC_HIDDEN;
-struct hlsl_type *clone_hlsl_type(struct hlsl_type *old, unsigned int default_majority) DECLSPEC_HIDDEN;
+struct hlsl_type *clone_hlsl_type(struct hlsl_type *old, unsigned int default_majority,
+        unsigned int modifiers) DECLSPEC_HIDDEN;
 struct hlsl_type *get_type(struct hlsl_scope *scope, const char *name, BOOL recursive) DECLSPEC_HIDDEN;
 BOOL is_row_major(const struct hlsl_type *type) DECLSPEC_HIDDEN;
 BOOL find_function(const char *name) DECLSPEC_HIDDEN;

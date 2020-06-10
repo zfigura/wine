@@ -1334,6 +1334,14 @@ static void test_fail(void)
         "{\n"
         "    return float4(0, 0, 0, 0);\n"
         "}",
+
+        "typedef struct apple {float a;} apple_t;\n"
+        "uniform const apple_t a;\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    a.a = 1;\n"
+        "    return a.a;\n"
+        "}",
     };
 
     static const char *targets[] = {"ps_2_0", "ps_3_0", "ps_4_0"};
