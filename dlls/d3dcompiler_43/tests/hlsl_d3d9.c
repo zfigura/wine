@@ -1009,6 +1009,42 @@ static void test_const_initializer(void)
     release_test_context(&test_context);
 }
 
+static void test_duplicate_modifiers(void)
+{
+    static const D3DXVECTOR4 color = {0.1, 0.5, 0.3, 0.4};
+    struct test_context test_context;
+    ID3DXConstantTable *constants;
+    ID3D10Blob *ps_code;
+    struct vec4 v;
+    HRESULT hr;
+
+    static const char ps_source[] =
+        "typedef const float4 cfloat4_t;\n"
+        "const cfloat4_t c;\n"
+        "float4 main() : COLOR\n"
+        "{\n"
+        "    return c;\n"
+        "}";
+
+    if (!init_test_context(&test_context))
+        return;
+
+    ps_code = compile_shader(ps_source, "ps_2_0");
+    hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
+    ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetVector(constants, test_context.device, "c", &color);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    ID3DXConstantTable_Release(constants);
+    draw_quad(test_context.device, ps_code);
+
+    v = get_color_vec4(test_context.device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.1f, 0.5f, 0.3f, 0.4f, 1),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+
+    ID3D10Blob_Release(ps_code);
+    release_test_context(&test_context);
+}
+
 static void check_constant_desc(const char *prefix, const D3DXCONSTANT_DESC *desc,
         const D3DXCONSTANT_DESC *expect, BOOL nonzero_defaultvalue)
 {
@@ -1285,6 +1321,19 @@ static void test_fail(void)
         "{\n"
         "    o.t = float4(0, 0, 0, 0);\n"
         "}",
+
+        "const const float4 c;\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "typedef row_major float4x4 mat_t;\n"
+        "column_major mat_t m;\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
     };
 
     static const char *targets[] = {"ps_2_0", "ps_3_0", "ps_4_0"};
@@ -1351,6 +1400,7 @@ START_TEST(hlsl_d3d9)
     test_struct_semantics();
     test_global_initializer();
     test_const_initializer();
+    test_duplicate_modifiers();
 
     test_constant_table();
     test_fail();

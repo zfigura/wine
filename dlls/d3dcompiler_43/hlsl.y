@@ -972,8 +972,11 @@ static struct hlsl_type *apply_type_modifiers(struct hlsl_type *type,
     if (!(new_type = clone_hlsl_type(type, default_majority)))
         return NULL;
 
-    new_type->modifiers = add_modifiers(new_type->modifiers, *modifiers, loc);
+    new_type->modifiers |= *modifiers;
     *modifiers &= ~HLSL_TYPE_MODIFIERS_MASK;
+
+    if ((new_type->modifiers & HLSL_MODIFIER_ROW_MAJOR) && (new_type->modifiers & HLSL_MODIFIER_COLUMN_MAJOR))
+        hlsl_report_message(loc, HLSL_LEVEL_ERROR, "more than one matrix majority keyword");
 
     if (new_type->type == HLSL_CLASS_MATRIX)
         new_type->reg_size = (is_row_major(new_type) ? new_type->dimy : new_type->dimx) * 4;
