@@ -4015,6 +4015,129 @@ static struct hlsl_reg hlsl_reg_from_deref(const struct hlsl_deref *deref, const
     return ret;
 }
 
+static int bit_scan(unsigned int *x)
+{
+    int bit_offset;
+#if defined(__GNUC__) && ((__GNUC__ > 3) || ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 3)))
+    bit_offset = __builtin_ffs(*x) - 1;
+#else
+    for (bit_offset = 0; bit_offset < 32; bit_offset++)
+        if (*x & (1u << bit_offset)) break;
+#endif
+    *x ^= 1u << bit_offset;
+    return bit_offset;
+}
+
+static void bitmap_clear(uint32_t *map, unsigned int idx)
+{
+    map[idx >> 5] &= ~(1u << (idx & 0x1f));
+}
+
+static BOOL bitmap_is_set(const uint32_t *map, unsigned int idx)
+{
+    return map[idx >> 5] & (1u << (idx & 0x1f));
+}
+
+static void calculate_buffer_offset(struct hlsl_ir_var *var)
+{
+    unsigned int var_size = var->data_type->reg_size;
+    struct hlsl_buffer *buffer = var->buffer;
+
+    /* Align to the next vec4 boundary if necessary. */
+    if (var->data_type->type > HLSL_CLASS_LAST_NUMERIC || (buffer->size & 3) + var_size > 4)
+        buffer->size = (buffer->size + 3) & ~3;
+
+    var->buffer_offset = buffer->size;
+    TRACE("Allocated buffer offset %u to %s.\n", var->buffer_offset, var->name);
+    buffer->size += var_size;
+    if (var->last_read)
+        buffer->used_size = buffer->size;
+}
+
+static void allocate_buffers(struct hlsl_ir_function_decl *entry_func)
+{
+    struct hlsl_buffer *buffer, *params_buffer = NULL;
+    uint32_t constant_mask = (1 << 16) - 1;
+    struct hlsl_ir_var *var;
+
+    if (!(params_buffer = d3dcompiler_alloc(sizeof(*params_buffer))))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    params_buffer->type = HLSL_BUFFER_CONSTANT;
+    params_buffer->loc = entry_func->loc;
+    params_buffer->name = d3dcompiler_strdup("$Params");
+    list_add_head(&hlsl_ctx.buffers, &params_buffer->entry);
+
+    /* The $Globals buffer should be allocated before $Params and all explicit
+     * buffers. */
+    list_remove(&hlsl_ctx.globals_buffer->entry);
+    list_add_head(&hlsl_ctx.buffers, &hlsl_ctx.globals_buffer->entry);
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        if (var->modifiers & HLSL_STORAGE_UNIFORM)
+        {
+            if (var->is_param)
+                var->buffer = params_buffer;
+            calculate_buffer_offset(var);
+        }
+    }
+
+    /* Allocate reserved buffers. */
+    LIST_FOR_EACH_ENTRY(buffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        unsigned int regnum = buffer->reg_reservation.regnum;
+
+        if (!buffer->used_size)
+            continue;
+
+        if (buffer->type == HLSL_BUFFER_CONSTANT && buffer->reg_reservation.type == 'b')
+        {
+            if (regnum >= 16)
+                hlsl_report_message(buffer->loc, HLSL_LEVEL_ERROR,
+                        "only 16 constant buffers are available; cannot reserve cb%u", regnum);
+            else if (!bitmap_is_set(&constant_mask, regnum))
+                hlsl_report_message(buffer->loc, HLSL_LEVEL_ERROR,
+                        "attempt to bind multiple constant buffers to cb%u", regnum);
+            else
+            {
+                bitmap_clear(&constant_mask, regnum);
+                buffer->reg.reg = regnum;
+                buffer->reg.allocated = TRUE;
+                TRACE("Allocated reserved cb%u to %s.\n", regnum, buffer->name);
+            }
+        }
+        else if (buffer->type == HLSL_BUFFER_TEXTURE && buffer->reg_reservation.type == 't')
+        {
+            FIXME("Allocate reserved registers for texture buffers.\n");
+        }
+        else if (buffer->reg_reservation.type)
+            hlsl_report_message(buffer->loc, HLSL_LEVEL_ERROR,
+                    "invalid buffer reservation %c%u", buffer->reg_reservation.type, regnum);
+    }
+
+    /* Allocate remaining buffers. */
+    LIST_FOR_EACH_ENTRY(buffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        if (buffer->reg.allocated || !buffer->used_size)
+            continue;
+
+        if (buffer->type == HLSL_BUFFER_CONSTANT)
+        {
+            if (constant_mask)
+                buffer->reg.reg = bit_scan(&constant_mask);
+            else
+                hlsl_report_message(buffer->loc, HLSL_LEVEL_ERROR, "too many constant buffers declared\n");
+            buffer->reg.allocated = TRUE;
+            TRACE("Allocated cb%u to %s.\n", buffer->reg.reg, buffer->name);
+        }
+        else
+            FIXME("Allocate registers for texture buffers.\n");
+    }
+}
+
 struct bytecode_buffer
 {
     DWORD *data;
@@ -4857,7 +4980,10 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         hr = write_sm1_shader(entry_func, &constant_defs, shader_blob);
     }
     else
+    {
+        allocate_buffers(entry_func);
         hr = E_NOTIMPL;
+    }
 
 out:
     if (messages)

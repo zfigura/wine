@@ -729,6 +729,7 @@ struct hlsl_ir_var
 
     unsigned int first_write, last_read;
     struct hlsl_reg reg;
+    unsigned int buffer_offset;
 };
 
 struct hlsl_ir_function
@@ -986,6 +987,9 @@ struct hlsl_buffer
     const char *name;
     struct reg_reservation reg_reservation;
     struct list entry;
+
+    unsigned int size, used_size;
+    struct hlsl_reg reg;
 };
 
 struct hlsl_parse_ctx
