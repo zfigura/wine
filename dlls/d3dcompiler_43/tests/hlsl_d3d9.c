@@ -1298,6 +1298,16 @@ static void test_fail(void)
         "    const float4 x;\n"
         "    return x;\n"
         "}",
+
+        "struct input\n"
+        "{\n"
+        "    float4 t : TEXCOORD0;\n"
+        "    int a;\n"
+        "};\n"
+        "float4 test(struct input i) : SV_TARGET\n"
+        "{\n"
+        "    return i.t;\n"
+        "}",
     };
 
     static const char *targets[] = {"ps_2_0", "ps_3_0", "ps_4_0"};

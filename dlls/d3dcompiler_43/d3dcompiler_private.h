@@ -627,21 +627,22 @@ struct hlsl_type
     } e;
 };
 
-struct hlsl_struct_field
-{
-    struct list entry;
-    struct hlsl_type *type;
-    const char *name;
-    const char *semantic;
-    DWORD modifiers;
-    unsigned int reg_offset;
-};
-
 struct source_location
 {
     const char *file;
     unsigned int line;
     unsigned int col;
+};
+
+struct hlsl_struct_field
+{
+    struct list entry;
+    struct source_location loc;
+    struct hlsl_type *type;
+    const char *name;
+    const char *semantic;
+    DWORD modifiers;
+    unsigned int reg_offset;
 };
 
 enum hlsl_ir_node_type

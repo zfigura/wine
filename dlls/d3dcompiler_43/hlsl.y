@@ -996,6 +996,7 @@ static struct list *gen_struct_fields(struct hlsl_type *type, DWORD modifiers, s
             d3dcompiler_free(v);
             return list;
         }
+        field->loc = v->loc;
         if (v->array_size)
             field->type = new_array_type(type, v->array_size);
         else
@@ -3199,6 +3200,74 @@ static void prepend_uniform_copy(struct list *instrs, struct hlsl_ir_var *var)
     list_add_after(&load->node.entry, &store->node.entry);
 }
 
+static void prepend_input_copy(struct list *instrs, struct hlsl_ir_var *var,
+        struct hlsl_type *type, unsigned int field_offset, const char *semantic)
+{
+    struct hlsl_ir_assignment *store;
+    struct hlsl_ir_constant *offset;
+    struct hlsl_ir_var *varying;
+    struct hlsl_ir_load *load;
+    char name[29];
+
+    sprintf(name, "<input-%.20s>", semantic);
+    if (!(varying = new_var(strdup(name), type, var->loc, strdup(semantic), var->modifiers, NULL)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_head(&hlsl_ctx.globals->vars, &varying->scope_entry);
+
+    if (!(load = new_var_load(varying, var->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_head(instrs, &load->node.entry);
+
+    if (!(offset = new_uint_constant(field_offset * 4, var->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_after(&load->node.entry, &offset->node.entry);
+
+    if (!(store = new_assignment(var, &offset->node, &load->node, 0, var->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_after(&offset->node.entry, &store->node.entry);
+}
+
+static void prepend_input_struct_copy(struct list *instrs, struct hlsl_ir_var *var,
+        struct hlsl_type *type, unsigned int field_offset)
+{
+    struct hlsl_struct_field *field;
+
+    LIST_FOR_EACH_ENTRY(field, type->e.elements, struct hlsl_struct_field, entry)
+    {
+        if (field->type->type == HLSL_CLASS_STRUCT)
+            prepend_input_struct_copy(instrs, var, field->type, field_offset + field->reg_offset);
+        else if (field->semantic)
+            prepend_input_copy(instrs, var, field->type, field_offset + field->reg_offset, field->semantic);
+        else
+            hlsl_report_message(field->loc, HLSL_LEVEL_ERROR, "field '%s' is missing a semantic", field->name);
+    }
+}
+
+/* Split input varyings into two variables representing the varying and temp
+ * registers, and copy the former to the latter, so that writes to varyings
+ * work. */
+static void prepend_input_var_copy(struct list *instrs, struct hlsl_ir_var *var)
+{
+    if (var->data_type->type == HLSL_CLASS_STRUCT)
+        prepend_input_struct_copy(instrs, var, var->data_type, 0);
+    else
+        prepend_input_copy(instrs, var, var->data_type, 0, var->semantic);
+
+    var->modifiers &= ~HLSL_STORAGE_IN;
+}
+
 HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
@@ -3258,6 +3327,8 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     {
         if (var->modifiers & HLSL_STORAGE_UNIFORM)
             prepend_uniform_copy(entry_func->body, var);
+        if (var->modifiers & HLSL_STORAGE_IN)
+            prepend_input_var_copy(entry_func->body, var);
     }
 
     transform_ir(fold_ident, entry_func->body, NULL);
