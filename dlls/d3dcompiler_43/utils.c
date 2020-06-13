@@ -610,10 +610,7 @@ struct hlsl_type *new_hlsl_type(const char *name, enum hlsl_type_class type_clas
     type->base_type = base_type;
     type->dimx = dimx;
     type->dimy = dimy;
-    if (type_class == HLSL_CLASS_MATRIX)
-        type->reg_size = (is_row_major(type) ? dimy : dimx) * 4;
-    else
-        type->reg_size = 4;
+    type->reg_size = get_type_reg_size(type);
 
     list_add_tail(&hlsl_ctx.types, &type->entry);
 
@@ -622,17 +619,19 @@ struct hlsl_type *new_hlsl_type(const char *name, enum hlsl_type_class type_clas
 
 struct hlsl_type *new_array_type(struct hlsl_type *basic_type, unsigned int array_size)
 {
-    struct hlsl_type *type = new_hlsl_type(NULL, HLSL_CLASS_ARRAY, HLSL_TYPE_FLOAT, 1, 1);
+    struct hlsl_type *type;
 
-    if (!type)
+    if (!(type = d3dcompiler_alloc(sizeof(*type))))
         return NULL;
 
+    type->type = HLSL_CLASS_ARRAY;
     type->modifiers = basic_type->modifiers;
     type->e.array.elements_count = array_size;
     type->e.array.type = basic_type;
-    type->reg_size = basic_type->reg_size * array_size;
     type->dimx = basic_type->dimx;
     type->dimy = basic_type->dimy;
+    type->reg_size = get_type_reg_size(type);
+    list_add_tail(&hlsl_ctx.types, &type->entry);
     return type;
 }
 
@@ -757,13 +756,10 @@ struct hlsl_type *clone_hlsl_type(struct hlsl_type *old, unsigned int default_ma
         case HLSL_CLASS_ARRAY:
             type->e.array.type = clone_hlsl_type(old->e.array.type, default_majority, modifiers);
             type->e.array.elements_count = old->e.array.elements_count;
-            type->reg_size = type->e.array.elements_count * type->e.array.type->reg_size;
             break;
 
         case HLSL_CLASS_STRUCT:
         {
-            unsigned int reg_size = 0;
-
             type->e.elements = d3dcompiler_alloc(sizeof(*type->e.elements));
             if (!type->e.elements)
             {
@@ -793,24 +789,18 @@ struct hlsl_type *clone_hlsl_type(struct hlsl_type *old, unsigned int default_ma
                 if (old_field->semantic)
                     field->semantic = d3dcompiler_strdup(old_field->semantic);
                 field->modifiers |= old_field->modifiers;
-                field->reg_offset = reg_size;
-                reg_size += field->type->reg_size;
                 list_add_tail(type->e.elements, &field->entry);
             }
-            type->reg_size = reg_size;
+            calculate_field_offsets(type);
             break;
         }
 
-        case HLSL_CLASS_MATRIX:
-            type->reg_size = (is_row_major(type) ? type->dimy : type->dimx) * 4;
-            break;
-
         default:
-            type->reg_size = 4;
             break;
     }
 
     list_add_tail(&hlsl_ctx.types, &type->entry);
+    type->reg_size = get_type_reg_size(type);
     return type;
 }
 

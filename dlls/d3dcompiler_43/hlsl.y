@@ -937,7 +937,7 @@ static BOOL add_struct_field(struct list *fields, struct hlsl_struct_field *fiel
     return TRUE;
 }
 
-BOOL is_row_major(const struct hlsl_type *type)
+static BOOL is_row_major(const struct hlsl_type *type)
 {
     /* Default to column-major if the majority isn't explicitly set, which can
      * happen for anonymous nodes. */
@@ -1033,11 +1033,48 @@ static DWORD get_array_size(const struct hlsl_type *type)
     return 1;
 }
 
+unsigned int get_type_reg_size(const struct hlsl_type *type)
+{
+    switch (type->type)
+    {
+        case HLSL_CLASS_SCALAR:
+        case HLSL_CLASS_VECTOR:
+            return 4;
+        case HLSL_CLASS_MATRIX:
+            return 4 * (is_row_major(type) ? type->dimy : type->dimx);
+        case HLSL_CLASS_ARRAY:
+            return type->e.array.elements_count * get_type_reg_size(type->e.array.type);
+        case HLSL_CLASS_STRUCT:
+        {
+            struct hlsl_struct_field *field = LIST_ENTRY(list_tail(type->e.elements),
+                    struct hlsl_struct_field, entry);
+            return field->reg_offset + get_type_reg_size(field->type);
+        }
+        case HLSL_CLASS_OBJECT:
+            break;
+    }
+    return 0;
+}
+
+/* Returns the total struct size. */
+unsigned int calculate_field_offsets(struct hlsl_type *type)
+{
+    struct hlsl_struct_field *field;
+    unsigned int reg_size = 0;
+
+    type->dimx = 0;
+    LIST_FOR_EACH_ENTRY(field, type->e.elements, struct hlsl_struct_field, entry)
+    {
+        type->dimx += field->type->dimx * field->type->dimy * get_array_size(field->type);
+        field->reg_offset = reg_size;
+        reg_size += field->type->reg_size;
+    }
+    return reg_size;
+}
+
 static struct hlsl_type *new_struct_type(const char *name, struct list *fields)
 {
     struct hlsl_type *type = d3dcompiler_alloc(sizeof(*type));
-    struct hlsl_struct_field *field;
-    unsigned int reg_size = 0;
 
     if (!type)
     {
@@ -1050,14 +1087,7 @@ static struct hlsl_type *new_struct_type(const char *name, struct list *fields)
     type->dimx = 0;
     type->dimy = 1;
     type->e.elements = fields;
-
-    LIST_FOR_EACH_ENTRY(field, fields, struct hlsl_struct_field, entry)
-    {
-        field->reg_offset = reg_size;
-        reg_size += field->type->reg_size;
-        type->dimx += field->type->dimx * field->type->dimy * get_array_size(field->type);
-    }
-    type->reg_size = reg_size;
+    type->reg_size = calculate_field_offsets(type);
 
     list_add_tail(&hlsl_ctx.types, &type->entry);
 
