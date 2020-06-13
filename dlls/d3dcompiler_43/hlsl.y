@@ -849,7 +849,9 @@ static struct list *declare_vars(struct hlsl_type *basic_type, DWORD modifiers, 
             local = FALSE;
         }
 
-        if (type->modifiers & HLSL_MODIFIER_CONST && !(var->modifiers & HLSL_STORAGE_UNIFORM) && !v->initializer.args_count)
+        if (type->modifiers & HLSL_MODIFIER_CONST
+                && !(var->modifiers & (HLSL_STORAGE_STATIC | HLSL_STORAGE_UNIFORM))
+                && !v->initializer.args_count)
         {
             hlsl_report_message(v->loc, HLSL_LEVEL_ERROR, "const variable without initializer");
             free_declaration(var);

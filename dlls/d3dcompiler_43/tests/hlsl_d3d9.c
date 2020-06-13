@@ -982,11 +982,62 @@ static void test_global_initializer(void)
         draw_quad(test_context.device, ps_code);
 
         v = get_color_vec4(test_context.device, 0, 0);
-        todo_wine ok(compare_vec4(&v, 0.8f, 0.2f, 0.0f, 0.0f, 4096),
+        todo_wine ok(compare_vec4(&v, 0.8f, 0.2f, 0.0f, 0.0f, 0),
                 "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
         ID3D10Blob_Release(ps_code);
     }
+    release_test_context(&test_context);
+}
+
+static void test_const_initializer(void)
+{
+    struct test_context test_context;
+    ID3D10Blob *ps_code = NULL;
+    struct vec4 v;
+
+    static const char ps_const_source[] =
+        "float4 main() : COLOR\n"
+        "{\n"
+        "    static const float4 x;\n"
+        "    return x + 0.5;\n"
+        "}";
+
+    static const char ps_mut_source[] =
+        "float4 main() : COLOR\n"
+        "{\n"
+        "    static float4 x;\n"
+        "    x.z = 1.0;\n"
+        "    return x;\n"
+        "}";
+
+    if (!init_test_context(&test_context))
+        return;
+
+    todo_wine ps_code = compile_shader(ps_const_source, "ps_2_0");
+    if (ps_code)
+    {
+        draw_quad(test_context.device, ps_code);
+
+        v = get_color_vec4(test_context.device, 0, 0);
+        todo_wine ok(compare_vec4(&v, 0.5f, 0.5f, 0.5f, 0.5f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+
+        ID3D10Blob_Release(ps_code);
+    }
+
+    todo_wine ps_code = compile_shader(ps_mut_source, "ps_2_0");
+    if (ps_code)
+    {
+        draw_quad(test_context.device, ps_code);
+
+        v = get_color_vec4(test_context.device, 0, 0);
+        todo_wine ok(compare_vec4(&v, 0.0f, 0.0f, 1.0f, 0.0f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+
+        ID3D10Blob_Release(ps_code);
+    }
+
     release_test_context(&test_context);
 }
 
@@ -1241,6 +1292,12 @@ static void test_fail(void)
         "{\n"
         "    return float4(0, 0, 0, 0);\n"
         "}",
+
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    const float4 x;\n"
+        "    return x;\n"
+        "}",
     };
 
     static const char *targets[] = {"ps_2_0", "ps_3_0", "ps_4_0"};
@@ -1306,6 +1363,7 @@ START_TEST(hlsl_d3d9)
     test_struct_assignment();
     test_struct_semantics();
     test_global_initializer();
+    test_const_initializer();
 
     test_constant_table();
     test_fail();
