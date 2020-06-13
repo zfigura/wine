@@ -3165,6 +3165,40 @@ static void compute_liveness(struct hlsl_ir_function_decl *entry_func)
     compute_liveness_recurse(entry_func->body, 0, 0);
 }
 
+/* Split uniforms into two variables representing the constant and temp
+ * registers, and copy the former to the latter, so that writes to uniforms
+ * work. */
+static void prepend_uniform_copy(struct list *instrs, struct hlsl_ir_var *var)
+{
+    struct hlsl_ir_assignment *store;
+    struct hlsl_ir_var *const_var;
+    struct hlsl_ir_load *load;
+    char name[31];
+
+    sprintf(name, "<uniform-%.20s>", var->name);
+    if (!(const_var = new_var(strdup(name), var->data_type, var->loc, NULL, var->modifiers, var->reg_reservation)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_head(&hlsl_ctx.globals->vars, &const_var->scope_entry);
+    var->modifiers &= ~(HLSL_STORAGE_UNIFORM | HLSL_STORAGE_IN);
+
+    if (!(load = new_var_load(const_var, var->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_head(instrs, &load->node.entry);
+
+    if (!(store = new_simple_assignment(var, &load->node)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_after(&load->node.entry, &store->node.entry);
+}
+
 HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
@@ -3213,6 +3247,18 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     }
 
     list_move_head(entry_func->body, &hlsl_ctx.static_initializers);
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
+    {
+        if (var->modifiers & HLSL_STORAGE_UNIFORM)
+            prepend_uniform_copy(entry_func->body, var);
+    }
+
+    LIST_FOR_EACH_ENTRY(var, entry_func->parameters, struct hlsl_ir_var, param_entry)
+    {
+        if (var->modifiers & HLSL_STORAGE_UNIFORM)
+            prepend_uniform_copy(entry_func->body, var);
+    }
 
     transform_ir(fold_ident, entry_func->body, NULL);
     while (transform_ir(split_struct_copies, entry_func->body, NULL));
