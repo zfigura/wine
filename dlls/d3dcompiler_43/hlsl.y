@@ -845,7 +845,8 @@ static struct list *declare_vars(struct hlsl_type *basic_type, DWORD modifiers, 
 
         if (hlsl_ctx.cur_scope == hlsl_ctx.globals)
         {
-            var->modifiers |= HLSL_STORAGE_UNIFORM;
+            if (!(var->modifiers & HLSL_STORAGE_STATIC))
+                var->modifiers |= HLSL_STORAGE_UNIFORM;
             local = FALSE;
         }
 
