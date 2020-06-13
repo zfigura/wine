@@ -597,18 +597,22 @@ struct hlsl_ir_node *new_binary_expr(enum hlsl_ir_expr_op op,
     return &expr->node;
 }
 
+static struct hlsl_ir_load *new_load(struct hlsl_ir_var *var, struct hlsl_ir_node *offset,
+        struct hlsl_type *data_type, const struct source_location loc)
+{
+    struct hlsl_ir_load *load;
+
+    if (!(load = d3dcompiler_alloc(sizeof(*load))))
+        return NULL;
+    init_node(&load->node, HLSL_IR_LOAD, data_type, loc);
+    load->src.var = var;
+    hlsl_src_from_node(&load->src.offset, offset);
+    return load;
+}
+
 static struct hlsl_ir_load *new_var_load(struct hlsl_ir_var *var, const struct source_location loc)
 {
-    struct hlsl_ir_load *load = d3dcompiler_alloc(sizeof(*load));
-
-    if (!load)
-    {
-        ERR("Out of memory.\n");
-        return NULL;
-    }
-    init_node(&load->node, HLSL_IR_LOAD, var->data_type, loc);
-    load->src.var = var;
-    return load;
+    return new_load(var, NULL, var->data_type, loc);
 }
 
 static struct hlsl_ir_load *add_load(struct list *instrs, struct hlsl_ir_node *var_node, struct hlsl_ir_node *offset,
@@ -3264,6 +3268,74 @@ static void prepend_input_var_copy(struct list *instrs, struct hlsl_ir_var *var)
     var->modifiers &= ~HLSL_STORAGE_IN;
 }
 
+static void append_output_copy(struct list *instrs, struct hlsl_ir_var *var,
+        struct hlsl_type *type, unsigned int field_offset, const char *semantic)
+{
+    struct hlsl_ir_assignment *store;
+    struct hlsl_ir_constant *offset;
+    struct hlsl_ir_var *varying;
+    struct hlsl_ir_load *load;
+    char name[30];
+
+    sprintf(name, "<output-%.20s>", semantic);
+    if (!(varying = new_var(strdup(name), type, var->loc, strdup(semantic), var->modifiers, NULL)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_head(&hlsl_ctx.globals->vars, &varying->scope_entry);
+
+    if (!(offset = new_uint_constant(field_offset * 4, var->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_tail(instrs, &offset->node.entry);
+
+    if (!(load = new_load(var, &offset->node, type, var->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_after(&offset->node.entry, &load->node.entry);
+
+    if (!(store = new_assignment(varying, NULL, &load->node, 0, var->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return;
+    }
+    list_add_after(&load->node.entry, &store->node.entry);
+}
+
+static void append_output_struct_copy(struct list *instrs, struct hlsl_ir_var *var,
+        struct hlsl_type *type, unsigned int field_offset)
+{
+    struct hlsl_struct_field *field;
+
+    LIST_FOR_EACH_ENTRY(field, type->e.elements, struct hlsl_struct_field, entry)
+    {
+        if (field->type->type == HLSL_CLASS_STRUCT)
+            append_output_struct_copy(instrs, var, field->type, field_offset + field->reg_offset);
+        else if (field->semantic)
+            append_output_copy(instrs, var, field->type, field_offset + field->reg_offset, field->semantic);
+        else
+            hlsl_report_message(field->loc, HLSL_LEVEL_ERROR, "field '%s' is missing a semantic", field->name);
+    }
+}
+
+/* Split output varyings into two variables representing the temp and varying
+ * registers, and copy the former to the latter, so that reads from output
+ * varyings work. */
+static void append_output_var_copy(struct list *instrs, struct hlsl_ir_var *var)
+{
+    if (var->data_type->type == HLSL_CLASS_STRUCT)
+        append_output_struct_copy(instrs, var, var->data_type, 0);
+    else
+        append_output_copy(instrs, var, var->data_type, 0, var->semantic);
+
+    var->modifiers &= ~HLSL_STORAGE_OUT;
+}
+
 HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
@@ -3325,7 +3397,11 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
             prepend_uniform_copy(entry_func->body, var);
         if (var->modifiers & HLSL_STORAGE_IN)
             prepend_input_var_copy(entry_func->body, var);
+        if (var->modifiers & HLSL_STORAGE_OUT)
+            append_output_var_copy(entry_func->body, var);
     }
+    if (entry_func->return_var)
+        append_output_var_copy(entry_func->body, entry_func->return_var);
 
     transform_ir(fold_ident, entry_func->body, NULL);
     while (transform_ir(split_struct_copies, entry_func->body, NULL));

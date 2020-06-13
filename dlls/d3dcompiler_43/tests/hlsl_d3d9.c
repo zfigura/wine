@@ -1308,6 +1308,17 @@ static void test_fail(void)
         "{\n"
         "    return i.t;\n"
         "}",
+
+        /* 20 */
+        "struct output\n"
+        "{\n"
+        "    float4 t : SV_TARGET;\n"
+        "    int a;\n"
+        "};\n"
+        "void test(out struct output o)\n"
+        "{\n"
+        "    o.t = float4(0, 0, 0, 0);\n"
+        "}",
     };
 
     static const char *targets[] = {"ps_2_0", "ps_3_0", "ps_4_0"};
