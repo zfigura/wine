@@ -3175,7 +3175,8 @@ static void compute_liveness(struct hlsl_ir_function_decl *entry_func)
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
     {
-        var->first_write = 1;
+        if (var->modifiers & HLSL_STORAGE_UNIFORM)
+            var->first_write = 1;
     }
 
     LIST_FOR_EACH_ENTRY(var, entry_func->parameters, struct hlsl_ir_var, param_entry)
