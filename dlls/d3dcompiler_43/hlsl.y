@@ -1035,23 +1035,53 @@ static DWORD get_array_size(const struct hlsl_type *type)
 
 unsigned int get_type_reg_size(const struct hlsl_type *type)
 {
-    switch (type->type)
+    if (hlsl_ctx.major_version >= 4)
     {
-        case HLSL_CLASS_SCALAR:
-        case HLSL_CLASS_VECTOR:
-            return 4;
-        case HLSL_CLASS_MATRIX:
-            return 4 * (is_row_major(type) ? type->dimy : type->dimx);
-        case HLSL_CLASS_ARRAY:
-            return type->e.array.elements_count * get_type_reg_size(type->e.array.type);
-        case HLSL_CLASS_STRUCT:
+        switch (type->type)
         {
-            struct hlsl_struct_field *field = LIST_ENTRY(list_tail(type->e.elements),
-                    struct hlsl_struct_field, entry);
-            return field->reg_offset + get_type_reg_size(field->type);
+            case HLSL_CLASS_SCALAR:
+            case HLSL_CLASS_VECTOR:
+                return type->dimx;
+            case HLSL_CLASS_MATRIX:
+                if (is_row_major(type))
+                    return 4 * (type->dimy - 1) + type->dimx;
+                else
+                    return 4 * (type->dimx - 1) + type->dimy;
+            case HLSL_CLASS_ARRAY:
+            {
+                unsigned int element_size = type->e.array.type->reg_size;
+                return (type->e.array.elements_count - 1) * ((element_size + 3) & ~3) + element_size;
+            }
+            case HLSL_CLASS_STRUCT:
+            {
+                struct hlsl_struct_field *field = LIST_ENTRY(list_tail(type->e.elements),
+                        struct hlsl_struct_field, entry);
+                return field->reg_offset + field->type->reg_size;
+            }
+            case HLSL_CLASS_OBJECT:
+                break;
         }
-        case HLSL_CLASS_OBJECT:
-            break;
+    }
+    else
+    {
+        switch (type->type)
+        {
+            case HLSL_CLASS_SCALAR:
+            case HLSL_CLASS_VECTOR:
+                return 4;
+            case HLSL_CLASS_MATRIX:
+                return 4 * (is_row_major(type) ? type->dimy : type->dimx);
+            case HLSL_CLASS_ARRAY:
+                return type->e.array.elements_count * type->e.array.type->reg_size;
+            case HLSL_CLASS_STRUCT:
+            {
+                struct hlsl_struct_field *field = LIST_ENTRY(list_tail(type->e.elements),
+                        struct hlsl_struct_field, entry);
+                return field->reg_offset + field->type->reg_size;
+            }
+            case HLSL_CLASS_OBJECT:
+                break;
+        }
     }
     return 0;
 }
@@ -1065,6 +1095,10 @@ unsigned int calculate_field_offsets(struct hlsl_type *type)
     type->dimx = 0;
     LIST_FOR_EACH_ENTRY(field, type->e.elements, struct hlsl_struct_field, entry)
     {
+        /* Align to the next vec4 boundary if necessary. */
+        if (field->type->type > HLSL_CLASS_LAST_NUMERIC || (reg_size & 3) + field->type->reg_size > 4)
+            reg_size = (reg_size + 3) & ~3;
+
         type->dimx += field->type->dimx * field->type->dimy * get_array_size(field->type);
         field->reg_offset = reg_size;
         reg_size += field->type->reg_size;
@@ -3555,9 +3589,16 @@ static struct hlsl_reg allocate_range(struct liveness_ctx *liveness,
 
 static const char *debugstr_register(char class, struct hlsl_reg reg, const struct hlsl_type *type)
 {
+    static const char writemask_offset[] = {'w','x','y','z'};
+
     if (type->reg_size > 4)
+    {
+        if (type->reg_size & 3)
+            return wine_dbg_sprintf("%c%u-%c%u.%c", class, reg.reg, class,
+                    reg.reg + (type->reg_size / 4), writemask_offset[type->reg_size & 3]);
         return wine_dbg_sprintf("%c%u-%c%u", class, reg.reg, class,
                 reg.reg + (type->reg_size / 4) - 1);
+    }
     return wine_dbg_sprintf("%c%u%s", class, reg.reg, debug_writemask(reg.writemask));
 }
 
