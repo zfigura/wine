@@ -130,50 +130,6 @@ static BOOL type_is_single_reg(const struct hlsl_type *type)
     return type->type == HLSL_CLASS_SCALAR || type->type == HLSL_CLASS_VECTOR;
 }
 
-static BOOL declare_variable(struct hlsl_ir_var *decl, BOOL local)
-{
-    BOOL ret;
-
-    TRACE("Declaring variable %s.\n", decl->name);
-    if (decl->data_type->type != HLSL_CLASS_MATRIX)
-        check_invalid_matrix_modifiers(decl->modifiers, decl->loc);
-
-    if (local)
-    {
-        DWORD invalid = decl->modifiers & (HLSL_STORAGE_EXTERN | HLSL_STORAGE_SHARED
-                | HLSL_STORAGE_GROUPSHARED | HLSL_STORAGE_UNIFORM);
-        if (invalid)
-        {
-            hlsl_report_message(decl->loc, HLSL_LEVEL_ERROR,
-                    "modifier '%s' invalid for local variables", debug_modifiers(invalid));
-        }
-        if (decl->semantic)
-        {
-            hlsl_report_message(decl->loc, HLSL_LEVEL_ERROR,
-                    "semantics are not allowed on local variables");
-            return FALSE;
-        }
-    }
-    else
-    {
-        if (find_function(decl->name))
-        {
-            hlsl_report_message(decl->loc, HLSL_LEVEL_ERROR, "redefinition of '%s'", decl->name);
-            return FALSE;
-        }
-    }
-    ret = add_declaration(hlsl_ctx.cur_scope, decl, local);
-    if (!ret)
-    {
-        struct hlsl_ir_var *old = get_variable(hlsl_ctx.cur_scope, decl->name);
-
-        hlsl_report_message(decl->loc, HLSL_LEVEL_ERROR, "\"%s\" already declared", decl->name);
-        hlsl_report_message(old->loc, HLSL_LEVEL_NOTE, "\"%s\" was previously declared here", old->name);
-        return FALSE;
-    }
-    return TRUE;
-}
-
 static DWORD add_modifiers(DWORD modifiers, DWORD mod, const struct source_location loc)
 {
     if (modifiers & mod)
@@ -810,8 +766,8 @@ static struct list *declare_vars(struct hlsl_type *basic_type, DWORD modifiers, 
     struct hlsl_type *type;
     struct parse_variable_def *v, *v_next;
     struct hlsl_ir_var *var;
-    BOOL ret, local = TRUE;
     struct list *statements_list = d3dcompiler_alloc(sizeof(*statements_list));
+    BOOL local = TRUE;
 
     if (basic_type->type == HLSL_CLASS_MATRIX)
         assert(basic_type->modifiers & HLSL_MODIFIERS_MAJORITY_MASK);
@@ -843,11 +799,28 @@ static struct list *declare_vars(struct hlsl_type *basic_type, DWORD modifiers, 
         }
         debug_dump_decl(type, modifiers, v->name, v->loc.line);
 
+        if (var->data_type->type != HLSL_CLASS_MATRIX)
+            check_invalid_matrix_modifiers(var->modifiers, var->loc);
+
         if (hlsl_ctx.cur_scope == hlsl_ctx.globals)
         {
             if (!(var->modifiers & HLSL_STORAGE_STATIC))
                 var->modifiers |= HLSL_STORAGE_UNIFORM;
             local = FALSE;
+
+            if (find_function(var->name))
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR, "redefinition of '%s'", var->name);
+        }
+        else
+        {
+            static const DWORD invalid = HLSL_STORAGE_EXTERN | HLSL_STORAGE_SHARED
+                    | HLSL_STORAGE_GROUPSHARED | HLSL_STORAGE_UNIFORM;
+            if (var->modifiers & invalid)
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR, "modifiers '%s' are invalid for local variables",
+                        debug_modifiers(var->modifiers & invalid));
+
+            if (var->semantic)
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR, "semantics are not allowed on local variables");
         }
 
         if (type->modifiers & HLSL_MODIFIER_CONST
@@ -860,14 +833,13 @@ static struct list *declare_vars(struct hlsl_type *basic_type, DWORD modifiers, 
             continue;
         }
 
-        ret = declare_variable(var, local);
-        if (!ret)
+        if (!add_declaration(hlsl_ctx.cur_scope, var, local))
         {
-            free_declaration(var);
-            d3dcompiler_free(v);
-            continue;
+            struct hlsl_ir_var *old = get_variable(hlsl_ctx.cur_scope, var->name);
+
+            hlsl_report_message(var->loc, HLSL_LEVEL_ERROR, "\"%s\" already declared", var->name);
+            hlsl_report_message(old->loc, HLSL_LEVEL_NOTE, "\"%s\" was previously declared here", old->name);
         }
-        TRACE("Declared variable %s.\n", var->name);
 
         if (v->initializer.args_count)
         {
