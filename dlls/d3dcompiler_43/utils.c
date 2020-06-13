@@ -2097,8 +2097,6 @@ void debug_dump_ir_function_decl(const struct hlsl_ir_function_decl *func)
         debug_dump_ir_var(param);
         wine_dbg_printf("\n");
     }
-    if (func->semantic)
-        TRACE("Function semantic: %s\n", debugstr_a(func->semantic));
     if (func->body)
     {
         debug_dump_instr_list(func->body);
@@ -2227,7 +2225,6 @@ void free_instr(struct hlsl_ir_node *node)
 
 static void free_function_decl(struct hlsl_ir_function_decl *decl)
 {
-    d3dcompiler_free((void *)decl->semantic);
     d3dcompiler_free(decl->parameters);
     free_instr_list(decl->body);
     d3dcompiler_free(decl);

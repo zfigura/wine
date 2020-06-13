@@ -1276,7 +1276,6 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
         return NULL;
     decl->return_type = return_type;
     decl->parameters = parameters;
-    decl->semantic = semantic;
     decl->loc = loc;
 
     if (!type_is_void(return_type))
@@ -1290,8 +1289,11 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
             d3dcompiler_free(decl);
             return NULL;
         }
+        return_var->semantic = semantic;
         decl->return_var = return_var;
     }
+    else if (semantic)
+        hlsl_report_message(loc, HLSL_LEVEL_ERROR, "void function with a semantic");
 
     return decl;
 }
@@ -1514,12 +1516,6 @@ hlsl_prog:                /* empty */
                                                 debugstr_a($2.name));
                                         YYABORT;
                                     }
-                                }
-
-                                if (type_is_void($2.decl->return_type) && $2.decl->semantic)
-                                {
-                                    hlsl_report_message($2.decl->loc, HLSL_LEVEL_ERROR,
-                                            "void function with a semantic");
                                 }
 
                                 TRACE("Adding function '%s' to the function list.\n", $2.name);
@@ -3309,7 +3305,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     }
 
     if (!type_is_void(entry_func->return_type)
-            && entry_func->return_type->type != HLSL_CLASS_STRUCT && !entry_func->semantic)
+            && entry_func->return_type->type != HLSL_CLASS_STRUCT && !entry_func->return_var->semantic)
     {
         hlsl_report_message(entry_func->loc, HLSL_LEVEL_ERROR,
                 "entry point \"%s\" is missing a return value semantic", entry_func->func->name);

@@ -734,7 +734,6 @@ struct hlsl_ir_function_decl
     struct source_location loc;
     struct wine_rb_entry entry;
     struct hlsl_ir_function *func;
-    const char *semantic;
     struct list *parameters;
     struct list *body;
 };
