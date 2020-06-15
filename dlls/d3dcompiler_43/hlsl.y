@@ -3195,7 +3195,8 @@ static void prepend_uniform_copy(struct list *instrs, struct hlsl_ir_var *var)
     struct hlsl_ir_load *load;
     char name[28];
 
-    if (!(const_var = new_var(var->name, var->data_type, var->loc, NULL, var->modifiers, var->reg_reservation)))
+    if (!(const_var = new_var(var->name, var->data_type, var->loc, NULL,
+            var->modifiers & ~HLSL_STORAGE_IN, var->reg_reservation)))
     {
         hlsl_ctx.status = PARSE_ERR;
         return;
