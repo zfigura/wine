@@ -911,10 +911,10 @@ static void test_struct_semantics(void)
     draw_quad(test_context.device, ps_code);
 
     v = get_color_vec4(test_context.device, 64, 48);
-    todo_wine ok(compare_vec4(&v, 0.1f, 0.1f, 0.0f, 0.0f, 4096),
+    ok(compare_vec4(&v, 0.1f, 0.1f, 0.0f, 0.0f, 4096),
             "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
     v = get_color_vec4(test_context.device, 320, 240);
-    todo_wine ok(compare_vec4(&v, 0.5f, 0.5f, 0.0f, 0.0f, 4096),
+    ok(compare_vec4(&v, 0.5f, 0.5f, 0.0f, 0.0f, 4096),
             "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
     ID3D10Blob_Release(ps_code);

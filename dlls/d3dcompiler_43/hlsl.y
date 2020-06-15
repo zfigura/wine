@@ -4386,6 +4386,48 @@ static void write_sm1_instructions(struct bytecode_buffer *buffer, const struct 
                 write_sm1_instruction(buffer, &sm1_instr);
                 break;
             }
+            case HLSL_IR_LOAD:
+            {
+                const struct hlsl_ir_load *load = load_from_node(instr);
+                const struct hlsl_reg reg = hlsl_reg_from_deref(&load->src, instr->data_type);
+                struct sm1_instruction sm1_instr =
+                {
+                    .opcode = D3DSIO_MOV,
+
+                    .dst.type = D3DSPR_TEMP,
+                    .dst.reg = instr->reg.reg,
+                    .dst.writemask = instr->reg.writemask,
+                    .has_dst = 1,
+
+                    .srcs[0].type = D3DSPR_TEMP,
+                    .srcs[0].reg = reg.reg,
+                    .srcs[0].swizzle = swizzle_from_writemask(reg.writemask),
+                    .src_count = 1,
+                };
+
+                assert(instr->reg.allocated);
+
+                if (load->src.var->modifiers & HLSL_STORAGE_UNIFORM)
+                {
+                    assert(reg.allocated);
+                    sm1_instr.srcs[0].type = D3DSPR_CONST;
+                }
+                else if (load->src.var->modifiers & HLSL_STORAGE_IN)
+                {
+                    if (!sm1_register_from_semantic(load->src.var->semantic,
+                            FALSE, &sm1_instr.srcs[0].type, &sm1_instr.srcs[0].reg))
+                    {
+                        assert(reg.allocated);
+                        sm1_instr.srcs[0].type = D3DSPR_INPUT;
+                        sm1_instr.srcs[0].reg = reg.reg;
+                    }
+                    else
+                        sm1_instr.srcs[0].swizzle = swizzle_from_writemask((1 << load->src.var->data_type->dimx) - 1);
+                }
+
+                write_sm1_instruction(buffer, &sm1_instr);
+                break;
+            }
             default:
                 FIXME("Unhandled instruction type %s.\n", debug_node_type(instr->type));
         }
