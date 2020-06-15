@@ -3830,6 +3830,17 @@ static unsigned int combine_writemasks(unsigned int first, unsigned int second)
     return ret;
 }
 
+static unsigned int combine_swizzles(unsigned int first, unsigned int second, unsigned int dim)
+{
+    unsigned int ret = 0, i;
+    for (i = 0; i < dim; ++i)
+    {
+        unsigned int s = (second >> (i * 2)) & 3;
+        ret |= ((first >> (s * 2)) & 3) << (i * 2);
+    }
+    return ret;
+}
+
 static struct hlsl_reg hlsl_reg_from_deref(const struct hlsl_deref *deref, const struct hlsl_type *type)
 {
     struct hlsl_ir_node *offset_node = deref->offset.node;
@@ -4448,6 +4459,32 @@ static void write_sm1_instructions(struct bytecode_buffer *buffer, const struct 
                         sm1_instr.srcs[0].swizzle = swizzle_from_writemask((1 << load->src.var->data_type->dimx) - 1);
                 }
 
+                write_sm1_instruction(buffer, &sm1_instr);
+                break;
+            }
+            case HLSL_IR_SWIZZLE:
+            {
+                const struct hlsl_ir_swizzle *swizzle = swizzle_from_node(instr);
+                const struct hlsl_ir_node *val = swizzle->val.node;
+
+                struct sm1_instruction sm1_instr =
+                {
+                    .opcode = D3DSIO_MOV,
+
+                    .dst.type = D3DSPR_TEMP,
+                    .dst.reg = instr->reg.reg,
+                    .dst.writemask = instr->reg.writemask,
+                    .has_dst = 1,
+
+                    .srcs[0].type = D3DSPR_TEMP,
+                    .srcs[0].reg = val->reg.reg,
+                    .srcs[0].swizzle = combine_swizzles(swizzle_from_writemask(val->reg.writemask),
+                            swizzle->swizzle, instr->data_type->dimx),
+                    .src_count = 1,
+                };
+
+                assert(instr->reg.allocated);
+                assert(val->reg.allocated);
                 write_sm1_instruction(buffer, &sm1_instr);
                 break;
             }

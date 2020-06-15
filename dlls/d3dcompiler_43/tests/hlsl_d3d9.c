@@ -404,7 +404,7 @@ static void test_swizzle(void)
         draw_quad(device, ps_code);
 
         v = get_color_vec4(device, 0, 0);
-        todo_wine_if (i != 3 && i != 4)
+        todo_wine_if (i != 0 && i != 3 && i != 4)
             ok(compare_vec4(&v, tests[i].color.x, tests[i].color.y, tests[i].color.z, tests[i].color.w, 0),
                     "Test %u: Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", i, v.x, v.y, v.z, v.w);
 
