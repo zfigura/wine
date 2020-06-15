@@ -724,7 +724,8 @@ struct hlsl_ir_var
     const char *semantic;
     unsigned int modifiers;
     const struct reg_reservation *reg_reservation;
-    struct list scope_entry, param_entry;
+    struct list scope_entry, param_entry, extern_entry;
+    BOOL is_param;
 
     unsigned int first_write, last_read;
     struct hlsl_reg reg;
@@ -990,6 +991,7 @@ struct hlsl_parse_ctx
     struct hlsl_scope *cur_scope;
     struct hlsl_scope *globals;
     struct list scopes;
+    struct list extern_vars; /* For varyings and uniforms. */
 
     struct list types;
     struct wine_rb_tree functions;

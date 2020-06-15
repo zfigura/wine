@@ -1110,6 +1110,7 @@ static BOOL add_func_parameter(struct list *list, struct parse_parameter *param,
 
     if (!(var = new_var(param->name, param->type, loc, param->semantic, param->modifiers, param->reg_reservation)))
         return FALSE;
+    var->is_param = TRUE;
 
     if (!add_declaration(hlsl_ctx.cur_scope, var, FALSE))
     {
@@ -3170,7 +3171,7 @@ static void compute_liveness(struct hlsl_ir_function_decl *entry_func)
             var->first_write = var->last_read = 0;
     }
 
-    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
         if (var->modifiers & (HLSL_STORAGE_IN | HLSL_STORAGE_UNIFORM))
             var->first_write = 1;
@@ -3199,7 +3200,9 @@ static void prepend_uniform_copy(struct list *instrs, struct hlsl_ir_var *var)
         hlsl_ctx.status = PARSE_ERR;
         return;
     }
-    list_add_head(&hlsl_ctx.globals->vars, &const_var->scope_entry);
+    const_var->is_param = var->is_param;
+    list_add_before(&var->scope_entry, &const_var->scope_entry);
+    list_add_tail(&hlsl_ctx.extern_vars, &const_var->extern_entry);
     var->modifiers &= ~(HLSL_STORAGE_UNIFORM | HLSL_STORAGE_IN);
     sprintf(name, "<temp-%.20s>", var->name);
     var->name = strdup(name);
@@ -3234,7 +3237,8 @@ static void prepend_input_copy(struct list *instrs, struct hlsl_ir_var *var,
         hlsl_ctx.status = PARSE_ERR;
         return;
     }
-    list_add_head(&hlsl_ctx.globals->vars, &varying->scope_entry);
+    list_add_before(&var->scope_entry, &varying->scope_entry);
+    list_add_tail(&hlsl_ctx.extern_vars, &varying->extern_entry);
 
     if (!(load = new_var_load(varying, var->loc)))
     {
@@ -3302,7 +3306,8 @@ static void append_output_copy(struct list *instrs, struct hlsl_ir_var *var,
         hlsl_ctx.status = PARSE_ERR;
         return;
     }
-    list_add_head(&hlsl_ctx.globals->vars, &varying->scope_entry);
+    list_add_before(&var->scope_entry, &varying->scope_entry);
+    list_add_tail(&hlsl_ctx.extern_vars, &varying->extern_entry);
 
     if (!(offset = new_uint_constant(field_offset * 4, var->loc)))
     {
@@ -3581,7 +3586,7 @@ static void allocate_const_registers(struct hlsl_ir_function_decl *entry_func)
     struct liveness_ctx ctx = {0};
     struct hlsl_ir_var *var;
 
-    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
         if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->last_read)
         {
@@ -3672,6 +3677,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     list_init(&hlsl_ctx.types);
     init_functions_tree(&hlsl_ctx.functions);
     list_init(&hlsl_ctx.static_initializers);
+    list_init(&hlsl_ctx.extern_vars);
 
     push_scope(&hlsl_ctx);
     hlsl_ctx.globals = hlsl_ctx.cur_scope;
@@ -3697,12 +3703,6 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
 
     list_move_head(entry_func->body, &hlsl_ctx.static_initializers);
 
-    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
-    {
-        if (var->modifiers & HLSL_STORAGE_UNIFORM)
-            prepend_uniform_copy(entry_func->body, var);
-    }
-
     LIST_FOR_EACH_ENTRY(var, entry_func->parameters, struct hlsl_ir_var, param_entry)
     {
         if (var->modifiers & HLSL_STORAGE_UNIFORM)
@@ -3714,6 +3714,12 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     }
     if (entry_func->return_var)
         append_output_var_copy(entry_func->body, entry_func->return_var);
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
+    {
+        if (var->modifiers & HLSL_STORAGE_UNIFORM)
+            prepend_uniform_copy(entry_func->body, var);
+    }
 
     transform_ir(fold_ident, entry_func->body, NULL);
     while (transform_ir(split_struct_copies, entry_func->body, NULL));
