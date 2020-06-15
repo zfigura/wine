@@ -4386,6 +4386,29 @@ static void write_sm1_instructions(struct bytecode_buffer *buffer, const struct 
                 write_sm1_instruction(buffer, &sm1_instr);
                 break;
             }
+            case HLSL_IR_CONSTANT:
+            {
+                const struct hlsl_ir_constant *constant = constant_from_node(instr);
+                struct sm1_instruction sm1_instr =
+                {
+                    .opcode = D3DSIO_MOV,
+
+                    .dst.type = D3DSPR_TEMP,
+                    .dst.reg = instr->reg.reg,
+                    .dst.writemask = instr->reg.writemask,
+                    .has_dst = 1,
+
+                    .srcs[0].type = D3DSPR_CONST,
+                    .srcs[0].reg = constant->reg.reg,
+                    .srcs[0].swizzle = swizzle_from_writemask(constant->reg.writemask),
+                    .src_count = 1,
+                };
+
+                assert(instr->reg.allocated);
+                assert(constant->reg.allocated);
+                write_sm1_instruction(buffer, &sm1_instr);
+                break;
+            }
             case HLSL_IR_LOAD:
             {
                 const struct hlsl_ir_load *load = load_from_node(instr);
