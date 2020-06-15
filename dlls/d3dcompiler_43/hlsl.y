@@ -3233,7 +3233,8 @@ static void prepend_input_copy(struct list *instrs, struct hlsl_ir_var *var,
     char name[29];
 
     sprintf(name, "<input-%.20s>", semantic);
-    if (!(varying = new_var(strdup(name), type, var->loc, strdup(semantic), var->modifiers, NULL)))
+    if (!(varying = new_var(strdup(name), type, var->loc, strdup(semantic),
+            var->modifiers & ~HLSL_STORAGE_OUT, NULL)))
     {
         hlsl_ctx.status = PARSE_ERR;
         return;
