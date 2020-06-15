@@ -3037,6 +3037,19 @@ static BOOL dce(struct hlsl_ir_node *instr, void *context)
             break;
 
         case HLSL_IR_ASSIGNMENT:
+        {
+            struct hlsl_ir_assignment *assignment = assignment_from_node(instr);
+            struct hlsl_ir_var *var = assignment->lhs.var;
+
+            if (var->last_read < instr->index)
+            {
+                list_remove(&instr->entry);
+                free_instr(instr);
+                return TRUE;
+            }
+            break;
+        }
+
         case HLSL_IR_IF:
         case HLSL_IR_JUMP:
         case HLSL_IR_LOOP:
@@ -3145,15 +3158,19 @@ static void compute_liveness_recurse(struct list *instrs, unsigned int loop_firs
 
 static void compute_liveness(struct hlsl_ir_function_decl *entry_func)
 {
+    struct hlsl_scope *scope;
     struct hlsl_ir_var *var;
 
-    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
+    /* Index 0 means unused; index 1 means function entry, so start at 2. */
+    index_instructions(entry_func->body, 2);
+
+    LIST_FOR_EACH_ENTRY(scope, &hlsl_ctx.scopes, struct hlsl_scope, entry)
     {
-        if (var->modifiers & HLSL_STORAGE_UNIFORM)
-            var->first_write = 1;
+        LIST_FOR_EACH_ENTRY(var, &scope->vars, struct hlsl_ir_var, scope_entry)
+            var->first_write = var->last_read = 0;
     }
 
-    LIST_FOR_EACH_ENTRY(var, entry_func->parameters, struct hlsl_ir_var, param_entry)
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
     {
         if (var->modifiers & (HLSL_STORAGE_IN | HLSL_STORAGE_UNIFORM))
             var->first_write = 1;
@@ -3701,10 +3718,12 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     transform_ir(fold_ident, entry_func->body, NULL);
     while (transform_ir(split_struct_copies, entry_func->body, NULL));
     while (transform_ir(fold_constants, entry_func->body, NULL));
+
+    do
+        compute_liveness(entry_func);
     while (transform_ir(dce, entry_func->body, NULL));
 
-    /* Index 0 means unused; index 1 means function entry, so start at 2. */
-    index_instructions(entry_func->body, 2);
+    compute_liveness(entry_func);
 
     if (TRACE_ON(hlsl_parser))
     {
@@ -3712,7 +3731,6 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         wine_rb_for_each_entry(&hlsl_ctx.functions, dump_function, NULL);
     }
 
-    compute_liveness(entry_func);
     allocate_temp_registers(entry_func);
     allocate_const_registers(entry_func);
 
