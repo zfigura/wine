@@ -3303,7 +3303,8 @@ static void append_output_copy(struct list *instrs, struct hlsl_ir_var *var,
     char name[30];
 
     sprintf(name, "<output-%.20s>", semantic);
-    if (!(varying = new_var(strdup(name), type, var->loc, strdup(semantic), var->modifiers, NULL)))
+    if (!(varying = new_var(strdup(name), type, var->loc, strdup(semantic),
+            var->modifiers & ~HLSL_STORAGE_IN, NULL)))
     {
         hlsl_ctx.status = PARSE_ERR;
         return;
