@@ -4045,6 +4045,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     {
         hlsl_report_message(entry_func->loc, HLSL_LEVEL_ERROR,
                 "entry point \"%s\" is missing a return value semantic", entry_func->func->name);
+        goto out;
     }
 
     list_move_head(entry_func->body, &hlsl_ctx.static_initializers);
