@@ -4045,6 +4045,12 @@ static DWORD sm1_encode_register_type(D3DSHADER_PARAM_REGISTER_TYPE type)
             | ((type << D3DSP_REGTYPE_SHIFT2) & D3DSP_REGTYPE_MASK2);
 }
 
+static DWORD sm1_encode_dst(D3DSHADER_PARAM_REGISTER_TYPE type,
+        D3DSHADER_PARAM_DSTMOD_TYPE modifier, DWORD writemask, unsigned int reg)
+{
+    return (1u << 31) | sm1_encode_register_type(type) | modifier | (writemask << 16) | reg;
+}
+
 static void write_sm1_constant_defs(struct bytecode_buffer *buffer, struct constant_defs *defs)
 {
     unsigned int i, x;
@@ -4075,6 +4081,109 @@ static void write_sm1_constant_defs(struct bytecode_buffer *buffer, struct const
     }
 }
 
+static BOOL sm1_usage_from_semantic(const char *semantic, D3DDECLUSAGE *usage, unsigned int *usage_idx)
+{
+    static const struct
+    {
+        const char *name;
+        D3DDECLUSAGE usage;
+    }
+    semantics[] =
+    {
+        {"binormal",        D3DDECLUSAGE_BINORMAL},
+        {"blendindices",    D3DDECLUSAGE_BLENDINDICES},
+        {"blendweight",     D3DDECLUSAGE_BLENDWEIGHT},
+        {"color",           D3DDECLUSAGE_COLOR},
+        {"depth",           D3DDECLUSAGE_DEPTH},
+        {"fog",             D3DDECLUSAGE_FOG},
+        {"normal",          D3DDECLUSAGE_NORMAL},
+        {"position",        D3DDECLUSAGE_POSITION},
+        {"positiont",       D3DDECLUSAGE_POSITIONT},
+        {"psize",           D3DDECLUSAGE_PSIZE},
+        {"sample",          D3DDECLUSAGE_SAMPLE},
+        {"sv_depth",        D3DDECLUSAGE_DEPTH},
+        {"sv_position",     D3DDECLUSAGE_POSITION},
+        {"sv_target",       D3DDECLUSAGE_COLOR},
+        {"tangent",         D3DDECLUSAGE_TANGENT},
+        {"tessfactor",      D3DDECLUSAGE_TESSFACTOR},
+        {"texcoord",        D3DDECLUSAGE_TEXCOORD},
+    };
+
+    unsigned int i;
+    const char *p;
+
+    for (p = semantic + strlen(semantic); p > semantic && isdigit(p[-1]); --p)
+        ;
+
+    for (i = 0; i < ARRAY_SIZE(semantics); ++i)
+    {
+        if (!strncasecmp(semantic, semantics[i].name, p - semantic))
+        {
+            *usage = semantics[i].usage;
+            *usage_idx = atoi(p);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static void write_sm1_varying_dcl(struct bytecode_buffer *buffer, const struct hlsl_ir_var *var, BOOL output)
+{
+    D3DSHADER_PARAM_REGISTER_TYPE type;
+    unsigned int usage_idx, reg_idx;
+    D3DDECLUSAGE usage;
+    DWORD token;
+
+    if (sm1_register_from_semantic(var->semantic, output, &type, &reg_idx))
+    {
+        usage = 0;
+        usage_idx = 0;
+    }
+    else
+    {
+        if (!sm1_usage_from_semantic(var->semantic, &usage, &usage_idx))
+        {
+            hlsl_report_message(var->loc, HLSL_LEVEL_ERROR, "invalid semantic '%s'", var->semantic);
+            return;
+        }
+        type = output ? D3DSPR_OUTPUT : D3DSPR_INPUT;
+        reg_idx = var->reg.reg;
+    }
+
+    token = D3DSIO_DCL;
+    if (hlsl_ctx.major_version > 1)
+        token |= 2 << D3DSI_INSTLENGTH_SHIFT;
+    put_dword(buffer, token);
+
+    token = (1u << 31);
+    token |= usage << D3DSP_DCL_USAGE_SHIFT;
+    token |= usage_idx << D3DSP_DCL_USAGEINDEX_SHIFT;
+    put_dword(buffer, token);
+    put_dword(buffer, sm1_encode_dst(type, D3DSPDM_NONE, (1 << var->data_type->dimx) - 1, reg_idx));
+}
+
+static void write_sm1_varying_dcls(struct bytecode_buffer *buffer)
+{
+    unsigned int storage_mask = 0;
+    struct hlsl_ir_var *var;
+
+    if (hlsl_ctx.shader_type == ST_PIXEL)
+        storage_mask = HLSL_STORAGE_IN;
+    else if (hlsl_ctx.shader_type == ST_VERTEX && hlsl_ctx.major_version == 3)
+        storage_mask = HLSL_STORAGE_IN | HLSL_STORAGE_OUT;
+    else if (hlsl_ctx.shader_type == ST_VERTEX && hlsl_ctx.major_version < 3)
+        storage_mask = HLSL_STORAGE_IN;
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        if ((var->modifiers & HLSL_STORAGE_IN) && (storage_mask & HLSL_STORAGE_IN))
+            write_sm1_varying_dcl(buffer, var, FALSE);
+        if ((var->modifiers & HLSL_STORAGE_OUT) && (storage_mask & HLSL_STORAGE_OUT))
+            write_sm1_varying_dcl(buffer, var, TRUE);
+    }
+}
+
 static HRESULT write_sm1_shader(struct hlsl_ir_function_decl *entry_func,
         struct constant_defs *constant_defs, ID3D10Blob **shader_blob)
 {
@@ -4086,6 +4195,7 @@ static HRESULT write_sm1_shader(struct hlsl_ir_function_decl *entry_func,
     write_sm1_uniforms(&buffer, entry_func);
 
     write_sm1_constant_defs(&buffer, constant_defs);
+    write_sm1_varying_dcls(&buffer);
 
     put_dword(&buffer, D3DSIO_END);
 
