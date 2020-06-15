@@ -3174,16 +3174,17 @@ static void prepend_uniform_copy(struct list *instrs, struct hlsl_ir_var *var)
     struct hlsl_ir_assignment *store;
     struct hlsl_ir_var *const_var;
     struct hlsl_ir_load *load;
-    char name[31];
+    char name[28];
 
-    sprintf(name, "<uniform-%.20s>", var->name);
-    if (!(const_var = new_var(strdup(name), var->data_type, var->loc, NULL, var->modifiers, var->reg_reservation)))
+    if (!(const_var = new_var(var->name, var->data_type, var->loc, NULL, var->modifiers, var->reg_reservation)))
     {
         hlsl_ctx.status = PARSE_ERR;
         return;
     }
     list_add_head(&hlsl_ctx.globals->vars, &const_var->scope_entry);
     var->modifiers &= ~(HLSL_STORAGE_UNIFORM | HLSL_STORAGE_IN);
+    sprintf(name, "<temp-%.20s>", var->name);
+    var->name = strdup(name);
 
     if (!(load = new_var_load(const_var, var->loc)))
     {
