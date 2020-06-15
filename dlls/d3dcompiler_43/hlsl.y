@@ -3560,6 +3560,22 @@ static void allocate_const_registers_recurse(struct list *instrs, struct livenes
 static void allocate_const_registers(struct hlsl_ir_function_decl *entry_func)
 {
     struct liveness_ctx ctx = {0};
+    struct hlsl_ir_var *var;
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
+    {
+        if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->last_read)
+        {
+            if (var->data_type->reg_size > 1)
+                var->reg = allocate_range(&ctx, 1, INT_MAX, var->data_type->reg_size);
+            else
+            {
+                var->reg = allocate_register(&ctx, 1, INT_MAX, 4);
+                var->reg.writemask = (1 << var->data_type->dimx) - 1;
+            }
+            TRACE("Allocated %s to %s.\n", debugstr_register('c', var->reg, var->data_type), var->name);
+        }
+    }
 
     allocate_const_registers_recurse(entry_func->body, &ctx);
 }
