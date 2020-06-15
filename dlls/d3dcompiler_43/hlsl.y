@@ -1295,6 +1295,7 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
             return NULL;
         }
         return_var->semantic = semantic;
+        return_var->modifiers |= HLSL_STORAGE_OUT;
         decl->return_var = return_var;
     }
     else if (semantic)
