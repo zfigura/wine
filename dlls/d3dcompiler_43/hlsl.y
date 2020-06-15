@@ -3673,6 +3673,108 @@ static struct constant_defs allocate_const_registers(struct hlsl_ir_function_dec
     return defs;
 }
 
+static BOOL sm1_register_from_semantic(const char *semantic, BOOL output,
+        D3DSHADER_PARAM_REGISTER_TYPE *type, unsigned int *reg)
+{
+    unsigned int i;
+    const char *p;
+
+    static const struct
+    {
+        const char *semantic;
+        BOOL output;
+        enum shader_type shader_type;
+        unsigned int major_version;
+        D3DSHADER_PARAM_REGISTER_TYPE type;
+        DWORD offset;
+    }
+    register_table[] =
+    {
+        {"color",       TRUE,  ST_PIXEL, 2, D3DSPR_COLOROUT},
+        {"depth",       TRUE,  ST_PIXEL, 2, D3DSPR_DEPTHOUT},
+        {"sv_depth",    TRUE,  ST_PIXEL, 2, D3DSPR_DEPTHOUT},
+        {"sv_target",   TRUE,  ST_PIXEL, 2, D3DSPR_COLOROUT},
+        {"color",       FALSE, ST_PIXEL, 2, D3DSPR_INPUT},
+        {"texcoord",    FALSE, ST_PIXEL, 2, D3DSPR_TEXTURE},
+
+        {"color",       TRUE,  ST_PIXEL, 3, D3DSPR_COLOROUT},
+        {"depth",       TRUE,  ST_PIXEL, 3, D3DSPR_DEPTHOUT},
+        {"sv_depth",    TRUE,  ST_PIXEL, 3, D3DSPR_DEPTHOUT},
+        {"sv_target",   TRUE,  ST_PIXEL, 3, D3DSPR_COLOROUT},
+        {"sv_position", FALSE, ST_PIXEL, 3, D3DSPR_MISCTYPE,    D3DSMO_POSITION},
+        {"vface",       FALSE, ST_PIXEL, 3, D3DSPR_MISCTYPE,    D3DSMO_FACE},
+        {"vpos",        FALSE, ST_PIXEL, 3, D3DSPR_MISCTYPE,    D3DSMO_POSITION},
+
+        {"color",       TRUE,  ST_VERTEX, 1, D3DSPR_ATTROUT},
+        {"fog",         TRUE,  ST_VERTEX, 1, D3DSPR_RASTOUT,     D3DSRO_FOG},
+        {"position",    TRUE,  ST_VERTEX, 1, D3DSPR_RASTOUT,     D3DSRO_POSITION},
+        {"psize",       TRUE,  ST_VERTEX, 1, D3DSPR_RASTOUT,     D3DSRO_POINT_SIZE},
+        {"sv_position", TRUE,  ST_VERTEX, 1, D3DSPR_RASTOUT,     D3DSRO_POSITION},
+        {"texcoord",    TRUE,  ST_VERTEX, 1, D3DSPR_TEXCRDOUT},
+
+        {"color",       TRUE,  ST_VERTEX, 2, D3DSPR_ATTROUT},
+        {"fog",         TRUE,  ST_VERTEX, 2, D3DSPR_RASTOUT,     D3DSRO_FOG},
+        {"position",    TRUE,  ST_VERTEX, 2, D3DSPR_RASTOUT,     D3DSRO_POSITION},
+        {"psize",       TRUE,  ST_VERTEX, 2, D3DSPR_RASTOUT,     D3DSRO_POINT_SIZE},
+        {"sv_position", TRUE,  ST_VERTEX, 2, D3DSPR_RASTOUT,     D3DSRO_POSITION},
+        {"texcoord",    TRUE,  ST_VERTEX, 2, D3DSPR_TEXCRDOUT},
+    };
+
+    for (p = semantic + strlen(semantic); p > semantic && isdigit(p[-1]); --p)
+        ;
+
+    for (i = 0; i < ARRAY_SIZE(register_table); ++i)
+    {
+        if (!strncasecmp(semantic, register_table[i].semantic, p - semantic)
+                && output == register_table[i].output
+                && hlsl_ctx.shader_type == register_table[i].shader_type
+                && hlsl_ctx.major_version == register_table[i].major_version)
+        {
+            *type = register_table[i].type;
+            if (register_table[i].type == D3DSPR_MISCTYPE || register_table[i].type == D3DSPR_RASTOUT)
+                *reg = register_table[i].offset;
+            else
+                *reg = atoi(p);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static void allocate_varying_register(struct hlsl_ir_var *var, unsigned int *counter, BOOL output)
+{
+    assert(var->semantic);
+
+    if (hlsl_ctx.major_version < 4)
+    {
+        D3DSHADER_PARAM_REGISTER_TYPE type;
+        unsigned int reg;
+
+        if (!sm1_register_from_semantic(var->semantic, output, &type, &reg))
+        {
+            var->reg.allocated = TRUE;
+            var->reg.reg = (*counter)++;
+            var->reg.writemask = (1 << var->data_type->dimx) - 1;
+            TRACE("Allocated %s to %s.\n", debugstr_register(output ? 'o' : 'v', var->reg, var->data_type), var->name);
+        }
+    }
+}
+
+static void allocate_varying_registers(void)
+{
+    unsigned int input_counter = 0, output_counter = 0;
+    struct hlsl_ir_var *var;
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        if ((var->modifiers & HLSL_STORAGE_IN) && var->last_read)
+            allocate_varying_register(var, &input_counter, FALSE);
+        if ((var->modifiers & HLSL_STORAGE_OUT) && var->first_write)
+            allocate_varying_register(var, &output_counter, TRUE);
+    }
+}
+
 struct bytecode_buffer
 {
     DWORD *data;
@@ -4085,6 +4187,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     }
 
     allocate_temp_registers(entry_func);
+    allocate_varying_registers();
 
     if (hlsl_ctx.status == PARSE_ERR)
         goto out;
