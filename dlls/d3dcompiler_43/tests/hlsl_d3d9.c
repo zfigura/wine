@@ -396,13 +396,10 @@ static void test_swizzle(void)
         if (i == 0)
         {
             hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
-            todo_wine ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
-            if (hr == S_OK)
-            {
-                hr = ID3DXConstantTable_SetVector(constants, device, "color", &color);
-                ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
-                ID3DXConstantTable_Release(constants);
-            }
+            ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
+            hr = ID3DXConstantTable_SetVector(constants, device, "color", &color);
+            ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+            ID3DXConstantTable_Release(constants);
         }
         draw_quad(device, ps_code);
 
@@ -441,23 +438,20 @@ static void test_math(void)
 
     ps_code = compile_shader(ps_source, "ps_2_0");
     hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
-    todo_wine ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
-    if (hr == S_OK)
-    {
-        hr = ID3DXConstantTable_SetFloat(constants, device, "$u", 2.5f);
-        ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
-        hr = ID3DXConstantTable_SetFloat(constants, device, "$v", 0.3f);
-        ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
-        hr = ID3DXConstantTable_SetFloat(constants, device, "$w", 0.2f);
-        ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
-        hr = ID3DXConstantTable_SetFloat(constants, device, "$x", 0.7f);
-        ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
-        hr = ID3DXConstantTable_SetFloat(constants, device, "$y", 0.1f);
-        ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
-        hr = ID3DXConstantTable_SetFloat(constants, device, "$z", 1.5f);
-        ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
-        ID3DXConstantTable_Release(constants);
-    }
+    ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetFloat(constants, device, "$u", 2.5f);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetFloat(constants, device, "$v", 0.3f);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetFloat(constants, device, "$w", 0.2f);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetFloat(constants, device, "$x", 0.7f);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetFloat(constants, device, "$y", 0.1f);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetFloat(constants, device, "$z", 1.5f);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    ID3DXConstantTable_Release(constants);
 
     draw_quad(device, ps_code);
 
@@ -1027,7 +1021,8 @@ static void check_constant_desc(const char *prefix, const D3DXCONSTANT_DESC *des
     ok(desc->Elements == expect->Elements, "%s: got Elements %u.\n", prefix, desc->Elements);
     ok(desc->StructMembers == expect->StructMembers, "%s: got StructMembers %u.\n", prefix, desc->StructMembers);
     ok(desc->Bytes == expect->Bytes, "%s: got Bytes %u.\n", prefix, desc->Bytes);
-    ok(!!desc->DefaultValue == nonzero_defaultvalue, "%s: got DefaultValue %p.\n", prefix, desc->DefaultValue);
+    todo_wine_if (nonzero_defaultvalue)
+        ok(!!desc->DefaultValue == nonzero_defaultvalue, "%s: got DefaultValue %p.\n", prefix, desc->DefaultValue);
 }
 
 static void test_constant_table(void)
@@ -1095,12 +1090,7 @@ static void test_constant_table(void)
 
     ps_code = compile_shader(source, "ps_2_0");
     hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
-    todo_wine ok(hr == D3D_OK, "Got hr %#x.\n", hr);
-    if (hr != D3D_OK)
-    {
-        ID3D10Blob_Release(ps_code);
-        return;
-    }
+    ok(hr == D3D_OK, "Got hr %#x.\n", hr);
 
     hr = ID3DXConstantTable_GetDesc(constants, &table_desc);
     ok(hr == D3D_OK, "Got hr %#x.\n", hr);

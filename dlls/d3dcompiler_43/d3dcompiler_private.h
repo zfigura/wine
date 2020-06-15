@@ -33,15 +33,9 @@
 #include "objbase.h"
 
 #include "d3dcompiler.h"
+#include "d3dx9shader.h"
 
 #include <assert.h>
-
-/*
- * This doesn't belong here, but for some functions it is possible to return that value,
- * see http://msdn.microsoft.com/en-us/library/bb205278%28v=VS.85%29.aspx
- * The original definition is in D3DX10core.h.
- */
-#define D3DERR_INVALIDCALL 0x8876086c
 
 /* TRACE helper functions */
 const char *debug_d3dcompiler_d3d_blob_part(D3D_BLOB_PART part) DECLSPEC_HIDDEN;
@@ -617,7 +611,6 @@ struct hlsl_type
     unsigned int modifiers;
     unsigned int dimx;
     unsigned int dimy;
-    unsigned int reg_size;
     union
     {
         struct list *elements;
@@ -627,6 +620,9 @@ struct hlsl_type
             unsigned int elements_count;
         } array;
     } e;
+
+    unsigned int reg_size;
+    unsigned int bytecode_offset;
 };
 
 struct source_location
@@ -644,7 +640,9 @@ struct hlsl_struct_field
     const char *name;
     const char *semantic;
     DWORD modifiers;
+
     unsigned int reg_offset;
+    unsigned int name_offset;
 };
 
 struct hlsl_reg
