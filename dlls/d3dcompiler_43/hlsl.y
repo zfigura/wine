@@ -2866,9 +2866,24 @@ static void replace_node(struct hlsl_ir_node *old, struct hlsl_ir_node *new)
         hlsl_src_remove(src);
         hlsl_src_from_node(src, new);
     }
-    list_add_before(&old->entry, &new->entry);
     list_remove(&old->entry);
     free_instr(old);
+}
+
+static BOOL fold_ident(struct hlsl_ir_node *instr, void *context)
+{
+    if (instr->type == HLSL_IR_EXPR)
+    {
+        struct hlsl_ir_expr *expr = expr_from_node(instr);
+
+        if (expr->op == HLSL_IR_UNOP_IDENT)
+        {
+            replace_node(&expr->node, expr->operands[0].node);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
 }
 
 static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
@@ -2929,6 +2944,7 @@ static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
             return FALSE;
     }
 
+    list_add_before(&expr->node.entry, &res->node.entry);
     replace_node(&expr->node, &res->node);
     return TRUE;
 }
@@ -3128,6 +3144,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
 
     list_move_head(entry_func->body, &hlsl_ctx.static_initializers);
 
+    transform_ir(fold_ident, entry_func->body, NULL);
     while (transform_ir(fold_constants, entry_func->body, NULL));
     while (transform_ir(dce, entry_func->body, NULL));
 
