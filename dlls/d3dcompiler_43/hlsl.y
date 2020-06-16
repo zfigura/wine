@@ -4455,6 +4455,10 @@ static void write_sm1_instructions(struct bytecode_buffer *buffer, const struct 
                         write_sm1_binary_op(buffer, D3DSIO_ADD, &instr->reg, &arg1->reg, &arg2->reg);
                         break;
 
+                    case HLSL_IR_BINOP_MUL:
+                        write_sm1_binary_op(buffer, D3DSIO_MUL, &instr->reg, &arg1->reg, &arg2->reg);
+                        break;
+
                     default:
                         FIXME("Unhandled op %u.\n", expr->op);
                         break;
