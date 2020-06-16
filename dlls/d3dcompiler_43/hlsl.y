@@ -2507,76 +2507,70 @@ postfix_expr:             primary_expr
             $$ = append_unop($4.instrs, &load->node);
         }
 
-unary_expr:               postfix_expr
-                            {
-                                $$ = $1;
-                            }
-                        | OP_INC unary_expr
-                            {
-                                struct source_location loc;
+unary_expr:
 
-                                loc = get_location(&@1);
-                                if (node_from_list($2)->data_type->modifiers & HLSL_MODIFIER_CONST)
-                                {
-                                    hlsl_report_message(loc, HLSL_LEVEL_ERROR, "modifying a const expression");
-                                    YYABORT;
-                                }
-                                $$ = append_unop($2, new_unary_expr(HLSL_IR_UNOP_PREINC, node_from_list($2), loc));
-                            }
-                        | OP_DEC unary_expr
-                            {
-                                struct source_location loc;
+      postfix_expr
+    | OP_INC unary_expr
+        {
+            struct hlsl_ir_node *lhs = node_from_list($2);
+            struct hlsl_ir_constant *one;
 
-                                loc = get_location(&@1);
-                                if (node_from_list($2)->data_type->modifiers & HLSL_MODIFIER_CONST)
-                                {
-                                    hlsl_report_message(loc, HLSL_LEVEL_ERROR, "modifying a const expression");
-                                    YYABORT;
-                                }
-                                $$ = append_unop($2, new_unary_expr(HLSL_IR_UNOP_PREDEC, node_from_list($2), loc));
-                            }
-                        | unary_op unary_expr
-                            {
-                                enum hlsl_ir_expr_op ops[] = {0, HLSL_IR_UNOP_NEG,
-                                        HLSL_IR_UNOP_LOGIC_NOT, HLSL_IR_UNOP_BIT_NOT};
+            if (!(one = new_uint_constant(1, get_location(&@1))))
+                YYABORT;
+            list_add_tail($2, &one->node.entry);
+            if (!add_assignment($2, lhs, ASSIGN_OP_ADD, &one->node))
+                YYABORT;
+            $$ = $2;
+        }
+    | OP_DEC unary_expr
+        {
+            struct hlsl_ir_node *lhs = node_from_list($2);
+            struct hlsl_ir_constant *one;
 
-                                if ($1 == UNARY_OP_PLUS)
-                                {
-                                    $$ = $2;
-                                }
-                                else
-                                {
-                                    $$ = append_unop($2, new_unary_expr(ops[$1], node_from_list($2), get_location(&@1)));
-                                }
-                            }
-                          /* var_modifiers just to avoid shift/reduce conflicts */
-                        | '(' var_modifiers type array ')' unary_expr
-                            {
-                                struct hlsl_type *src_type = node_from_list($6)->data_type;
-                                struct hlsl_type *dst_type;
-                                struct source_location loc;
+            if (!(one = new_uint_constant(1, get_location(&@1))))
+                YYABORT;
+            list_add_tail($2, &one->node.entry);
+            if (!add_assignment($2, lhs, ASSIGN_OP_SUB, &one->node))
+                YYABORT;
+            $$ = $2;
+        }
+    | unary_op unary_expr
+        {
+            enum hlsl_ir_expr_op ops[] = {0, HLSL_IR_UNOP_NEG, HLSL_IR_UNOP_LOGIC_NOT, HLSL_IR_UNOP_BIT_NOT};
 
-                                loc = get_location(&@3);
-                                if ($2)
-                                {
-                                    hlsl_report_message(loc, HLSL_LEVEL_ERROR, "unexpected modifier in a cast");
-                                    YYABORT;
-                                }
+            if ($1 == UNARY_OP_PLUS)
+                $$ = $2;
+            else
+                $$ = append_unop($2, new_unary_expr(ops[$1], node_from_list($2), get_location(&@1)));
+        }
+      /* var_modifiers is necessary to avoid shift/reduce conflicts. */
+    | '(' var_modifiers type array ')' unary_expr
+        {
+            struct hlsl_type *src_type = node_from_list($6)->data_type;
+            struct hlsl_type *dst_type;
+            struct source_location loc;
 
-                                if ($4)
-                                    dst_type = new_array_type($3, $4);
-                                else
-                                    dst_type = $3;
+            loc = get_location(&@3);
+            if ($2)
+            {
+                hlsl_report_message(loc, HLSL_LEVEL_ERROR, "unexpected modifier in a cast");
+                YYABORT;
+            }
 
-                                if (!compatible_data_types(src_type, dst_type))
-                                {
-                                    hlsl_report_message(loc, HLSL_LEVEL_ERROR, "can't cast from %s to %s",
-                                            debug_hlsl_type(src_type), debug_hlsl_type(dst_type));
-                                    YYABORT;
-                                }
+            if ($4)
+                dst_type = new_array_type($3, $4);
+            else
+                dst_type = $3;
 
-                                $$ = append_unop($6, &new_cast(node_from_list($6), dst_type, &loc)->node);
-                            }
+            if (!compatible_data_types(src_type, dst_type))
+            {
+                hlsl_report_message(loc, HLSL_LEVEL_ERROR, "can't cast from %s to %s",
+                        debug_hlsl_type(src_type), debug_hlsl_type(dst_type));
+                YYABORT;
+            }
+
+            $$ = append_unop($6, &new_cast(node_from_list($6), dst_type, &loc)->node);
+        }
 
 unary_op:                 '+'
                             {
