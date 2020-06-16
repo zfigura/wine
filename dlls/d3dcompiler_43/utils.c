@@ -1451,6 +1451,9 @@ struct hlsl_ir_node *add_assignment(struct list *instrs, struct hlsl_ir_node *lh
     struct hlsl_ir_node *copy;
     DWORD writemask = 0;
 
+    if (lhs->data_type->modifiers & HLSL_MODIFIER_CONST)
+        hlsl_report_message(lhs->loc, HLSL_LEVEL_ERROR, "lvalue is constant");
+
     lhs_type = lhs->data_type;
     if (lhs_type->type <= HLSL_CLASS_LAST_NUMERIC)
     {

@@ -2729,11 +2729,6 @@ assignment_expr:
         {
             struct hlsl_ir_node *lhs = node_from_list($1), *rhs = node_from_list($3);
 
-            if (lhs->data_type->modifiers & HLSL_MODIFIER_CONST)
-            {
-                hlsl_report_message(get_location(&@2), HLSL_LEVEL_ERROR, "l-value is const");
-                YYABORT;
-            }
             list_move_tail($3, $1);
             d3dcompiler_free($1);
             if (!add_assignment($3, lhs, $2, rhs))
