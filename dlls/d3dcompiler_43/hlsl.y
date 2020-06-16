@@ -2975,7 +2975,7 @@ static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
 {
     struct hlsl_ir_constant *arg1, *arg2 = NULL, *res;
     struct hlsl_ir_expr *expr;
-    unsigned int i;
+    unsigned int i, dimx;
 
     if (instr->type != HLSL_IR_EXPR)
         return FALSE;
@@ -2989,6 +2989,7 @@ static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
     arg1 = constant_from_node(expr->operands[0].node);
     if (expr->operands[1].node)
         arg2 = constant_from_node(expr->operands[1].node);
+    dimx = instr->data_type->dimx;
 
     if (!(res = d3dcompiler_alloc(sizeof(*res))))
     {
@@ -2999,19 +3000,56 @@ static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
 
     switch (instr->data_type->base_type)
     {
-        case HLSL_TYPE_UINT:
+        case HLSL_TYPE_FLOAT:
         {
             unsigned int i;
 
             switch (expr->op)
             {
+                case HLSL_IR_UNOP_CAST:
+                    if (instr->data_type->dimx != arg1->node.data_type->dimx
+                            || instr->data_type->dimy != arg1->node.data_type->dimy)
+                    {
+                        FIXME("Cast from %s to %s.\n", debug_hlsl_type(arg1->node.data_type),
+                                debug_hlsl_type(instr->data_type));
+                        d3dcompiler_free(res);
+                        return FALSE;
+                    }
+
+                    switch (arg1->node.data_type->base_type)
+                    {
+                        case HLSL_TYPE_UINT:
+                            for (i = 0; i < dimx; ++i)
+                                res->value.f[i] = arg1->value.u[i];
+                            break;
+
+                        default:
+                            FIXME("Cast from %s to %s.\n", debug_hlsl_type(arg1->node.data_type),
+                                    debug_hlsl_type(instr->data_type));
+                            d3dcompiler_free(res);
+                            return FALSE;
+                    }
+                    break;
+
+                default:
+                    FIXME("Fold float expr %#x.\n", expr->op);
+                    d3dcompiler_free(res);
+                    return FALSE;
+            }
+            break;
+        }
+
+        case HLSL_TYPE_UINT:
+        {
+            switch (expr->op)
+            {
                 case HLSL_IR_BINOP_ADD:
-                    for (i = 0; i < instr->data_type->dimx; ++i)
+                    for (i = 0; i < dimx; ++i)
                         res->value.u[i] = arg1->value.u[i] + arg2->value.u[i];
                     break;
 
                 case HLSL_IR_BINOP_MUL:
-                    for (i = 0; i < instr->data_type->dimx; ++i)
+                    for (i = 0; i < dimx; ++i)
                         res->value.u[i] = arg1->value.u[i] * arg2->value.u[i];
                     break;
 
