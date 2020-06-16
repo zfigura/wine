@@ -870,7 +870,7 @@ static void test_struct_assignment(void)
     draw_quad(test_context.device, ps_code);
 
     v = get_color_vec4(test_context.device, 0, 0);
-    todo_wine ok(compare_vec4(&v, 0.6f, 0.3f, 0.7f, 0.9f, 1),
+    ok(compare_vec4(&v, 0.6f, 0.3f, 0.7f, 0.9f, 1),
             "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
     ID3D10Blob_Release(ps_code);
