@@ -4420,6 +4420,14 @@ static void write_sm1_instructions(struct bytecode_buffer *buffer, const struct 
                 write_sm1_instruction(buffer, &sm1_instr);
                 break;
             }
+            case HLSL_IR_JUMP:
+            {
+                const struct hlsl_ir_jump *jump = jump_from_node(instr);
+
+                if (jump->type != HLSL_IR_JUMP_RETURN)
+                    FIXME("Unhandled jump type %#x.\n", jump->type);
+                break;
+            }
             case HLSL_IR_LOAD:
             {
                 const struct hlsl_ir_load *load = load_from_node(instr);
