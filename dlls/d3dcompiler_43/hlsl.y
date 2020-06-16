@@ -4201,6 +4201,27 @@ static void write_sm1_instruction(struct bytecode_buffer *buffer, const struct s
                 map_swizzle(instr->srcs[i].swizzle, instr->dst.writemask), instr->srcs[i].reg));
 };
 
+static void write_sm1_unary_op(struct bytecode_buffer *buffer, D3DSHADER_INSTRUCTION_OPCODE_TYPE opcode,
+        const struct hlsl_reg *dst, const struct hlsl_reg *src, D3DSHADER_PARAM_SRCMOD_TYPE src_mod)
+{
+    const struct sm1_instruction instr =
+    {
+        .opcode = opcode,
+
+        .dst.type = D3DSPR_TEMP,
+        .dst.writemask = dst->writemask,
+        .dst.reg = dst->reg,
+        .has_dst = 1,
+
+        .srcs[0].type = D3DSPR_TEMP,
+        .srcs[0].swizzle = swizzle_from_writemask(src->writemask),
+        .srcs[0].reg = src->reg,
+        .srcs[0].mod = src_mod,
+        .src_count = 1,
+    };
+    write_sm1_instruction(buffer, &instr);
+}
+
 static void write_sm1_binary_op(struct bytecode_buffer *buffer, D3DSHADER_INSTRUCTION_OPCODE_TYPE opcode,
         const struct hlsl_reg *dst, const struct hlsl_reg *src1, const struct hlsl_reg *src2)
 {
@@ -4449,8 +4470,14 @@ static void write_sm1_instructions(struct bytecode_buffer *buffer, const struct 
                 struct hlsl_ir_node *arg1 = expr->operands[0].node;
                 struct hlsl_ir_node *arg2 = expr->operands[1].node;
 
+                assert(instr->reg.allocated);
+
                 switch (expr->op)
                 {
+                    case HLSL_IR_UNOP_NEG:
+                        write_sm1_unary_op(buffer, D3DSIO_MOV, &instr->reg, &arg1->reg, D3DSPSM_NEG);
+                        break;
+
                     case HLSL_IR_BINOP_ADD:
                         write_sm1_binary_op(buffer, D3DSIO_ADD, &instr->reg, &arg1->reg, &arg2->reg);
                         break;
