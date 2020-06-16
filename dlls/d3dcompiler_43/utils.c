@@ -1294,7 +1294,7 @@ static struct hlsl_type *expr_common_type(struct hlsl_type *t1, struct hlsl_type
         }
     }
 
-    if (type == HLSL_CLASS_SCALAR)
+    if (type == HLSL_CLASS_SCALAR || (type == HLSL_CLASS_VECTOR && dimx == 1))
         return hlsl_ctx.builtin_types.scalar[base];
     if (type == HLSL_CLASS_VECTOR)
         return hlsl_ctx.builtin_types.vector[base][dimx - 1];
@@ -1497,9 +1497,14 @@ struct hlsl_ir_node *add_assignment(struct list *instrs, struct hlsl_ir_node *lh
                 d3dcompiler_free(assign);
                 return NULL;
             }
-            assert(swizzle_type->type == HLSL_CLASS_VECTOR);
+            assert(swizzle_type->type == HLSL_CLASS_VECTOR || swizzle_type->type == HLSL_CLASS_SCALAR);
             if (swizzle_type->dimx != width)
-                swizzle->node.data_type = hlsl_ctx.builtin_types.vector[swizzle_type->base_type][width - 1];
+            {
+                if (width == 1)
+                    swizzle->node.data_type = hlsl_ctx.builtin_types.scalar[swizzle_type->base_type];
+                else
+                    swizzle->node.data_type = hlsl_ctx.builtin_types.vector[swizzle_type->base_type][width - 1];
+            }
             rhs = &swizzle->node;
         }
         else

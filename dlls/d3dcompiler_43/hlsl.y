@@ -415,11 +415,17 @@ static struct hlsl_ir_swizzle *new_swizzle(DWORD s, unsigned int components,
         struct hlsl_ir_node *val, struct source_location *loc)
 {
     struct hlsl_ir_swizzle *swizzle = d3dcompiler_alloc(sizeof(*swizzle));
+    struct hlsl_type *data_type;
 
     if (!swizzle)
         return NULL;
-    init_node(&swizzle->node, HLSL_IR_SWIZZLE,
-            new_hlsl_type(NULL, HLSL_CLASS_VECTOR, val->data_type->base_type, components, 1), *loc);
+
+    if (components == 1)
+        data_type = hlsl_ctx.builtin_types.scalar[val->data_type->base_type];
+    else
+        data_type = hlsl_ctx.builtin_types.vector[val->data_type->base_type][components - 1];
+
+    init_node(&swizzle->node, HLSL_IR_SWIZZLE, data_type, *loc);
     hlsl_src_from_node(&swizzle->val, val);
     swizzle->swizzle = s;
     return swizzle;
@@ -2486,6 +2492,7 @@ postfix_expr:             primary_expr
             for (i = 0; i < $4.args_count; ++i)
             {
                 struct hlsl_ir_node *arg = $4.args[i];
+                struct hlsl_type *data_type;
                 unsigned int width;
 
                 if (arg->data_type->type == HLSL_CLASS_OBJECT)
@@ -2502,8 +2509,12 @@ postfix_expr:             primary_expr
                     continue;
                 }
 
-                if (!(arg = add_implicit_conversion($4.instrs, arg,
-                        hlsl_ctx.builtin_types.vector[$2->base_type][width - 1], &arg->loc)))
+                if (width == 1)
+                    data_type = hlsl_ctx.builtin_types.scalar[$2->base_type];
+                else
+                    data_type = hlsl_ctx.builtin_types.vector[$2->base_type][width - 1];
+
+                if (!(arg = add_implicit_conversion($4.instrs, arg, data_type, &arg->loc)))
                     continue;
 
                 if (!(assignment = new_assignment(var, NULL, arg,
