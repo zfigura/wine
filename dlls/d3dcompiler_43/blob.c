@@ -451,7 +451,7 @@ void skip_dword_unknown(const char **ptr, unsigned int count)
     }
 }
 
-HRESULT dxbc_add_section(struct dxbc *dxbc, DWORD tag, const char *data, DWORD data_size)
+HRESULT dxbc_add_section(struct dxbc *dxbc, DWORD tag, const void *data, DWORD data_size)
 {
     TRACE("dxbc %p, tag %s, size %#x.\n", dxbc, debugstr_an((const char *)&tag, 4), data_size);
 

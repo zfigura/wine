@@ -4866,16 +4866,31 @@ static HRESULT write_sm1_shader(struct hlsl_ir_function_decl *entry_func,
     return hr;
 }
 
+static void write_sm4_shdr(struct dxbc *dxbc)
+{
+    struct bytecode_buffer buffer = {0};
+
+    put_dword(&buffer, (hlsl_ctx.shader_type << 16) | (hlsl_ctx.major_version << 4) | hlsl_ctx.minor_version);
+    put_dword(&buffer, 0); /* instruction token count */
+
+    dxbc_add_section(dxbc, TAG_SHDR, buffer.data, buffer.count * sizeof(DWORD));
+}
+
 static HRESULT write_sm4_shader(struct hlsl_ir_function_decl *entry_func, ID3D10Blob **shader_blob)
 {
     struct dxbc dxbc;
+    unsigned int i;
     HRESULT hr;
 
-    if (FAILED(hr = dxbc_init(&dxbc, 0)))
+    if (FAILED(hr = dxbc_init(&dxbc, 1)))
         return hr;
+
+    write_sm4_shdr(&dxbc);
 
     hr = dxbc_write_blob(&dxbc, shader_blob);
 
+    for (i = 0; i < dxbc.count; ++i)
+        d3dcompiler_free((void *)dxbc.sections[i].data);
     dxbc_destroy(&dxbc);
     return hr;
 }

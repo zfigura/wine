@@ -45,9 +45,13 @@ const char *debug_d3dcompiler_shader_variable_type(D3D_SHADER_VARIABLE_TYPE t) D
 
 enum shader_type
 {
-    ST_UNKNOWN,
+    ST_PIXEL,
     ST_VERTEX,
-    ST_PIXEL
+    ST_GEOMETRY,
+    ST_HULL,
+    ST_DOMAIN,
+    ST_COMPUTE,
+    ST_UNKNOWN,
 };
 
 enum bwriter_comparison_type
@@ -1203,7 +1207,7 @@ struct dxbc
 HRESULT dxbc_write_blob(struct dxbc *dxbc, ID3DBlob **blob) DECLSPEC_HIDDEN;
 void dxbc_destroy(struct dxbc *dxbc) DECLSPEC_HIDDEN;
 HRESULT dxbc_parse(const char *data, SIZE_T data_size, struct dxbc *dxbc) DECLSPEC_HIDDEN;
-HRESULT dxbc_add_section(struct dxbc *dxbc, DWORD tag, const char *data, DWORD data_size) DECLSPEC_HIDDEN;
+HRESULT dxbc_add_section(struct dxbc *dxbc, DWORD tag, const void *data, DWORD data_size) DECLSPEC_HIDDEN;
 HRESULT dxbc_init(struct dxbc *dxbc, unsigned int size) DECLSPEC_HIDDEN;
 
 static inline void read_dword(const char **ptr, DWORD *d)
