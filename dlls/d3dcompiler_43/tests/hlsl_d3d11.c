@@ -545,6 +545,7 @@ static void test_reflection(void)
 
     static const char vs_source[] =
         "typedef uint uint_t;\n"
+        "typedef float float_array_t[2];\n"
         "float m;\n"
         "\n"
         "cbuffer b1\n"
@@ -561,7 +562,7 @@ static void test_reflection(void)
         "    } s;\n"
         /* In direct contradiction to the documentation, this does not align. */
         "    bool g;\n"
-        "    float h[2];\n"
+        "    float_array_t h;\n"
         "    int i;\n"
         "    uint_t j;\n"
         "    float3x1 k;\n"
@@ -660,9 +661,7 @@ static void test_reflection(void)
     {
         cbuffer = reflection->lpVtbl->GetConstantBufferByIndex(reflection, i);
         hr = cbuffer->lpVtbl->GetDesc(cbuffer, &buffer_desc);
-        todo_wine ok(hr == S_OK, "Test %u: got hr %#x.\n", i, hr);
-        if (hr != S_OK)
-            break;
+        ok(hr == S_OK, "Test %u: got hr %#x.\n", i, hr);
         ok(!strcmp(buffer_desc.Name, vs_buffers[i].desc.Name),
                 "Test %u: got name %s.\n", i, debugstr_a(buffer_desc.Name));
         ok(buffer_desc.Type == vs_buffers[i].desc.Type, "Test %u: got type %#x.\n", i, buffer_desc.Type);
@@ -709,9 +708,7 @@ static void test_reflection(void)
         D3D11_SHADER_INPUT_BIND_DESC desc;
 
         hr = reflection->lpVtbl->GetResourceBindingDesc(reflection, i, &desc);
-        todo_wine ok(hr == S_OK, "Test %u: got hr %#x.\n", i, hr);
-        if (hr != S_OK)
-            break;
+        ok(hr == S_OK, "Test %u: got hr %#x.\n", i, hr);
         ok(!strcmp(desc.Name, vs_bindings[i].Name), "Test %u: got name %s.\n", i, debugstr_a(desc.Name));
         ok(desc.Type == vs_bindings[i].Type, "Test %u: got type %#x.\n", i, desc.Type);
         ok(desc.BindPoint == vs_bindings[i].BindPoint, "Test %u: got bind point %u.\n", i, desc.BindPoint);

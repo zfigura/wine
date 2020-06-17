@@ -4323,6 +4323,8 @@ static void write_sm1_type(struct bytecode_buffer *buffer, struct hlsl_type *typ
     put_dword(buffer, fields_offset);
 }
 
+static const char creator_string[] = "Wine 'Bazman' HLSL shader compiler";
+
 static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_function_decl *entry_func)
 {
     unsigned int ctab_start, vars_start;
@@ -4397,7 +4399,7 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
     }
 
     set_dword(buffer, ctab_start + 1, (buffer->count - ctab_start) * sizeof(DWORD));
-    put_string(buffer, "Wine 'Bazman' HLSL shader compiler");
+    put_string(buffer, creator_string);
 
     set_dword(buffer, ctab_start - 2, D3DSIO_COMMENT | ((buffer->count - (ctab_start - 1)) << 16));
 }
@@ -4866,6 +4868,297 @@ static HRESULT write_sm1_shader(struct hlsl_ir_function_decl *entry_func,
     return hr;
 }
 
+static D3D_SHADER_VARIABLE_CLASS sm4_class(const struct hlsl_type *type)
+{
+    /* Values of D3D_SHADER_VARIABLE_CLASS are compatible with D3DXPARAMETER_CLASS. */
+    return (D3D_SHADER_VARIABLE_CLASS)sm1_class(type);
+}
+
+static D3D_SHADER_VARIABLE_TYPE sm4_base_type(const struct hlsl_type *type)
+{
+    switch (type->base_type)
+    {
+        case HLSL_TYPE_BOOL:
+            return D3D_SVT_BOOL;
+        case HLSL_TYPE_FLOAT:
+        case HLSL_TYPE_HALF:
+            return D3D_SVT_FLOAT;
+        case HLSL_TYPE_INT:
+            return D3D_SVT_INT;
+        case HLSL_TYPE_PIXELSHADER:
+            return D3D_SVT_PIXELSHADER;
+        case HLSL_TYPE_SAMPLER:
+            switch (type->sampler_dim)
+            {
+                case HLSL_SAMPLER_DIM_1D:
+                    return D3D_SVT_SAMPLER1D;
+                case HLSL_SAMPLER_DIM_2D:
+                    return D3D_SVT_SAMPLER2D;
+                case HLSL_SAMPLER_DIM_3D:
+                    return D3D_SVT_SAMPLER3D;
+                case HLSL_SAMPLER_DIM_CUBE:
+                    return D3D_SVT_SAMPLERCUBE;
+                case HLSL_SAMPLER_DIM_GENERIC:
+                    return D3D_SVT_SAMPLER;
+                default:
+                    ERR("Invalid dimension %#x.\n", type->sampler_dim);
+            }
+            break;
+        case HLSL_TYPE_STRING:
+            return D3D_SVT_STRING;
+        case HLSL_TYPE_TEXTURE:
+            switch (type->sampler_dim)
+            {
+                case HLSL_SAMPLER_DIM_1D:
+                    return D3D_SVT_TEXTURE1D;
+                case HLSL_SAMPLER_DIM_2D:
+                    return D3D_SVT_TEXTURE2D;
+                case HLSL_SAMPLER_DIM_3D:
+                    return D3D_SVT_TEXTURE3D;
+                case HLSL_SAMPLER_DIM_CUBE:
+                    return D3D_SVT_TEXTURECUBE;
+                case HLSL_SAMPLER_DIM_GENERIC:
+                    return D3D_SVT_TEXTURE;
+                default:
+                    ERR("Invalid dimension %#x.\n", type->sampler_dim);
+            }
+            break;
+        case HLSL_TYPE_UINT:
+            return D3D_SVT_UINT;
+        case HLSL_TYPE_VERTEXSHADER:
+            return D3D_SVT_VERTEXSHADER;
+        case HLSL_TYPE_VOID:
+            return D3D_SVT_VOID;
+        default:
+            ERR("Invalid type %s.\n", debug_base_type(type));
+    }
+    assert(0);
+    return 0;
+}
+
+static void write_sm4_type(struct bytecode_buffer *buffer, struct hlsl_type *type)
+{
+    DWORD fields_offset = 0, field_count = 0, array_size = 0, name_offset = buffer->count;
+    const struct hlsl_type *array_type = get_array_type(type);
+    const char *name = array_type->name ? array_type->name : "<unnamed>";
+    struct hlsl_struct_field *field;
+
+    if (type->bytecode_offset)
+        return;
+
+    put_string(buffer, name);
+
+    if (type->type == HLSL_CLASS_ARRAY)
+        array_size = get_array_size(type);
+
+    if (array_type->type == HLSL_CLASS_STRUCT)
+    {
+        LIST_FOR_EACH_ENTRY(field, array_type->e.elements, struct hlsl_struct_field, entry)
+        {
+            field->name_offset = buffer->count;
+            put_string(buffer, field->name);
+            write_sm4_type(buffer, field->type);
+        }
+
+        fields_offset = buffer->count * sizeof(DWORD);
+
+        LIST_FOR_EACH_ENTRY(field, array_type->e.elements, struct hlsl_struct_field, entry)
+        {
+            put_dword(buffer, field->name_offset * sizeof(DWORD));
+            put_dword(buffer, field->type->bytecode_offset * sizeof(DWORD));
+            put_dword(buffer, field->reg_offset);
+            ++field_count;
+        }
+    }
+
+    type->bytecode_offset = buffer->count;
+    put_dword(buffer, sm4_class(type) | (sm4_base_type(type) << 16));
+    put_dword(buffer, type->dimy | (type->dimx << 16));
+    put_dword(buffer, array_size | (field_count << 16));
+    put_dword(buffer, fields_offset);
+
+    if (hlsl_ctx.major_version >= 5)
+    {
+        put_dword(buffer, 0); /* FIXME: unknown */
+        put_dword(buffer, 0); /* FIXME: unknown */
+        put_dword(buffer, 0); /* FIXME: unknown */
+        put_dword(buffer, 0); /* FIXME: unknown */
+        put_dword(buffer, name_offset * sizeof(DWORD));
+    }
+}
+
+static void write_sm4_rdef(struct dxbc *dxbc)
+{
+    const unsigned int var_size = (hlsl_ctx.major_version >= 5 ? 10 : 6);
+    unsigned int resource_start, cbuffer_start;
+    unsigned int cbuffer_count = 0, i, j;
+    struct bytecode_buffer buffer = {0};
+    const struct hlsl_buffer *cbuffer;
+
+    static const uint16_t target_types[] =
+    {
+        0xffff, /* ST_PIXEL */
+        0xfffe, /* ST_VERTEX */
+        0x4753, /* ST_GEOMETRY */
+        0x4853, /* ST_HULL */
+        0x4453, /* ST_DOMAIN */
+        0x4353, /* ST_COMPUTE */
+    };
+
+    LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        if (cbuffer->reg.allocated)
+            ++cbuffer_count;
+    }
+
+    put_dword(&buffer, cbuffer_count);
+    put_dword(&buffer, 0); /* cbuffer offset */
+    put_dword(&buffer, cbuffer_count); /* bound resource count */
+    put_dword(&buffer, 0); /* bound resource offset */
+    put_dword(&buffer, (target_types[hlsl_ctx.shader_type] << 16)
+            | (hlsl_ctx.major_version << 8) | hlsl_ctx.minor_version);
+    put_dword(&buffer, 0); /* FIXME: compilation flags */
+    put_dword(&buffer, 0); /* creator offset */
+
+    if (hlsl_ctx.major_version >= 5)
+    {
+        put_dword(&buffer, TAG_RD11);
+        put_dword(&buffer, 15 * sizeof(DWORD)); /* size of RDEF header including this header */
+        put_dword(&buffer, 6 * sizeof(DWORD)); /* size of buffer desc */
+        put_dword(&buffer, 8 * sizeof(DWORD)); /* size of binding desc */
+        put_dword(&buffer, 10 * sizeof(DWORD)); /* size of variable desc */
+        put_dword(&buffer, 9 * sizeof(DWORD)); /* size of type desc */
+        put_dword(&buffer, 3 * sizeof(DWORD)); /* size of member desc */
+        put_dword(&buffer, 0); /* unknown; possibly a null terminator */
+    }
+
+    /* Bound resources. */
+
+    resource_start = buffer.count;
+    LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        DWORD flags = 0;
+
+        if (!cbuffer->reg.allocated)
+            continue;
+
+        if (cbuffer->reg_reservation.type)
+            flags |= D3D_SIF_USERPACKED;
+
+        put_dword(&buffer, 0); /* name */
+        put_dword(&buffer, cbuffer->type == HLSL_BUFFER_CONSTANT ? D3D_SIT_CBUFFER : D3D_SIT_TBUFFER);
+        put_dword(&buffer, 0); /* return type */
+        put_dword(&buffer, 0); /* dimension */
+        put_dword(&buffer, 0); /* multisample count */
+        put_dword(&buffer, cbuffer->reg.reg); /* bind point */
+        put_dword(&buffer, 1); /* bind count */
+        put_dword(&buffer, flags); /* flags */
+    }
+
+    i = 0;
+    LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        if (!cbuffer->reg.allocated)
+            continue;
+
+        set_dword(&buffer, resource_start + i++ * 8, buffer.count * sizeof(DWORD));
+        put_string(&buffer, cbuffer->name);
+    }
+
+    /* Buffers. */
+
+    cbuffer_start = buffer.count;
+    LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        const struct hlsl_ir_var *var;
+        unsigned int var_count = 0;
+
+        if (!cbuffer->reg.allocated)
+            continue;
+
+        LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+        {
+            if (var->buffer == cbuffer && (var->modifiers & HLSL_STORAGE_UNIFORM))
+                ++var_count;
+        }
+
+        put_dword(&buffer, 0); /* name */
+        put_dword(&buffer, var_count);
+        put_dword(&buffer, 0); /* variable offset */
+        put_dword(&buffer, ((cbuffer->size + 3) & ~3) * 4);
+        put_dword(&buffer, 0); /* FIXME: flags */
+        put_dword(&buffer, cbuffer->type == HLSL_BUFFER_CONSTANT ? D3D_CT_CBUFFER : D3D_CT_TBUFFER);
+    }
+
+    i = 0;
+    LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        if (!cbuffer->reg.allocated)
+            continue;
+
+        set_dword(&buffer, cbuffer_start + i++ * 6, buffer.count * sizeof(DWORD));
+        put_string(&buffer, cbuffer->name);
+    }
+
+    i = 0;
+    LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        unsigned int vars_start = buffer.count;
+        const struct hlsl_ir_var *var;
+
+        if (!cbuffer->reg.allocated)
+            continue;
+
+        set_dword(&buffer, cbuffer_start + i++ * 6 + 2, buffer.count * sizeof(DWORD));
+
+        LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+        {
+            if (var->buffer == cbuffer && (var->modifiers & HLSL_STORAGE_UNIFORM))
+            {
+                DWORD flags = 0;
+
+                if (var->last_read)
+                    flags |= D3D_SVF_USED;
+
+                put_dword(&buffer, 0); /* name */
+                put_dword(&buffer, var->buffer_offset * 4);
+                put_dword(&buffer, var->data_type->reg_size * 4);
+                put_dword(&buffer, flags);
+                put_dword(&buffer, 0); /* type */
+                put_dword(&buffer, 0); /* FIXME: default value */
+
+                if (hlsl_ctx.major_version >= 5)
+                {
+                    put_dword(&buffer, 0); /* texture start */
+                    put_dword(&buffer, 0); /* texture count */
+                    put_dword(&buffer, 0); /* sampler start */
+                    put_dword(&buffer, 0); /* sampler count */
+                }
+            }
+        }
+
+        j = 0;
+        LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+        {
+            if (var->buffer == cbuffer && (var->modifiers & HLSL_STORAGE_UNIFORM))
+            {
+                set_dword(&buffer, vars_start + j * var_size, buffer.count * sizeof(DWORD));
+                put_string(&buffer, var->name);
+                write_sm4_type(&buffer, var->data_type);
+                set_dword(&buffer, vars_start + j * var_size + 4, var->data_type->bytecode_offset * sizeof(DWORD));
+                ++j;
+            }
+        }
+    }
+
+    set_dword(&buffer, 1, cbuffer_start * sizeof(DWORD));
+    set_dword(&buffer, 3, resource_start * sizeof(DWORD));
+    set_dword(&buffer, 6, buffer.count * sizeof(DWORD));
+    put_string(&buffer, creator_string);
+
+    dxbc_add_section(dxbc, TAG_RDEF, buffer.data, buffer.count * sizeof(DWORD));
+}
+
 static void write_sm4_shdr(struct dxbc *dxbc)
 {
     struct bytecode_buffer buffer = {0};
@@ -4882,9 +5175,10 @@ static HRESULT write_sm4_shader(struct hlsl_ir_function_decl *entry_func, ID3D10
     unsigned int i;
     HRESULT hr;
 
-    if (FAILED(hr = dxbc_init(&dxbc, 1)))
+    if (FAILED(hr = dxbc_init(&dxbc, 2)))
         return hr;
 
+    write_sm4_rdef(&dxbc);
     write_sm4_shdr(&dxbc);
 
     hr = dxbc_write_blob(&dxbc, shader_blob);

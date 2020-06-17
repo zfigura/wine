@@ -1182,6 +1182,7 @@ void free_function_rb(struct wine_rb_entry *entry, void *context) DECLSPEC_HIDDE
 #define TAG_OSGN MAKE_TAG('O', 'S', 'G', 'N')
 #define TAG_OSG5 MAKE_TAG('O', 'S', 'G', '5')
 #define TAG_PCSG MAKE_TAG('P', 'C', 'S', 'G')
+#define TAG_RD11 MAKE_TAG('R', 'D', '1', '1')
 #define TAG_RDEF MAKE_TAG('R', 'D', 'E', 'F')
 #define TAG_SDBG MAKE_TAG('S', 'D', 'B', 'G')
 #define TAG_SHDR MAKE_TAG('S', 'H', 'D', 'R')
