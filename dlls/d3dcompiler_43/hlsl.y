@@ -4866,6 +4866,20 @@ static HRESULT write_sm1_shader(struct hlsl_ir_function_decl *entry_func,
     return hr;
 }
 
+static HRESULT write_sm4_shader(struct hlsl_ir_function_decl *entry_func, ID3D10Blob **shader_blob)
+{
+    struct dxbc dxbc;
+    HRESULT hr;
+
+    if (FAILED(hr = dxbc_init(&dxbc, 0)))
+        return hr;
+
+    hr = dxbc_write_blob(&dxbc, shader_blob);
+
+    dxbc_destroy(&dxbc);
+    return hr;
+}
+
 HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
@@ -4982,7 +4996,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     else
     {
         allocate_buffers(entry_func);
-        hr = E_NOTIMPL;
+        hr = write_sm4_shader(entry_func, shader_blob);
     }
 
 out:

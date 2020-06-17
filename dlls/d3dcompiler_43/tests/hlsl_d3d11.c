@@ -295,7 +295,7 @@ static void draw_quad_(unsigned int line, struct test_context *context, ID3D10Bl
 
         hr = ID3D11Device_CreateVertexShader(device, ID3D10Blob_GetBufferPointer(vs_code),
                 ID3D10Blob_GetBufferSize(vs_code), NULL, &context->vs);
-        ok_(__FILE__, line)(hr == S_OK, "Failed to create vertex shader, hr %#x.\n", hr);
+        todo_wine ok_(__FILE__, line)(hr == S_OK, "Failed to create vertex shader, hr %#x.\n", hr);
     }
 
     if (!context->vb)
@@ -303,7 +303,9 @@ static void draw_quad_(unsigned int line, struct test_context *context, ID3D10Bl
 
     hr = ID3D11Device_CreatePixelShader(device, ID3D10Blob_GetBufferPointer(ps_code),
             ID3D10Blob_GetBufferSize(ps_code), NULL, &ps);
-    ok_(__FILE__, line)(hr == S_OK, "Failed to create pixel shader, hr %#x.\n", hr);
+    todo_wine ok_(__FILE__, line)(hr == S_OK, "Failed to create pixel shader, hr %#x.\n", hr);
+    if (hr != S_OK)
+        return;
 
     ID3D11DeviceContext_IASetInputLayout(context->immediate_context, context->input_layout);
     ID3D11DeviceContext_IASetPrimitiveTopology(context->immediate_context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
@@ -368,7 +370,7 @@ static void test_swizzle(void)
 {
     static const struct vec4 uniform = {0.0303f, 0.0f, 0.0f, 0.0202f};
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
+    ID3D10Blob *ps_code;
     ID3D11Buffer *cb;
     struct vec4 v;
 
@@ -385,20 +387,17 @@ static void test_swizzle(void)
     if (!init_test_context(&test_context))
         return;
 
-    todo_wine ps_code = compile_shader(ps_source, "ps_4_0");
-    if (ps_code)
-    {
-        cb = create_buffer(test_context.device, D3D11_BIND_CONSTANT_BUFFER, sizeof(uniform), &uniform);
-        ID3D11DeviceContext_PSSetConstantBuffers(test_context.immediate_context, 0, 1, &cb);
-        draw_quad(&test_context, ps_code);
+    ps_code = compile_shader(ps_source, "ps_4_0");
+    cb = create_buffer(test_context.device, D3D11_BIND_CONSTANT_BUFFER, sizeof(uniform), &uniform);
+    ID3D11DeviceContext_PSSetConstantBuffers(test_context.immediate_context, 0, 1, &cb);
+    draw_quad(&test_context, ps_code);
 
-        v = get_color_vec4(&test_context, 0, 0);
-        ok(compare_vec4(&v, 0.0101f, 0.0303f, 0.0202f, 0.0404f, 0),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(&test_context, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.0101f, 0.0303f, 0.0202f, 0.0404f, 0),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D11Buffer_Release(cb);
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D11Buffer_Release(cb);
+    ID3D10Blob_Release(ps_code);
     release_test_context(&test_context);
 }
 
@@ -406,7 +405,7 @@ static void test_math(void)
 {
     static const float uniforms[8] = {2.5f, 0.3f, 0.2f, 0.7f, 0.1f, 1.5f};
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
+    ID3D10Blob *ps_code;
     ID3D11Buffer *cb;
     struct vec4 v;
 
@@ -423,28 +422,25 @@ static void test_math(void)
     if (!init_test_context(&test_context))
         return;
 
-    todo_wine ps_code = compile_shader(ps_source, "ps_4_0");
-    if (ps_code)
-    {
-        cb = create_buffer(test_context.device, D3D11_BIND_CONSTANT_BUFFER, sizeof(uniforms), uniforms);
-        ID3D11DeviceContext_PSSetConstantBuffers(test_context.immediate_context, 0, 1, &cb);
-        draw_quad(&test_context, ps_code);
+    ps_code = compile_shader(ps_source, "ps_4_0");
+    cb = create_buffer(test_context.device, D3D11_BIND_CONSTANT_BUFFER, sizeof(uniforms), uniforms);
+    ID3D11DeviceContext_PSSetConstantBuffers(test_context.immediate_context, 0, 1, &cb);
+    draw_quad(&test_context, ps_code);
 
-        v = get_color_vec4(&test_context, 0, 0);
-        ok(compare_vec4(&v, -12.43f, 9.833333f, 1.6f, 35.0f, 1),
-                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+    v = get_color_vec4(&test_context, 0, 0);
+    todo_wine ok(compare_vec4(&v, -12.43f, 9.833333f, 1.6f, 35.0f, 1),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
-        ID3D11Buffer_Release(cb);
-        ID3D10Blob_Release(ps_code);
-    }
+    ID3D11Buffer_Release(cb);
+    ID3D10Blob_Release(ps_code);
     release_test_context(&test_context);
 }
 
 static void test_conditionals(void)
 {
     struct test_context test_context;
-    ID3D10Blob *ps_code = NULL;
     const struct vec4 *v;
+    ID3D10Blob *ps_code;
     struct readback rb;
     unsigned int i;
 
@@ -460,29 +456,26 @@ static void test_conditionals(void)
     if (!init_test_context(&test_context))
         return;
 
-    todo_wine ps_code = compile_shader(ps_source, "ps_4_0");
-    if (ps_code)
+    ps_code = compile_shader(ps_source, "ps_4_0");
+    draw_quad(&test_context, ps_code);
+    init_readback(&test_context, &rb);
+
+    for (i = 0; i < 200; i += 40)
     {
-        draw_quad(&test_context, ps_code);
-        init_readback(&test_context, &rb);
-
-        for (i = 0; i < 200; i += 40)
-        {
-            v = get_readback_vec4(&rb, i, 0);
-            ok(compare_vec4(v, 0.9f, 0.8f, 0.7f, 0.6f, 0),
-                    "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
-        }
-
-        for (i = 240; i < 640; i += 40)
-        {
-            v = get_readback_vec4(&rb, i, 0);
-            ok(compare_vec4(v, 0.1f, 0.2f, 0.3f, 0.4f, 0),
-                    "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
-        }
-
-        release_readback(&test_context, &rb);
-        ID3D10Blob_Release(ps_code);
+        v = get_readback_vec4(&rb, i, 0);
+        todo_wine ok(compare_vec4(v, 0.9f, 0.8f, 0.7f, 0.6f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
     }
+
+    for (i = 240; i < 640; i += 40)
+    {
+        v = get_readback_vec4(&rb, i, 0);
+        todo_wine ok(compare_vec4(v, 0.1f, 0.2f, 0.3f, 0.4f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v->x, v->y, v->z, v->w);
+    }
+
+    release_readback(&test_context, &rb);
+    ID3D10Blob_Release(ps_code);
     release_test_context(&test_context);
 }
 
@@ -545,8 +538,8 @@ static void test_reflection(void)
     D3D11_SHADER_VARIABLE_DESC var_desc;
     ID3D11ShaderReflection *reflection;
     D3D11_SHADER_TYPE_DESC type_desc;
-    ID3D10Blob *vs_code = NULL;
     unsigned int i, j, k;
+    ID3D10Blob *vs_code;
     ULONG refcount;
     HRESULT hr;
 
@@ -657,9 +650,7 @@ static void test_reflection(void)
         {"b5", D3D_SIT_CBUFFER, 5, 1, D3D_SIF_USERPACKED},
     };
 
-    todo_wine vs_code = compile_shader(vs_source, "vs_5_0");
-    if (!vs_code)
-        return;
+    vs_code = compile_shader(vs_source, "vs_5_0");
 
     hr = pD3DReflect(ID3D10Blob_GetBufferPointer(vs_code), ID3D10Blob_GetBufferSize(vs_code),
             &IID_ID3D11ShaderReflection, (void **)&reflection);
@@ -669,7 +660,9 @@ static void test_reflection(void)
     {
         cbuffer = reflection->lpVtbl->GetConstantBufferByIndex(reflection, i);
         hr = cbuffer->lpVtbl->GetDesc(cbuffer, &buffer_desc);
-        ok(hr == S_OK, "Test %u: got hr %#x.\n", i, hr);
+        todo_wine ok(hr == S_OK, "Test %u: got hr %#x.\n", i, hr);
+        if (hr != S_OK)
+            break;
         ok(!strcmp(buffer_desc.Name, vs_buffers[i].desc.Name),
                 "Test %u: got name %s.\n", i, debugstr_a(buffer_desc.Name));
         ok(buffer_desc.Type == vs_buffers[i].desc.Type, "Test %u: got type %#x.\n", i, buffer_desc.Type);
