@@ -1006,6 +1006,7 @@ struct hlsl_parse_ctx
     enum parse_status status;
     struct compilation_messages messages;
 
+    UINT compilation_flags;
     enum shader_type shader_type;
     unsigned int major_version, minor_version;
 
@@ -1157,7 +1158,7 @@ BOOL pop_scope(struct hlsl_parse_ctx *ctx) DECLSPEC_HIDDEN;
 void init_functions_tree(struct wine_rb_tree *funcs) DECLSPEC_HIDDEN;
 void add_function_decl(struct wine_rb_tree *funcs, char *name, struct hlsl_ir_function_decl *decl,
         BOOL intrinsic) DECLSPEC_HIDDEN;
-HRESULT parse_hlsl_shader(const char *text, enum shader_type type, DWORD major, DWORD minor,
+HRESULT parse_hlsl_shader(const char *text, enum shader_type type, DWORD major, DWORD minor, UINT sflags,
         const char *entrypoint, ID3D10Blob **shader, char **messages) DECLSPEC_HIDDEN;
 
 const char *debug_base_type(const struct hlsl_type *type) DECLSPEC_HIDDEN;

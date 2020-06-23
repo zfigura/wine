@@ -273,11 +273,11 @@ row_major               {return KW_ROW_MAJOR;           }
 
 %%
 
-HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
+HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
         const char *entrypoint, ID3D10Blob **shader, char **messages);
 
 HRESULT parse_hlsl_shader(const char *text, enum shader_type type, DWORD major, DWORD minor,
-        const char *entrypoint, ID3D10Blob **shader, char **messages)
+        UINT sflags, const char *entrypoint, ID3D10Blob **shader, char **messages)
 {
     YY_BUFFER_STATE buffer;
     HRESULT hr;
@@ -285,7 +285,7 @@ HRESULT parse_hlsl_shader(const char *text, enum shader_type type, DWORD major, 
     buffer = hlsl__scan_string(text);
     hlsl__switch_to_buffer(buffer);
 
-    hr = parse_hlsl(type, major, minor, entrypoint, shader, messages);
+    hr = parse_hlsl(type, major, minor, sflags, entrypoint, shader, messages);
 
     hlsl__delete_buffer(buffer);
     return hr;

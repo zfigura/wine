@@ -751,8 +751,8 @@ static const struct target_info * get_target_info(const char *target)
     return NULL;
 }
 
-static HRESULT compile_shader(const char *preproc_shader, const char *target, const char *entrypoint,
-        ID3DBlob **shader, ID3DBlob **error_messages)
+static HRESULT compile_shader(const char *preproc_shader, const char *target, UINT sflags,
+        const char *entrypoint, ID3DBlob **shader, ID3DBlob **error_messages)
 {
     DWORD size, major, minor;
     char *messages = NULL;
@@ -786,7 +786,7 @@ static HRESULT compile_shader(const char *preproc_shader, const char *target, co
         }
     }
 
-    hr = parse_hlsl_shader(preproc_shader, shader_type, major, minor, entrypoint, shader, &messages);
+    hr = parse_hlsl_shader(preproc_shader, shader_type, major, minor, sflags, entrypoint, shader, &messages);
 
     if (messages)
     {
@@ -854,7 +854,7 @@ HRESULT WINAPI D3DCompile2(const void *data, SIZE_T data_size, const char *filen
 
     hr = preprocess_shader(data, data_size, filename, defines, include, error_messages);
     if (SUCCEEDED(hr))
-        hr = compile_shader(wpp_output, target, entrypoint, shader, error_messages);
+        hr = compile_shader(wpp_output, target, sflags, entrypoint, shader, error_messages);
 
     HeapFree(GetProcessHeap(), 0, wpp_output);
     LeaveCriticalSection(&wpp_mutex);

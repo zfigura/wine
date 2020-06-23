@@ -5189,7 +5189,7 @@ static HRESULT write_sm4_shader(struct hlsl_ir_function_decl *entry_func, ID3D10
     return hr;
 }
 
-HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
+HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
         const char *entrypoint, ID3D10Blob **shader_blob, char **messages)
 {
     struct hlsl_ir_function_decl *entry_func;
@@ -5200,9 +5200,11 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
     HRESULT hr = E_FAIL;
     unsigned int i;
 
+    hlsl_ctx.compilation_flags = sflags;
     hlsl_ctx.shader_type = type;
     hlsl_ctx.major_version = major;
     hlsl_ctx.minor_version = minor;
+
     hlsl_ctx.status = PARSE_SUCCESS;
     hlsl_ctx.messages.size = hlsl_ctx.messages.capacity = 0;
     hlsl_ctx.line_no = hlsl_ctx.column = 1;
