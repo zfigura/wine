@@ -3882,8 +3882,87 @@ static BOOL sm1_register_from_semantic(const char *semantic, BOOL output,
     return FALSE;
 }
 
+enum sm4_register_type
+{
+    SM4_RT_TEMP                    = 0x00,
+    SM4_RT_INPUT                   = 0x01,
+    SM4_RT_OUTPUT                  = 0x02,
+    SM4_RT_INDEXABLE_TEMP          = 0x03,
+    SM4_RT_IMMCONST                = 0x04,
+    SM4_RT_SAMPLER                 = 0x06,
+    SM4_RT_RESOURCE                = 0x07,
+    SM4_RT_CONSTBUFFER             = 0x08,
+    SM4_RT_IMMCONSTBUFFER          = 0x09,
+    SM4_RT_PRIMID                  = 0x0b,
+    SM4_RT_DEPTHOUT                = 0x0c,
+    SM4_RT_NULL                    = 0x0d,
+    SM4_RT_RASTERIZER              = 0x0e,
+    SM4_RT_OMASK                   = 0x0f,
+    SM5_RT_STREAM                  = 0x10,
+    SM5_RT_FUNCTION_BODY           = 0x11,
+    SM5_RT_FUNCTION_POINTER        = 0x13,
+    SM5_RT_OUTPUT_CONTROL_POINT_ID = 0x16,
+    SM5_RT_FORK_INSTANCE_ID        = 0x17,
+    SM5_RT_JOIN_INSTANCE_ID        = 0x18,
+    SM5_RT_INPUT_CONTROL_POINT     = 0x19,
+    SM5_RT_OUTPUT_CONTROL_POINT    = 0x1a,
+    SM5_RT_PATCH_CONSTANT_DATA     = 0x1b,
+    SM5_RT_DOMAIN_LOCATION         = 0x1c,
+    SM5_RT_UAV                     = 0x1e,
+    SM5_RT_SHARED_MEMORY           = 0x1f,
+    SM5_RT_THREAD_ID               = 0x20,
+    SM5_RT_THREAD_GROUP_ID         = 0x21,
+    SM5_RT_LOCAL_THREAD_ID         = 0x22,
+    SM5_RT_COVERAGE                = 0x23,
+    SM5_RT_LOCAL_THREAD_INDEX      = 0x24,
+    SM5_RT_GS_INSTANCE_ID          = 0x25,
+    SM5_RT_DEPTHOUT_GREATER_EQUAL  = 0x26,
+    SM5_RT_DEPTHOUT_LESS_EQUAL     = 0x27,
+};
+
+static BOOL sm4_register_from_semantic(const char *semantic, BOOL output,
+        enum sm4_register_type *type, unsigned int *reg)
+{
+    unsigned int i;
+    const char *p;
+
+    static const struct
+    {
+        const char *semantic;
+        enum sm4_register_type type;
+        BOOL ps_out;
+    }
+    register_table[] =
+    {
+        {"color",       SM4_RT_OUTPUT,      TRUE},
+        {"depth",       SM4_RT_DEPTHOUT,    TRUE},
+        {"sv_depth",    SM4_RT_DEPTHOUT,    TRUE},
+        {"sv_target",   SM4_RT_OUTPUT,      TRUE},
+    };
+
+    for (p = semantic + strlen(semantic); p > semantic && isdigit(p[-1]); --p)
+        ;
+
+    for (i = 0; i < ARRAY_SIZE(register_table); ++i)
+    {
+        if (register_table[i].ps_out && (hlsl_ctx.shader_type != ST_PIXEL || !output))
+            continue;
+
+        if (!strncasecmp(semantic, register_table[i].semantic, p - semantic))
+        {
+            *type = register_table[i].type;
+            *reg = atoi(p);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 static void allocate_varying_register(struct hlsl_ir_var *var, unsigned int *counter, BOOL output)
 {
+    BOOL builtin;
+
     assert(var->semantic);
 
     if (hlsl_ctx.major_version < 4)
@@ -3891,13 +3970,25 @@ static void allocate_varying_register(struct hlsl_ir_var *var, unsigned int *cou
         D3DSHADER_PARAM_REGISTER_TYPE type;
         unsigned int reg;
 
-        if (!sm1_register_from_semantic(var->semantic, output, &type, &reg))
-        {
-            var->reg.allocated = TRUE;
-            var->reg.reg = (*counter)++;
-            var->reg.writemask = (1 << var->data_type->dimx) - 1;
-            TRACE("Allocated %s to %s.\n", debugstr_register(output ? 'o' : 'v', var->reg, var->data_type), var->name);
-        }
+        if ((!output && !var->last_read) || (output && !var->first_write))
+            return;
+
+        builtin = sm1_register_from_semantic(var->semantic, output, &type, &reg);
+    }
+    else
+    {
+        enum sm4_register_type type;
+        unsigned int reg;
+
+        builtin = sm4_register_from_semantic(var->semantic, output, &type, &reg);
+    }
+
+    if (!builtin)
+    {
+        var->reg.allocated = TRUE;
+        var->reg.reg = (*counter)++;
+        var->reg.writemask = (1 << var->data_type->dimx) - 1;
+        TRACE("Allocated %s to %s.\n", debugstr_register(output ? 'o' : 'v', var->reg, var->data_type), var->name);
     }
 }
 
@@ -3908,9 +3999,9 @@ static void allocate_varying_registers(void)
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
-        if ((var->modifiers & HLSL_STORAGE_IN) && var->last_read)
+        if (var->modifiers & HLSL_STORAGE_IN)
             allocate_varying_register(var, &input_counter, FALSE);
-        if ((var->modifiers & HLSL_STORAGE_OUT) && var->first_write)
+        if (var->modifiers & HLSL_STORAGE_OUT)
             allocate_varying_register(var, &output_counter, TRUE);
     }
 }
@@ -4167,21 +4258,27 @@ static void set_dword(struct bytecode_buffer *buffer, unsigned int index, DWORD 
     buffer->data[index] = value;
 }
 
-static void put_string(struct bytecode_buffer *buffer, const char *str)
+static void put_string_len(struct bytecode_buffer *buffer, const char *str, unsigned int len)
 {
-    unsigned int len = (strlen(str) + 1 + 3) / sizeof(DWORD);
+    DWORD size = (len + 1 + 3) / sizeof(DWORD);
 
     if (buffer->status)
         return;
 
-    if (!array_reserve((void **)&buffer->data, &buffer->size, buffer->count + len, sizeof(*buffer->data)))
+    if (!array_reserve((void **)&buffer->data, &buffer->size, buffer->count + size, sizeof(*buffer->data)))
     {
         buffer->status = E_OUTOFMEMORY;
         return;
     }
 
-    strcpy((char *)(buffer->data + buffer->count), str);
-    buffer->count += len;
+    memcpy((char *)(buffer->data + buffer->count), str, len);
+    ((char *)(buffer->data + buffer->count))[len] = 0;
+    buffer->count += size;
+}
+
+static void put_string(struct bytecode_buffer *buffer, const char *str)
+{
+    put_string_len(buffer, str, strlen(str));
 }
 
 static DWORD sm1_version(enum shader_type type, unsigned int major, unsigned int minor)
@@ -4868,6 +4965,163 @@ static HRESULT write_sm1_shader(struct hlsl_ir_function_decl *entry_func,
     return hr;
 }
 
+static BOOL sm4_usage_from_semantic(const char *semantic, unsigned int len, BOOL output, D3D_NAME *usage)
+{
+    static const struct
+    {
+        const char *name;
+        BOOL output;
+        enum shader_type shader_type;
+        D3DDECLUSAGE usage;
+    }
+    semantics[] =
+    {
+        {"color",                       TRUE,  ST_PIXEL,  D3D_NAME_TARGET},
+        {"depth",                       TRUE,  ST_PIXEL,  D3D_NAME_DEPTH},
+        {"sv_target",                   TRUE,  ST_PIXEL,  D3D_NAME_TARGET},
+        {"sv_depth",                    TRUE,  ST_PIXEL,  D3D_NAME_DEPTH},
+
+        {"position",                    FALSE, ST_PIXEL,  D3D_NAME_POSITION},
+        {"sv_position",                 FALSE, ST_PIXEL,  D3D_NAME_POSITION},
+
+        {"position",                    TRUE,  ST_VERTEX, D3D_NAME_POSITION},
+        {"sv_position",                 TRUE,  ST_VERTEX, D3D_NAME_POSITION},
+
+        {"sv_position",                 FALSE, ST_VERTEX, D3D_NAME_UNDEFINED},
+    };
+
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(semantics); ++i)
+    {
+        if (!strncasecmp(semantic, semantics[i].name, len)
+                && output == semantics[i].output
+                && hlsl_ctx.shader_type == semantics[i].shader_type
+                && ((hlsl_ctx.compilation_flags & D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY)
+                    || !strncasecmp(semantic, "sv_", 3)))
+        {
+            *usage = semantics[i].usage;
+            return TRUE;
+        }
+    }
+
+    if (!strncasecmp(semantic, "sv_", 3))
+        return FALSE;
+
+    *usage = D3D_NAME_UNDEFINED;
+    return TRUE;
+}
+
+static void write_sm4_signature(struct dxbc *dxbc, BOOL output)
+{
+    const unsigned int storage_mask = output ? HLSL_STORAGE_OUT : HLSL_STORAGE_IN;
+    struct bytecode_buffer buffer = {0};
+    const struct hlsl_ir_var *var;
+    unsigned int i;
+
+    put_dword(&buffer, 0); /* count */
+    put_dword(&buffer, 8); /* unknown */
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        unsigned int width = (1 << var->data_type->dimx) - 1, use_mask;
+        const char *semantic = var->semantic, *p;
+        unsigned int usage_idx, reg_idx;
+        enum sm4_register_type type;
+        D3D_NAME usage;
+
+        if (!(var->modifiers & storage_mask))
+            continue;
+
+        for (p = semantic + strlen(semantic); p > semantic && isdigit(p[-1]); --p)
+            ;
+
+        if (!sm4_usage_from_semantic(semantic, p - semantic, output, &usage))
+        {
+            hlsl_report_message(var->loc, HLSL_LEVEL_ERROR, "invalid semantic '%s'", var->semantic);
+            return;
+        }
+        usage_idx = atoi(p);
+
+        if (!sm4_register_from_semantic(semantic, output, &type, &reg_idx))
+        {
+            assert(var->reg.allocated);
+            type = SM4_RT_INPUT;
+            reg_idx = var->reg.reg;
+        }
+
+        use_mask = width; /* FIXME: accurately report use mask */
+        if (output)
+            use_mask = 0xf ^ use_mask;
+
+        if (hlsl_ctx.shader_type == ST_PIXEL && output)
+        {
+            if (usage != D3D_NAME_TARGET)
+                reg_idx = ~0u;
+            usage = 0;
+        }
+
+        put_dword(&buffer, 0); /* name */
+        put_dword(&buffer, usage_idx);
+        put_dword(&buffer, usage);
+        switch (var->data_type->base_type)
+        {
+            case HLSL_TYPE_FLOAT:
+            case HLSL_TYPE_HALF:
+                put_dword(&buffer, D3D_REGISTER_COMPONENT_FLOAT32);
+                break;
+
+            case HLSL_TYPE_INT:
+                put_dword(&buffer, D3D_REGISTER_COMPONENT_SINT32);
+                break;
+
+            case HLSL_TYPE_BOOL:
+            case HLSL_TYPE_UINT:
+                put_dword(&buffer, D3D_REGISTER_COMPONENT_UINT32);
+                break;
+
+            default:
+                FIXME("Unhandled data type %s.\n", debug_hlsl_type(var->data_type));
+                put_dword(&buffer, D3D_REGISTER_COMPONENT_UNKNOWN);
+        }
+        put_dword(&buffer, reg_idx);
+        put_dword(&buffer, width | (use_mask << 8));
+    }
+
+    i = 0;
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        const char *semantic = var->semantic, *p;
+        D3D_NAME usage;
+
+        if (!(var->modifiers & storage_mask))
+            continue;
+
+        for (p = semantic + strlen(semantic); p > semantic && isdigit(p[-1]); --p)
+            ;
+
+        set_dword(&buffer, 2 + i++ * 6, buffer.count * sizeof(DWORD));
+
+        if (sm4_usage_from_semantic(semantic, p - semantic, output, &usage))
+        {
+            if (usage == D3D_NAME_TARGET && !strncasecmp(semantic, "color", strlen("color")))
+                put_string(&buffer, "SV_Target");
+            else if (usage == D3D_NAME_DEPTH && !strncasecmp(semantic, "depth", strlen("depth")))
+                put_string(&buffer, "SV_Depth");
+            else if (usage == D3D_NAME_POSITION && !strncasecmp(semantic, "position", strlen("position")))
+                put_string(&buffer, "SV_Position");
+            else
+                put_string_len(&buffer, semantic, p - semantic);
+        }
+        else
+            put_string_len(&buffer, semantic, p - semantic);
+    }
+
+    set_dword(&buffer, 0, i);
+
+    dxbc_add_section(dxbc, output ? TAG_OSGN : TAG_ISGN, buffer.data, buffer.count * sizeof(DWORD));
+}
+
 static D3D_SHADER_VARIABLE_CLASS sm4_class(const struct hlsl_type *type)
 {
     /* Values of D3D_SHADER_VARIABLE_CLASS are compatible with D3DXPARAMETER_CLASS. */
@@ -5175,9 +5429,11 @@ static HRESULT write_sm4_shader(struct hlsl_ir_function_decl *entry_func, ID3D10
     unsigned int i;
     HRESULT hr;
 
-    if (FAILED(hr = dxbc_init(&dxbc, 2)))
+    if (FAILED(hr = dxbc_init(&dxbc, 4)))
         return hr;
 
+    write_sm4_signature(&dxbc, FALSE);
+    write_sm4_signature(&dxbc, TRUE);
     write_sm4_rdef(&dxbc);
     write_sm4_shdr(&dxbc);
 

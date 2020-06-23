@@ -890,9 +890,9 @@ static void test_semantic_reflection(void)
 
         hr = reflection->lpVtbl->GetDesc(reflection, &shader_desc);
         ok(hr == S_OK, "Test %u: got hr %#x.\n", i, hr);
-        todo_wine ok(shader_desc.InputParameters == tests[i].input_count,
+        ok(shader_desc.InputParameters == tests[i].input_count,
                 "Test %u: got %u input parameters.\n", i, shader_desc.InputParameters);
-        todo_wine ok(shader_desc.OutputParameters == tests[i].output_count,
+        ok(shader_desc.OutputParameters == tests[i].output_count,
                 "Test %u: got %u output parameters.\n", i, shader_desc.OutputParameters);
 
         for (j = 0; j < shader_desc.InputParameters; ++j)
