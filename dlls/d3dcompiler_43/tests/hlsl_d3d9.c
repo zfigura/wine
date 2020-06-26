@@ -1045,6 +1045,45 @@ static void test_duplicate_modifiers(void)
     release_test_context(&test_context);
 }
 
+static void test_function_overloads(void)
+{
+    struct test_context test_context;
+    ID3D10Blob *ps_code = NULL;
+    struct vec4 v;
+
+    static const char ps_source[] =
+        "float func(int arg)\n"
+        "{\n"
+        "    return 0.1;\n"
+        "}\n"
+        "float func(uint arg)\n"
+        "{\n"
+        "    return 0.2;\n"
+        "}\n"
+        "float4 main() : COLOR\n"
+        "{\n"
+        "    int i = 1;\n"
+        "    uint u = 1;\n"
+        "    return float4(func(i), func(u), func(int2(1, 1)), func(uint2(1, 1)));\n"
+        "}";
+
+    if (!init_test_context(&test_context))
+        return;
+
+    todo_wine ps_code = compile_shader(ps_source, "ps_2_0");
+    if (ps_code)
+    {
+        draw_quad(test_context.device, ps_code);
+
+        v = get_color_vec4(test_context.device, 0, 0);
+        ok(compare_vec4(&v, 0.1f, 0.2f, 0.1f, 0.2f, 0),
+                "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+
+        ID3D10Blob_Release(ps_code);
+    }
+    release_test_context(&test_context);
+}
+
 static void check_constant_desc(const char *prefix, const D3DXCONSTANT_DESC *desc,
         const D3DXCONSTANT_DESC *expect, BOOL nonzero_defaultvalue)
 {
@@ -1409,6 +1448,7 @@ START_TEST(hlsl_d3d9)
     test_global_initializer();
     test_const_initializer();
     test_duplicate_modifiers();
+    test_function_overloads();
 
     test_constant_table();
     test_fail();
