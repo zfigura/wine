@@ -5600,6 +5600,18 @@ enum sm4_opcode
     SM5_OP_DCL_GS_INSTANCES                 = 0xce,
 };
 
+enum sm4_interpolation
+{
+    SM4_INTERPOLATION_NONE = 0,
+    SM4_INTERPOLATION_CONSTANT = 1,
+    SM4_INTERPOLATION_LINEAR = 2,
+    SM4_INTERPOLATION_LINEAR_CENTROID = 3,
+    SM4_INTERPOLATION_LINEAR_NOPERSPECTIVE = 4,
+    SM4_INTERPOLATION_LINEAR_NOPERSPECTIVE_CENTROID = 5,
+    SM4_INTERPOLATION_LINEAR_SAMPLE = 6,
+    SM4_INTERPOLATION_LINEAR_NOPERSPECTIVE_SAMPLE = 7,
+};
+
 enum sm4_dimension
 {
     SM4_DIMENSION_NONE = 0,
@@ -5641,8 +5653,13 @@ static unsigned int sm4_idx_count(enum sm4_register_type type)
         case SM4_RT_CONSTBUFFER:
             return 2;
 
+        case SM4_RT_DEPTHOUT:
+            return 0;
+
         default:
             FIXME("Unhandled register type %#x.\n", type);
+        case SM4_RT_INPUT:
+        case SM4_RT_OUTPUT:
             return 1;
     }
 }
@@ -5661,6 +5678,7 @@ static unsigned int sm4_swizzle_type(enum sm4_register_type type)
         default:
             FIXME("Unhandled register type %#x.\n", type);
         case SM4_RT_CONSTBUFFER:
+        case SM4_RT_INPUT:
             return SM4_SWIZZLE_VEC4;
     }
 }
@@ -5746,10 +5764,48 @@ static void write_sm4_dcl_constant_buffer(struct bytecode_buffer *buffer,
     write_sm4_instruction(buffer, &instr);
 }
 
+static void write_sm4_dcl_varying(struct bytecode_buffer *buffer, enum sm4_opcode opcode,
+        enum sm4_register_type reg_type, unsigned int reg_idx, unsigned int writemask, D3D_NAME usage)
+{
+    struct sm4_instruction instr =
+    {
+        .opcode = opcode,
+
+        .dst.reg.dim = SM4_DIMENSION_VEC4,
+        .dst.reg.type = reg_type,
+        .dst.reg.idx = {reg_idx},
+        .dst.writemask = writemask,
+        .has_dst = 1,
+
+        .idx = {usage},
+    };
+
+    if (reg_type == SM4_RT_DEPTHOUT)
+        instr.dst.reg.dim = SM4_DIMENSION_SCALAR;
+
+    switch (usage)
+    {
+        case D3D_NAME_COVERAGE:
+        case D3D_NAME_DEPTH:
+        case D3D_NAME_DEPTH_GREATER_EQUAL:
+        case D3D_NAME_DEPTH_LESS_EQUAL:
+        case D3D_NAME_TARGET:
+        case D3D_NAME_UNDEFINED:
+            break;
+
+        default:
+            instr.idx_count = 1;
+            break;
+    }
+
+    write_sm4_instruction(buffer, &instr);
+}
+
 static void write_sm4_shdr(struct dxbc *dxbc)
 {
     struct bytecode_buffer buffer = {0};
     const struct hlsl_buffer *cbuffer;
+    const struct hlsl_ir_var *var;
 
     put_dword(&buffer, (hlsl_ctx.shader_type << 16) | (hlsl_ctx.major_version << 4) | hlsl_ctx.minor_version);
     put_dword(&buffer, 0); /* instruction token count */
@@ -5760,6 +5816,75 @@ static void write_sm4_shdr(struct dxbc *dxbc)
             continue;
 
         write_sm4_dcl_constant_buffer(&buffer, cbuffer->reg.reg, (cbuffer->used_size + 3) / 4);
+    }
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        const char *semantic = var->semantic, *p;
+        enum sm4_register_type reg_type;
+        unsigned int reg_idx, writemask;
+        enum sm4_opcode opcode;
+        D3D_NAME usage;
+
+        if (!(var->modifiers & (HLSL_STORAGE_IN | HLSL_STORAGE_OUT)))
+            continue;
+
+        if (((var->modifiers & HLSL_STORAGE_IN) && !var->last_read)
+                || (var->modifiers & HLSL_STORAGE_OUT && !var->first_write))
+            continue;
+
+        for (p = semantic + strlen(semantic); p > semantic && isdigit(p[-1]); --p)
+            ;
+
+        if (!sm4_register_from_semantic(semantic, !!(var->modifiers & HLSL_STORAGE_OUT), &reg_type, &reg_idx))
+        {
+            reg_type = (var->modifiers & HLSL_STORAGE_OUT) ? SM4_RT_OUTPUT : SM4_RT_INPUT;
+            reg_idx = var->reg.reg;
+            writemask = var->reg.writemask;
+        }
+        else
+        {
+            writemask = (1 << var->data_type->dimx) - 1;
+        }
+
+        sm4_usage_from_semantic(semantic, p - semantic, !!(var->modifiers & HLSL_STORAGE_OUT), &usage);
+
+        if (var->modifiers & HLSL_STORAGE_IN)
+        {
+            switch (usage)
+            {
+                case D3D_NAME_UNDEFINED:
+                    opcode = (hlsl_ctx.shader_type == ST_PIXEL) ? SM4_OP_DCL_INPUT_PS : SM4_OP_DCL_INPUT;
+                    break;
+
+                case D3D_NAME_INSTANCE_ID:
+                case D3D_NAME_PRIMITIVE_ID:
+                case D3D_NAME_VERTEX_ID:
+                    opcode = (hlsl_ctx.shader_type == ST_PIXEL) ? SM4_OP_DCL_INPUT_PS_SGV : SM4_OP_DCL_INPUT_SGV;
+                    break;
+
+                default:
+                    opcode = (hlsl_ctx.shader_type == ST_PIXEL) ? SM4_OP_DCL_INPUT_PS_SIV : SM4_OP_DCL_INPUT_SIV;
+                    break;
+            }
+
+            if (hlsl_ctx.shader_type == ST_PIXEL)
+            {
+                if (var->modifiers & HLSL_STORAGE_NOINTERPOLATION)
+                    opcode |= SM4_INTERPOLATION_CONSTANT << SM4_INTERPOLATION_MODE_SHIFT;
+                else
+                    opcode |= SM4_INTERPOLATION_LINEAR << SM4_INTERPOLATION_MODE_SHIFT;
+            }
+        }
+        else
+        {
+            if (usage == D3D_NAME_UNDEFINED || hlsl_ctx.shader_type == ST_PIXEL)
+                opcode = SM4_OP_DCL_OUTPUT;
+            else
+                opcode = SM4_OP_DCL_OUTPUT_SIV;
+        }
+
+        write_sm4_dcl_varying(&buffer, opcode, reg_type, reg_idx, writemask, usage);
     }
 
     set_dword(&buffer, 1, buffer.count);
