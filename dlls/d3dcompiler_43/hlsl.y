@@ -5413,12 +5413,356 @@ static void write_sm4_rdef(struct dxbc *dxbc)
     dxbc_add_section(dxbc, TAG_RDEF, buffer.data, buffer.count * sizeof(DWORD));
 }
 
+enum sm4_opcode
+{
+    SM4_OP_ADD                              = 0x00,
+    SM4_OP_AND                              = 0x01,
+    SM4_OP_BREAK                            = 0x02,
+    SM4_OP_BREAKC                           = 0x03,
+    SM4_OP_CASE                             = 0x06,
+    SM4_OP_CONTINUE                         = 0x07,
+    SM4_OP_CONTINUEC                        = 0x08,
+    SM4_OP_CUT                              = 0x09,
+    SM4_OP_DEFAULT                          = 0x0a,
+    SM4_OP_DERIV_RTX                        = 0x0b,
+    SM4_OP_DERIV_RTY                        = 0x0c,
+    SM4_OP_DISCARD                          = 0x0d,
+    SM4_OP_DIV                              = 0x0e,
+    SM4_OP_DP2                              = 0x0f,
+    SM4_OP_DP3                              = 0x10,
+    SM4_OP_DP4                              = 0x11,
+    SM4_OP_ELSE                             = 0x12,
+    SM4_OP_EMIT                             = 0x13,
+    SM4_OP_ENDIF                            = 0x15,
+    SM4_OP_ENDLOOP                          = 0x16,
+    SM4_OP_ENDSWITCH                        = 0x17,
+    SM4_OP_EQ                               = 0x18,
+    SM4_OP_EXP                              = 0x19,
+    SM4_OP_FRC                              = 0x1a,
+    SM4_OP_FTOI                             = 0x1b,
+    SM4_OP_FTOU                             = 0x1c,
+    SM4_OP_GE                               = 0x1d,
+    SM4_OP_IADD                             = 0x1e,
+    SM4_OP_IF                               = 0x1f,
+    SM4_OP_IEQ                              = 0x20,
+    SM4_OP_IGE                              = 0x21,
+    SM4_OP_ILT                              = 0x22,
+    SM4_OP_IMAD                             = 0x23,
+    SM4_OP_IMAX                             = 0x24,
+    SM4_OP_IMIN                             = 0x25,
+    SM4_OP_IMUL                             = 0x26,
+    SM4_OP_INE                              = 0x27,
+    SM4_OP_INEG                             = 0x28,
+    SM4_OP_ISHL                             = 0x29,
+    SM4_OP_ISHR                             = 0x2a,
+    SM4_OP_ITOF                             = 0x2b,
+    SM4_OP_LABEL                            = 0x2c,
+    SM4_OP_LD                               = 0x2d,
+    SM4_OP_LD2DMS                           = 0x2e,
+    SM4_OP_LOG                              = 0x2f,
+    SM4_OP_LOOP                             = 0x30,
+    SM4_OP_LT                               = 0x31,
+    SM4_OP_MAD                              = 0x32,
+    SM4_OP_MIN                              = 0x33,
+    SM4_OP_MAX                              = 0x34,
+    SM4_OP_SHADER_DATA                      = 0x35,
+    SM4_OP_MOV                              = 0x36,
+    SM4_OP_MOVC                             = 0x37,
+    SM4_OP_MUL                              = 0x38,
+    SM4_OP_NE                               = 0x39,
+    SM4_OP_NOP                              = 0x3a,
+    SM4_OP_NOT                              = 0x3b,
+    SM4_OP_OR                               = 0x3c,
+    SM4_OP_RESINFO                          = 0x3d,
+    SM4_OP_RET                              = 0x3e,
+    SM4_OP_RETC                             = 0x3f,
+    SM4_OP_ROUND_NE                         = 0x40,
+    SM4_OP_ROUND_NI                         = 0x41,
+    SM4_OP_ROUND_PI                         = 0x42,
+    SM4_OP_ROUND_Z                          = 0x43,
+    SM4_OP_RSQ                              = 0x44,
+    SM4_OP_SAMPLE                           = 0x45,
+    SM4_OP_SAMPLE_C                         = 0x46,
+    SM4_OP_SAMPLE_C_LZ                      = 0x47,
+    SM4_OP_SAMPLE_LOD                       = 0x48,
+    SM4_OP_SAMPLE_GRAD                      = 0x49,
+    SM4_OP_SAMPLE_B                         = 0x4a,
+    SM4_OP_SQRT                             = 0x4b,
+    SM4_OP_SWITCH                           = 0x4c,
+    SM4_OP_SINCOS                           = 0x4d,
+    SM4_OP_UDIV                             = 0x4e,
+    SM4_OP_ULT                              = 0x4f,
+    SM4_OP_UGE                              = 0x50,
+    SM4_OP_UMUL                             = 0x51,
+    SM4_OP_UMAX                             = 0x53,
+    SM4_OP_UMIN                             = 0x54,
+    SM4_OP_USHR                             = 0x55,
+    SM4_OP_UTOF                             = 0x56,
+    SM4_OP_XOR                              = 0x57,
+    SM4_OP_DCL_RESOURCE                     = 0x58,
+    SM4_OP_DCL_CONSTANT_BUFFER              = 0x59,
+    SM4_OP_DCL_SAMPLER                      = 0x5a,
+    SM4_OP_DCL_INDEX_RANGE                  = 0x5b,
+    SM4_OP_DCL_OUTPUT_TOPOLOGY              = 0x5c,
+    SM4_OP_DCL_INPUT_PRIMITIVE              = 0x5d,
+    SM4_OP_DCL_VERTICES_OUT                 = 0x5e,
+    SM4_OP_DCL_INPUT                        = 0x5f,
+    SM4_OP_DCL_INPUT_SGV                    = 0x60,
+    SM4_OP_DCL_INPUT_SIV                    = 0x61,
+    SM4_OP_DCL_INPUT_PS                     = 0x62,
+    SM4_OP_DCL_INPUT_PS_SGV                 = 0x63,
+    SM4_OP_DCL_INPUT_PS_SIV                 = 0x64,
+    SM4_OP_DCL_OUTPUT                       = 0x65,
+    SM4_OP_DCL_OUTPUT_SIV                   = 0x67,
+    SM4_OP_DCL_TEMPS                        = 0x68,
+    SM4_OP_DCL_INDEXABLE_TEMP               = 0x69,
+    SM4_OP_DCL_GLOBAL_FLAGS                 = 0x6a,
+    SM4_OP_LOD                              = 0x6c,
+    SM4_OP_GATHER4                          = 0x6d,
+    SM4_OP_SAMPLE_POS                       = 0x6e,
+    SM4_OP_SAMPLE_INFO                      = 0x6f,
+    SM5_OP_HS_DECLS                         = 0x71,
+    SM5_OP_HS_CONTROL_POINT_PHASE           = 0x72,
+    SM5_OP_HS_FORK_PHASE                    = 0x73,
+    SM5_OP_HS_JOIN_PHASE                    = 0x74,
+    SM5_OP_EMIT_STREAM                      = 0x75,
+    SM5_OP_CUT_STREAM                       = 0x76,
+    SM5_OP_FCALL                            = 0x78,
+    SM5_OP_BUFINFO                          = 0x79,
+    SM5_OP_DERIV_RTX_COARSE                 = 0x7a,
+    SM5_OP_DERIV_RTX_FINE                   = 0x7b,
+    SM5_OP_DERIV_RTY_COARSE                 = 0x7c,
+    SM5_OP_DERIV_RTY_FINE                   = 0x7d,
+    SM5_OP_GATHER4_C                        = 0x7e,
+    SM5_OP_GATHER4_PO                       = 0x7f,
+    SM5_OP_GATHER4_PO_C                     = 0x80,
+    SM5_OP_RCP                              = 0x81,
+    SM5_OP_F32TOF16                         = 0x82,
+    SM5_OP_F16TOF32                         = 0x83,
+    SM5_OP_COUNTBITS                        = 0x86,
+    SM5_OP_FIRSTBIT_HI                      = 0x87,
+    SM5_OP_FIRSTBIT_LO                      = 0x88,
+    SM5_OP_FIRSTBIT_SHI                     = 0x89,
+    SM5_OP_UBFE                             = 0x8a,
+    SM5_OP_IBFE                             = 0x8b,
+    SM5_OP_BFI                              = 0x8c,
+    SM5_OP_BFREV                            = 0x8d,
+    SM5_OP_SWAPC                            = 0x8e,
+    SM5_OP_DCL_STREAM                       = 0x8f,
+    SM5_OP_DCL_FUNCTION_BODY                = 0x90,
+    SM5_OP_DCL_FUNCTION_TABLE               = 0x91,
+    SM5_OP_DCL_INTERFACE                    = 0x92,
+    SM5_OP_DCL_INPUT_CONTROL_POINT_COUNT    = 0x93,
+    SM5_OP_DCL_OUTPUT_CONTROL_POINT_COUNT   = 0x94,
+    SM5_OP_DCL_TESSELLATOR_DOMAIN           = 0x95,
+    SM5_OP_DCL_TESSELLATOR_PARTITIONING     = 0x96,
+    SM5_OP_DCL_TESSELLATOR_OUTPUT_PRIMITIVE = 0x97,
+    SM5_OP_DCL_HS_MAX_TESSFACTOR            = 0x98,
+    SM5_OP_DCL_HS_FORK_PHASE_INSTANCE_COUNT = 0x99,
+    SM5_OP_DCL_HS_JOIN_PHASE_INSTANCE_COUNT = 0x9a,
+    SM5_OP_DCL_THREAD_GROUP                 = 0x9b,
+    SM5_OP_DCL_UAV_TYPED                    = 0x9c,
+    SM5_OP_DCL_UAV_RAW                      = 0x9d,
+    SM5_OP_DCL_UAV_STRUCTURED               = 0x9e,
+    SM5_OP_DCL_TGSM_RAW                     = 0x9f,
+    SM5_OP_DCL_TGSM_STRUCTURED              = 0xa0,
+    SM5_OP_DCL_RESOURCE_RAW                 = 0xa1,
+    SM5_OP_DCL_RESOURCE_STRUCTURED          = 0xa2,
+    SM5_OP_LD_UAV_TYPED                     = 0xa3,
+    SM5_OP_STORE_UAV_TYPED                  = 0xa4,
+    SM5_OP_LD_RAW                           = 0xa5,
+    SM5_OP_STORE_RAW                        = 0xa6,
+    SM5_OP_LD_STRUCTURED                    = 0xa7,
+    SM5_OP_STORE_STRUCTURED                 = 0xa8,
+    SM5_OP_ATOMIC_AND                       = 0xa9,
+    SM5_OP_ATOMIC_OR                        = 0xaa,
+    SM5_OP_ATOMIC_XOR                       = 0xab,
+    SM5_OP_ATOMIC_CMP_STORE                 = 0xac,
+    SM5_OP_ATOMIC_IADD                      = 0xad,
+    SM5_OP_ATOMIC_IMAX                      = 0xae,
+    SM5_OP_ATOMIC_IMIN                      = 0xaf,
+    SM5_OP_ATOMIC_UMAX                      = 0xb0,
+    SM5_OP_ATOMIC_UMIN                      = 0xb1,
+    SM5_OP_IMM_ATOMIC_ALLOC                 = 0xb2,
+    SM5_OP_IMM_ATOMIC_CONSUME               = 0xb3,
+    SM5_OP_IMM_ATOMIC_IADD                  = 0xb4,
+    SM5_OP_IMM_ATOMIC_AND                   = 0xb5,
+    SM5_OP_IMM_ATOMIC_OR                    = 0xb6,
+    SM5_OP_IMM_ATOMIC_XOR                   = 0xb7,
+    SM5_OP_IMM_ATOMIC_EXCH                  = 0xb8,
+    SM5_OP_IMM_ATOMIC_CMP_EXCH              = 0xb9,
+    SM5_OP_IMM_ATOMIC_IMAX                  = 0xba,
+    SM5_OP_IMM_ATOMIC_IMIN                  = 0xbb,
+    SM5_OP_IMM_ATOMIC_UMAX                  = 0xbc,
+    SM5_OP_IMM_ATOMIC_UMIN                  = 0xbd,
+    SM5_OP_SYNC                             = 0xbe,
+    SM5_OP_EVAL_SAMPLE_INDEX                = 0xcc,
+    SM5_OP_DCL_GS_INSTANCES                 = 0xce,
+};
+
+enum sm4_dimension
+{
+    SM4_DIMENSION_NONE = 0,
+    SM4_DIMENSION_SCALAR = 1,
+    SM4_DIMENSION_VEC4 = 2,
+};
+
+struct sm4_register
+{
+    enum sm4_register_type type;
+    DWORD idx[2];
+    enum sm4_dimension dim;
+};
+
+struct sm4_instruction
+{
+    enum sm4_opcode opcode;
+
+    struct
+    {
+        struct sm4_register reg;
+        unsigned int writemask;
+    } dst;
+
+    struct
+    {
+        struct sm4_register reg;
+        unsigned int swizzle;
+    } srcs[2];
+    unsigned int src_count;
+
+    unsigned int has_dst : 1;
+};
+
+static unsigned int sm4_idx_count(enum sm4_register_type type)
+{
+    switch (type)
+    {
+        case SM4_RT_CONSTBUFFER:
+            return 2;
+
+        default:
+            FIXME("Unhandled register type %#x.\n", type);
+            return 1;
+    }
+}
+
+enum sm4_swizzle_type
+{
+    SM4_SWIZZLE_NONE = 0,
+    SM4_SWIZZLE_VEC4 = 1,
+    SM4_SWIZZLE_SCALAR = 2,
+};
+
+static unsigned int sm4_swizzle_type(enum sm4_register_type type)
+{
+    switch (type)
+    {
+        default:
+            FIXME("Unhandled register type %#x.\n", type);
+        case SM4_RT_CONSTBUFFER:
+            return SM4_SWIZZLE_VEC4;
+    }
+}
+
+#define SM4_SWIZZLE_TYPE_SHIFT      2   /* src only */
+#define SM4_SWIZZLE_SHIFT           4   /* src only */
+#define SM4_WRITEMASK_SHIFT         4   /* dst only */
+#define SM4_REGISTER_TYPE_SHIFT     12
+#define SM4_REGISTER_ORDER_SHIFT    20
+
+#define SM4_INSTRUCTION_LENGTH_SHIFT    24
+
+static DWORD sm4_encode_register(const struct sm4_register *reg)
+{
+    return (reg->type << SM4_REGISTER_TYPE_SHIFT)
+            | (sm4_idx_count(reg->type) << SM4_REGISTER_ORDER_SHIFT)
+            | (reg->dim);
+}
+
+static unsigned int sm4_register_order(const struct sm4_register *reg)
+{
+    unsigned int order = 1;
+    if (reg->type == SM4_RT_IMMCONST)
+        order += reg->dim == SM4_DIMENSION_VEC4 ? 4 : 1;
+    order += sm4_idx_count(reg->type);
+    return order;
+}
+
+static void write_sm4_instruction(struct bytecode_buffer *buffer, const struct sm4_instruction *instr)
+{
+    DWORD token = instr->opcode;
+    unsigned int size = 1, i, j;
+
+    if (instr->has_dst)
+        size += sm4_register_order(&instr->dst.reg);
+    for (i = 0; i < instr->src_count; ++i)
+        size += sm4_register_order(&instr->srcs[i].reg);
+
+    token |= (size << SM4_INSTRUCTION_LENGTH_SHIFT);
+    put_dword(buffer, token);
+
+    if (instr->has_dst)
+    {
+        unsigned int idx_count = sm4_idx_count(instr->dst.reg.type);
+
+        token = sm4_encode_register(&instr->dst.reg);
+        if (instr->dst.reg.dim == SM4_DIMENSION_VEC4)
+            token |= instr->dst.writemask << SM4_WRITEMASK_SHIFT;
+        put_dword(buffer, token);
+
+        for (j = 0; j < idx_count; ++j)
+            put_dword(buffer, instr->dst.reg.idx[j]);
+    }
+
+    for (i = 0; i < instr->src_count; ++i)
+    {
+        unsigned int idx_count = sm4_idx_count(instr->srcs[i].reg.type);
+
+        token = sm4_encode_register(&instr->srcs[i].reg);
+        token |= sm4_swizzle_type(instr->srcs[i].reg.type) << SM4_SWIZZLE_TYPE_SHIFT;
+        token |= instr->srcs[i].swizzle << SM4_SWIZZLE_SHIFT;
+        put_dword(buffer, token);
+
+        for (j = 0; j < idx_count; ++j)
+            put_dword(buffer, instr->srcs[i].reg.idx[j]);
+    }
+}
+
+static void write_sm4_dcl_constant_buffer(struct bytecode_buffer *buffer,
+        unsigned int index, unsigned int size)
+{
+    struct sm4_instruction instr =
+    {
+        .opcode = SM4_OP_DCL_CONSTANT_BUFFER,
+
+        .srcs[0].reg.dim = SM4_DIMENSION_VEC4,
+        .srcs[0].reg.type = SM4_RT_CONSTBUFFER,
+        .srcs[0].reg.idx = {index, size},
+        .srcs[0].swizzle = BWRITERVS_NOSWIZZLE,
+        .src_count = 1,
+    };
+
+    write_sm4_instruction(buffer, &instr);
+}
+
 static void write_sm4_shdr(struct dxbc *dxbc)
 {
     struct bytecode_buffer buffer = {0};
+    const struct hlsl_buffer *cbuffer;
 
     put_dword(&buffer, (hlsl_ctx.shader_type << 16) | (hlsl_ctx.major_version << 4) | hlsl_ctx.minor_version);
     put_dword(&buffer, 0); /* instruction token count */
+
+    LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
+    {
+        if (!cbuffer->reg.allocated)
+            continue;
+
+        write_sm4_dcl_constant_buffer(&buffer, cbuffer->reg.reg, (cbuffer->used_size + 3) / 4);
+    }
+
+    set_dword(&buffer, 1, buffer.count);
 
     dxbc_add_section(dxbc, TAG_SHDR, buffer.data, buffer.count * sizeof(DWORD));
 }
