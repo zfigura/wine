@@ -366,7 +366,7 @@ static unsigned int initializer_size(const struct parse_initializer *initializer
     return count;
 }
 
-static void free_parse_initializer(struct parse_initializer *initializer)
+static void free_parse_initializer(const struct parse_initializer *initializer)
 {
     free_instr_list(initializer->instrs);
     d3dcompiler_free(initializer->args);
@@ -1343,6 +1343,62 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
     return decl;
 }
 
+struct find_function_call_ctx
+{
+    const struct parse_initializer *params;
+    const struct hlsl_ir_function_decl *decl;
+};
+
+static void find_function_call_exact(struct wine_rb_entry *entry, void *context)
+{
+    const struct hlsl_ir_function_decl *decl = WINE_RB_ENTRY_VALUE(entry, const struct hlsl_ir_function_decl, entry);
+    struct find_function_call_ctx *ctx = context;
+    const struct hlsl_ir_var *param;
+    unsigned int i = 0;
+
+    LIST_FOR_EACH_ENTRY(param, decl->parameters, struct hlsl_ir_var, param_entry)
+    {
+        if (i >= ctx->params->args_count
+                || !compare_hlsl_types(param->data_type, ctx->params->args[i++]->data_type))
+            return;
+    }
+    if (i == ctx->params->args_count)
+        ctx->decl = decl;
+}
+
+static const struct hlsl_ir_function_decl *find_function_call(const char *name, const struct parse_initializer *params)
+{
+    struct find_function_call_ctx ctx = {.params = params};
+    struct hlsl_ir_function *func;
+    struct wine_rb_entry *entry;
+
+    if (!(entry = wine_rb_get(&hlsl_ctx.functions, name)))
+        return NULL;
+    func = WINE_RB_ENTRY_VALUE(entry, struct hlsl_ir_function, entry);
+
+    wine_rb_for_each_entry(&func->overloads, find_function_call_exact, &ctx);
+    if (!ctx.decl)
+        FIXME("Search for compatible overloads.\n");
+    return ctx.decl;
+}
+
+static struct list *add_call(const char *name, const struct parse_initializer *params, struct source_location loc)
+{
+    const struct hlsl_ir_function_decl *decl;
+
+    if ((decl = find_function_call(name, params)))
+    {
+        FIXME("Call to user-defined function %s.\n", name);
+        free_parse_initializer(params);
+        return NULL;
+    }
+    else
+    {
+        hlsl_report_message(loc, HLSL_LEVEL_ERROR, "undefined function %s", name);
+    }
+    return params->instrs;
+}
+
 %}
 
 %locations
@@ -1490,6 +1546,7 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
 %type <variable_def> type_spec
 %type <initializer> complex_initializer
 %type <initializer> initializer_expr_list
+%type <initializer> func_arguments
 %type <list> initializer_expr
 %type <modifiers> var_modifiers
 %type <list> field
@@ -2339,6 +2396,18 @@ expr_statement:           ';'
                                 $$ = $1;
                             }
 
+func_arguments:
+
+      /* empty */
+        {
+            $$.args = NULL;
+            $$.args_count = 0;
+            if (!($$.instrs = d3dcompiler_alloc(sizeof(*$$.instrs))))
+                YYABORT;
+            list_init($$.instrs);
+        }
+    | initializer_expr_list
+
 primary_expr:             C_FLOAT
                             {
                                 struct hlsl_ir_constant *c = d3dcompiler_alloc(sizeof(*c));
@@ -2404,6 +2473,11 @@ primary_expr:             C_FLOAT
                             {
                                 $$ = $2;
                             }
+    | var_identifier '(' func_arguments ')'
+        {
+            if (!($$ = add_call($1, &$3, get_location(&@1))))
+                YYABORT;
+        }
 
 postfix_expr:             primary_expr
                             {
