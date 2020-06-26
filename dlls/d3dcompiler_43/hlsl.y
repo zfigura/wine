@@ -3499,7 +3499,7 @@ static void append_output_var_copy(struct list *instrs, struct hlsl_ir_var *var)
 
 struct liveness_ctx
 {
-    unsigned int count;
+    unsigned int count, max;
     struct
     {
         /* 0 if not live yet. */
@@ -3550,6 +3550,7 @@ static struct hlsl_reg allocate_register(struct liveness_ctx *liveness,
     }
     ret.reg = regnum / 4;
     ret.writemask = writemask;
+    liveness->max = max(liveness->max, ret.reg);
     return ret;
 }
 
@@ -3584,6 +3585,7 @@ static struct hlsl_reg allocate_range(struct liveness_ctx *liveness,
     for (i = 0; i < components; ++i)
         liveness->regs[regnum + i].last_read = last_read;
     ret.reg = regnum / 4;
+    liveness->max = max(liveness->max, ret.reg + (components + 3) / 4 - 1);
     return ret;
 }
 
@@ -3677,10 +3679,11 @@ static void allocate_temp_registers_recurse(struct list *instrs, struct liveness
  * index to all (simultaneously live) variables or intermediate values. Agnostic
  * as to how many registers are actually available for the current backend, and
  * does not handle constants. */
-static void allocate_temp_registers(struct hlsl_ir_function_decl *entry_func)
+static unsigned int allocate_temp_registers(struct hlsl_ir_function_decl *entry_func)
 {
     struct liveness_ctx liveness = {0};
     allocate_temp_registers_recurse(entry_func->body, &liveness);
+    return liveness.max;
 }
 
 struct vec4
@@ -5624,7 +5627,12 @@ struct sm4_register
     enum sm4_register_type type;
     DWORD idx[2];
     enum sm4_dimension dim;
+    DWORD immconst_uint[4];
+    unsigned int mod;
 };
+
+#define SM4_SRC_MODIFIER_NEG    0x40
+#define SM4_SRC_MODIFIER_ABS    0x80
 
 struct sm4_instruction
 {
@@ -5643,6 +5651,9 @@ struct sm4_instruction
     } srcs[2];
     unsigned int src_count;
 
+    unsigned int idx[2];
+    unsigned int idx_count;
+
     unsigned int has_dst : 1;
 };
 
@@ -5654,12 +5665,14 @@ static unsigned int sm4_idx_count(enum sm4_register_type type)
             return 2;
 
         case SM4_RT_DEPTHOUT:
+        case SM4_RT_IMMCONST:
             return 0;
 
         default:
             FIXME("Unhandled register type %#x.\n", type);
         case SM4_RT_INPUT:
         case SM4_RT_OUTPUT:
+        case SM4_RT_TEMP:
             return 1;
     }
 }
@@ -5675,9 +5688,14 @@ static unsigned int sm4_swizzle_type(enum sm4_register_type type)
 {
     switch (type)
     {
+        case SM4_RT_IMMCONST:
+        case SM4_RT_SAMPLER:
+            return SM4_SWIZZLE_NONE;
+
         default:
             FIXME("Unhandled register type %#x.\n", type);
         case SM4_RT_CONSTBUFFER:
+        case SM4_RT_TEMP:
         case SM4_RT_INPUT:
             return SM4_SWIZZLE_VEC4;
     }
@@ -5688,8 +5706,16 @@ static unsigned int sm4_swizzle_type(enum sm4_register_type type)
 #define SM4_WRITEMASK_SHIFT         4   /* dst only */
 #define SM4_REGISTER_TYPE_SHIFT     12
 #define SM4_REGISTER_ORDER_SHIFT    20
+#define SM4_ADDRESSING_SHIFT0       22
+#define SM4_ADDRESSING_SHIFT1       25
+#define SM4_REGISTER_MODIFIER       (0x1u << 31)
 
 #define SM4_INSTRUCTION_LENGTH_SHIFT    24
+#define SM5_INSTRUCTION_PRECISE_SHIFT   19
+#define SM4_INSTRUCTION_FLAGS_SHIFT     11
+#define SM4_INSTRUCTION_INDEXED_DYNAMIC     0x00000800  /* dcl_constant_buffer */
+#define SM4_INTERPOLATION_MODE_SHIFT    11  /* dcl_input_ps(_siv) */
+#define SM4_RESOURCE_TYPE_SHIFT         11
 
 static DWORD sm4_encode_register(const struct sm4_register *reg)
 {
@@ -5704,6 +5730,8 @@ static unsigned int sm4_register_order(const struct sm4_register *reg)
     if (reg->type == SM4_RT_IMMCONST)
         order += reg->dim == SM4_DIMENSION_VEC4 ? 4 : 1;
     order += sm4_idx_count(reg->type);
+    if (reg->mod)
+        order += 1;
     return order;
 }
 
@@ -5716,6 +5744,7 @@ static void write_sm4_instruction(struct bytecode_buffer *buffer, const struct s
         size += sm4_register_order(&instr->dst.reg);
     for (i = 0; i < instr->src_count; ++i)
         size += sm4_register_order(&instr->srcs[i].reg);
+    size += instr->idx_count;
 
     token |= (size << SM4_INSTRUCTION_LENGTH_SHIFT);
     put_dword(buffer, token);
@@ -5740,11 +5769,37 @@ static void write_sm4_instruction(struct bytecode_buffer *buffer, const struct s
         token = sm4_encode_register(&instr->srcs[i].reg);
         token |= sm4_swizzle_type(instr->srcs[i].reg.type) << SM4_SWIZZLE_TYPE_SHIFT;
         token |= instr->srcs[i].swizzle << SM4_SWIZZLE_SHIFT;
+        if (instr->srcs[i].reg.mod)
+            token |= SM4_REGISTER_MODIFIER;
         put_dword(buffer, token);
+
+        if (instr->srcs[i].reg.mod)
+        {
+            token = 0x1;
+            if (instr->srcs[i].reg.mod & SM4_SRC_MODIFIER_NEG)
+                token |= 0x40;
+            if (instr->srcs[i].reg.mod & SM4_SRC_MODIFIER_ABS)
+                token |= 0x80;
+            put_dword(buffer, token);
+        }
 
         for (j = 0; j < idx_count; ++j)
             put_dword(buffer, instr->srcs[i].reg.idx[j]);
+
+        if (instr->srcs[i].reg.type == SM4_RT_IMMCONST)
+        {
+            put_dword(buffer, instr->srcs[i].reg.immconst_uint[0]);
+            if (instr->srcs[i].reg.dim == SM4_DIMENSION_VEC4)
+            {
+                put_dword(buffer, instr->srcs[i].reg.immconst_uint[1]);
+                put_dword(buffer, instr->srcs[i].reg.immconst_uint[2]);
+                put_dword(buffer, instr->srcs[i].reg.immconst_uint[3]);
+            }
+        }
     }
+
+    for (j = 0; j < instr->idx_count; ++j)
+        put_dword(buffer, instr->idx[j]);
 }
 
 static void write_sm4_dcl_constant_buffer(struct bytecode_buffer *buffer,
@@ -5801,10 +5856,86 @@ static void write_sm4_dcl_varying(struct bytecode_buffer *buffer, enum sm4_opcod
     write_sm4_instruction(buffer, &instr);
 }
 
-static void write_sm4_shdr(struct dxbc *dxbc)
+static void write_sm4_dcl_temps(struct bytecode_buffer *buffer, unsigned int count)
+{
+    struct sm4_instruction instr =
+    {
+        .opcode = SM4_OP_DCL_TEMPS,
+
+        .idx = {count},
+        .idx_count = 1,
+    };
+
+    write_sm4_instruction(buffer, &instr);
+}
+
+static void write_sm4_ret(struct bytecode_buffer *buffer)
+{
+    struct sm4_instruction instr =
+    {
+        .opcode = SM4_OP_RET,
+    };
+
+    write_sm4_instruction(buffer, &instr);
+}
+
+static void write_sm4_unary_op(struct bytecode_buffer *buffer, enum sm4_opcode opcode,
+        const struct hlsl_reg *dst, const struct hlsl_reg *src, unsigned int src_mod)
+{
+    struct sm4_instruction instr =
+    {
+        .opcode = opcode,
+
+        .dst.reg.dim = SM4_DIMENSION_VEC4,
+        .dst.reg.type = SM4_RT_TEMP,
+        .dst.reg.idx = {dst->reg},
+        .dst.writemask = dst->writemask,
+        .has_dst = 1,
+
+        .srcs[0].reg.dim = SM4_DIMENSION_VEC4,
+        .srcs[0].reg.type = SM4_RT_TEMP,
+        .srcs[0].reg.idx = {src->reg},
+        .srcs[0].swizzle = map_swizzle(swizzle_from_writemask(src->writemask), dst->writemask),
+        .srcs[0].reg.mod = src_mod,
+        .src_count = 1,
+    };
+
+    write_sm4_instruction(buffer, &instr);
+}
+
+static void write_sm4_binary_op(struct bytecode_buffer *buffer, enum sm4_opcode opcode,
+        const struct hlsl_reg *dst, const struct hlsl_reg *src1, const struct hlsl_reg *src2, unsigned int src2_mod)
+{
+    struct sm4_instruction instr =
+    {
+        .opcode = opcode,
+
+        .dst.reg.dim = SM4_DIMENSION_VEC4,
+        .dst.reg.type = SM4_RT_TEMP,
+        .dst.reg.idx = {dst->reg},
+        .dst.writemask = dst->writemask,
+        .has_dst = 1,
+
+        .srcs[0].reg.dim = SM4_DIMENSION_VEC4,
+        .srcs[0].reg.type = SM4_RT_TEMP,
+        .srcs[0].reg.idx = {src1->reg},
+        .srcs[0].swizzle = map_swizzle(swizzle_from_writemask(src1->writemask), dst->writemask),
+        .srcs[1].reg.dim = SM4_DIMENSION_VEC4,
+        .srcs[1].reg.type = SM4_RT_TEMP,
+        .srcs[1].reg.idx = {src2->reg},
+        .srcs[1].swizzle = map_swizzle(swizzle_from_writemask(src2->writemask), dst->writemask),
+        .srcs[1].reg.mod = src2_mod,
+        .src_count = 2,
+    };
+
+    write_sm4_instruction(buffer, &instr);
+}
+
+static void write_sm4_shdr(struct dxbc *dxbc, const struct hlsl_ir_function_decl *entry_func, unsigned int max_temp)
 {
     struct bytecode_buffer buffer = {0};
     const struct hlsl_buffer *cbuffer;
+    const struct hlsl_ir_node *instr;
     const struct hlsl_ir_var *var;
 
     put_dword(&buffer, (hlsl_ctx.shader_type << 16) | (hlsl_ctx.major_version << 4) | hlsl_ctx.minor_version);
@@ -5887,12 +6018,247 @@ static void write_sm4_shdr(struct dxbc *dxbc)
         write_sm4_dcl_varying(&buffer, opcode, reg_type, reg_idx, writemask, usage);
     }
 
+    write_sm4_dcl_temps(&buffer, max_temp + 1);
+
+    LIST_FOR_EACH_ENTRY(instr, entry_func->body, struct hlsl_ir_node, entry)
+    {
+        if (instr->data_type)
+        {
+            if (instr->data_type->type == HLSL_CLASS_MATRIX)
+            {
+                FIXME("Matrix operations need to be lowered.\n");
+                break;
+            }
+
+            assert(instr->data_type->type == HLSL_CLASS_SCALAR || instr->data_type->type == HLSL_CLASS_VECTOR);
+        }
+
+        switch (instr->type)
+        {
+            case HLSL_IR_ASSIGNMENT:
+            {
+                const struct hlsl_ir_assignment *assignment = assignment_from_node(instr);
+                const struct hlsl_ir_node *rhs = assignment->rhs.node;
+                const struct hlsl_reg reg = hlsl_reg_from_deref(&assignment->lhs, rhs->data_type);
+                unsigned int writemask = reg.writemask;
+
+                struct sm4_instruction sm4_instr =
+                {
+                    .opcode = SM4_OP_MOV,
+
+                    .dst.reg.dim = SM4_DIMENSION_VEC4,
+                    .dst.reg.type = SM4_RT_TEMP,
+                    .dst.reg.idx = {reg.reg},
+                    .has_dst = 1,
+
+                    .srcs[0].reg.dim = SM4_DIMENSION_VEC4,
+                    .srcs[0].reg.type = SM4_RT_TEMP,
+                    .srcs[0].reg.idx = {rhs->reg.reg},
+                    .src_count = 1,
+                };
+
+                if (assignment->lhs.var->data_type->type == HLSL_CLASS_MATRIX)
+                {
+                    FIXME("Matrix writemasks need to be lowered.\n");
+                    break;
+                }
+
+                if (assignment->lhs.var->modifiers & HLSL_STORAGE_OUT)
+                {
+                    if (!sm4_register_from_semantic(assignment->lhs.var->semantic,
+                            TRUE, &sm4_instr.dst.reg.type, &sm4_instr.dst.reg.idx[0]))
+                    {
+                        assert(reg.allocated);
+                        sm4_instr.dst.reg.type = SM4_RT_OUTPUT;
+                        sm4_instr.dst.reg.idx[0] = reg.reg;
+                    }
+                    else
+                    {
+                        writemask = (1 << assignment->lhs.var->data_type->dimx) - 1;
+                        if (sm4_instr.dst.reg.type == SM4_RT_DEPTHOUT)
+                            sm4_instr.dst.reg.dim = SM4_DIMENSION_SCALAR;
+                    }
+                }
+                else
+                    assert(reg.allocated);
+
+                sm4_instr.dst.writemask = combine_writemasks(writemask, assignment->writemask);
+                sm4_instr.srcs[0].swizzle = map_swizzle(swizzle_from_writemask(rhs->reg.writemask), sm4_instr.dst.writemask);
+
+                write_sm4_instruction(&buffer, &sm4_instr);
+                break;
+            }
+
+            case HLSL_IR_CONSTANT:
+            {
+                const struct hlsl_ir_constant *constant = constant_from_node(instr);
+                unsigned int i;
+
+                struct sm4_instruction sm4_instr =
+                {
+                    .opcode = SM4_OP_MOV,
+
+                    .dst.reg.dim = SM4_DIMENSION_VEC4,
+                    .dst.reg.type = SM4_RT_TEMP,
+                    .dst.reg.idx = {instr->reg.reg},
+                    .dst.writemask = instr->reg.writemask,
+                    .has_dst = 1,
+
+                    .srcs[0].reg.dim = (instr->data_type->dimx > 1) ? SM4_DIMENSION_VEC4 : SM4_DIMENSION_SCALAR,
+                    .srcs[0].reg.type = SM4_RT_IMMCONST,
+                    .srcs[0].reg.idx = {constant->reg.reg},
+                    .srcs[0].swizzle = map_swizzle(swizzle_from_writemask(constant->reg.writemask), instr->reg.writemask),
+                    .src_count = 1,
+                };
+
+                for (i = 0; i < instr->data_type->dimx; ++i)
+                    sm4_instr.srcs[0].reg.immconst_uint[i] = constant->value.u[i];
+
+                assert(instr->reg.allocated);
+                write_sm4_instruction(&buffer, &sm4_instr);
+                break;
+            }
+
+            case HLSL_IR_EXPR:
+            {
+                struct hlsl_ir_expr *expr = expr_from_node(instr);
+                struct hlsl_ir_node *arg1 = expr->operands[0].node;
+                struct hlsl_ir_node *arg2 = expr->operands[1].node;
+
+                assert(instr->reg.allocated);
+
+                switch (expr->op)
+                {
+                    case HLSL_IR_UNOP_NEG:
+                        write_sm4_unary_op(&buffer, SM4_OP_MOV, &instr->reg, &arg1->reg, SM4_SRC_MODIFIER_NEG);
+                        break;
+
+                    case HLSL_IR_BINOP_ADD:
+                        write_sm4_binary_op(&buffer, SM4_OP_ADD, &instr->reg, &arg1->reg, &arg2->reg, 0);
+                        break;
+
+                    case HLSL_IR_BINOP_DIV:
+                        write_sm4_binary_op(&buffer, SM4_OP_DIV, &instr->reg, &arg1->reg, &arg2->reg, 0);
+                        break;
+
+                    case HLSL_IR_BINOP_MUL:
+                        write_sm4_binary_op(&buffer, SM4_OP_MUL, &instr->reg, &arg1->reg, &arg2->reg, 0);
+                        break;
+
+                    case HLSL_IR_BINOP_SUB:
+                        write_sm4_binary_op(&buffer, SM4_OP_ADD, &instr->reg,
+                                &arg1->reg, &arg2->reg, SM4_SRC_MODIFIER_NEG);
+                        break;
+
+                    default:
+                        FIXME("Unhandled op %u.\n", expr->op);
+                        break;
+                }
+                break;
+            }
+
+            case HLSL_IR_JUMP:
+            {
+                const struct hlsl_ir_jump *jump = jump_from_node(instr);
+
+                if (jump->type != HLSL_IR_JUMP_RETURN)
+                    FIXME("Unhandled jump type %#x.\n", jump->type);
+                break;
+            }
+
+            case HLSL_IR_LOAD:
+            {
+                const struct hlsl_ir_load *load = load_from_node(instr);
+                const struct hlsl_reg reg = hlsl_reg_from_deref(&load->src, instr->data_type);
+                unsigned int src_writemask = reg.writemask;
+
+                struct sm4_instruction sm4_instr =
+                {
+                    .opcode = SM4_OP_MOV,
+
+                    .dst.reg.dim = SM4_DIMENSION_VEC4,
+                    .dst.reg.type = SM4_RT_TEMP,
+                    .dst.reg.idx = {instr->reg.reg},
+                    .dst.writemask = instr->reg.writemask,
+                    .has_dst = 1,
+
+                    .srcs[0].reg.dim = SM4_DIMENSION_VEC4,
+                    .srcs[0].reg.type = SM4_RT_TEMP,
+                    .srcs[0].reg.idx = {reg.reg},
+                    .src_count = 1,
+                };
+
+                assert(instr->reg.allocated);
+
+                if (load->src.var->modifiers & HLSL_STORAGE_UNIFORM)
+                {
+                    sm4_instr.srcs[0].reg.type = SM4_RT_CONSTBUFFER;
+                    sm4_instr.srcs[0].reg.idx[0] = load->src.var->buffer->reg.reg;
+                    sm4_instr.srcs[0].reg.idx[1] = load->src.var->buffer_offset / 4;
+                    src_writemask = ((1 << load->src.var->data_type->dimx) - 1) << (load->src.var->buffer_offset & 3);
+                }
+                else if (load->src.var->modifiers & HLSL_STORAGE_IN)
+                {
+                    if (!sm4_register_from_semantic(load->src.var->semantic,
+                            FALSE, &sm4_instr.srcs[0].reg.type, &sm4_instr.srcs[0].reg.idx[0]))
+                    {
+                        assert(reg.allocated);
+                        sm4_instr.srcs[0].reg.type = SM4_RT_INPUT;
+                        sm4_instr.srcs[0].reg.idx[0] = reg.reg;
+                    }
+                    else
+                        src_writemask = (1 << load->src.var->data_type->dimx) - 1;
+                }
+
+                sm4_instr.srcs[0].swizzle = map_swizzle(swizzle_from_writemask(src_writemask), instr->reg.writemask);
+
+                write_sm4_instruction(&buffer, &sm4_instr);
+                break;
+            }
+
+            case HLSL_IR_SWIZZLE:
+            {
+                const struct hlsl_ir_swizzle *swizzle = swizzle_from_node(instr);
+                const struct hlsl_ir_node *val = swizzle->val.node;
+
+                struct sm4_instruction sm4_instr =
+                {
+                    .opcode = SM4_OP_MOV,
+
+                    .dst.reg.dim = SM4_DIMENSION_VEC4,
+                    .dst.reg.type = SM4_RT_TEMP,
+                    .dst.reg.idx = {instr->reg.reg},
+                    .dst.writemask = instr->reg.writemask,
+                    .has_dst = 1,
+
+                    .srcs[0].reg.dim = SM4_DIMENSION_VEC4,
+                    .srcs[0].reg.type = SM4_RT_TEMP,
+                    .srcs[0].reg.idx = {val->reg.reg},
+                    .srcs[0].swizzle = map_swizzle(combine_swizzles(swizzle_from_writemask(val->reg.writemask),
+                            swizzle->swizzle, instr->data_type->dimx), instr->reg.writemask),
+                    .src_count = 1,
+                };
+
+                assert(instr->reg.allocated);
+                assert(val->reg.allocated);
+                write_sm4_instruction(&buffer, &sm4_instr);
+                break;
+            }
+
+            default:
+                FIXME("Unhandled instruction type %s.\n", debug_node_type(instr->type));
+        }
+    }
+
+    write_sm4_ret(&buffer);
+
     set_dword(&buffer, 1, buffer.count);
 
     dxbc_add_section(dxbc, TAG_SHDR, buffer.data, buffer.count * sizeof(DWORD));
 }
 
-static HRESULT write_sm4_shader(struct hlsl_ir_function_decl *entry_func, ID3D10Blob **shader_blob)
+static HRESULT write_sm4_shader(struct hlsl_ir_function_decl *entry_func, ID3D10Blob **shader_blob,
+        unsigned int max_temp)
 {
     struct dxbc dxbc;
     unsigned int i;
@@ -5904,7 +6270,7 @@ static HRESULT write_sm4_shader(struct hlsl_ir_function_decl *entry_func, ID3D10
     write_sm4_signature(&dxbc, FALSE);
     write_sm4_signature(&dxbc, TRUE);
     write_sm4_rdef(&dxbc);
-    write_sm4_shdr(&dxbc);
+    write_sm4_shdr(&dxbc, entry_func, max_temp);
 
     hr = dxbc_write_blob(&dxbc, shader_blob);
 
@@ -5922,8 +6288,8 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
     struct hlsl_scope *scope, *next_scope;
     struct hlsl_type *hlsl_type, *next_type;
     struct hlsl_ir_var *var, *next_var;
+    unsigned int max_temp, i;
     HRESULT hr = E_FAIL;
-    unsigned int i;
 
     hlsl_ctx.compilation_flags = sflags;
     hlsl_ctx.shader_type = type;
@@ -6018,7 +6384,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
         wine_rb_for_each_entry(&hlsl_ctx.functions, dump_function, NULL);
     }
 
-    allocate_temp_registers(entry_func);
+    max_temp = allocate_temp_registers(entry_func);
     allocate_varying_registers();
 
     if (hlsl_ctx.status == PARSE_ERR)
@@ -6032,7 +6398,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
     else
     {
         allocate_buffers(entry_func);
-        hr = write_sm4_shader(entry_func, shader_blob);
+        hr = write_sm4_shader(entry_func, shader_blob, max_temp);
     }
 
 out:
