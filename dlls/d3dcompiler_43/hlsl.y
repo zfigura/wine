@@ -1526,7 +1526,6 @@ static struct list *add_call(const char *name, const struct parse_initializer *p
 %token <floatval> C_FLOAT
 %token <intval> C_INTEGER
 %type <boolval> boolean
-%type <type> base_type
 %type <type> type
 %type <list> declaration_statement
 %type <list> declaration
@@ -1979,11 +1978,7 @@ input_mod:                KW_IN
 
 type:
 
-      base_type
-        {
-            $$ = $1;
-        }
-    | KW_VECTOR '<' base_type ',' C_INTEGER '>'
+      KW_VECTOR '<' type ',' C_INTEGER '>'
         {
             if ($3->type != HLSL_CLASS_SCALAR)
             {
@@ -2000,7 +1995,7 @@ type:
 
             $$ = new_hlsl_type(NULL, HLSL_CLASS_VECTOR, $3->base_type, $5, 1);
         }
-    | KW_MATRIX '<' base_type ',' C_INTEGER ',' C_INTEGER '>'
+    | KW_MATRIX '<' type ',' C_INTEGER ',' C_INTEGER '>'
         {
             if ($3->type != HLSL_CLASS_SCALAR)
             {
@@ -2024,9 +2019,7 @@ type:
             $$ = new_hlsl_type(NULL, HLSL_CLASS_MATRIX, $3->base_type, $7, $5);
         }
 
-base_type:
-
-      KW_VOID
+    | KW_VOID
         {
             $$ = hlsl_ctx.builtin_types.Void;
         }
