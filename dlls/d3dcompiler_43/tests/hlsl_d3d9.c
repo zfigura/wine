@@ -423,7 +423,7 @@ static void test_math(void)
     struct vec4 v;
     HRESULT hr;
 
-    static const char ps_source[] =
+    static const char ps_arithmetic_source[] =
         "float4 main(uniform float u, uniform float v, uniform float w, uniform float x,\n"
         "            uniform float y, uniform float z): COLOR\n"
         "{\n"
@@ -433,11 +433,17 @@ static void test_math(void)
         "            x / y / w);\n"
         "}";
 
+    static const char ps_max_source[] =
+        "float4 main(uniform float u, uniform float v) : COLOR\n"
+        "{\n"
+        "    return float4(max(u, v), max(2, 3.0), max(true, 2), max(-1, -1));\n"
+        "}";
+
     if (!init_test_context(&test_context))
         return;
     device = test_context.device;
 
-    ps_code = compile_shader(ps_source, "ps_2_0");
+    ps_code = compile_shader(ps_arithmetic_source, "ps_2_0");
     hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
     ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
     hr = ID3DXConstantTable_SetFloat(constants, device, "$u", 2.5f);
@@ -455,12 +461,28 @@ static void test_math(void)
     ID3DXConstantTable_Release(constants);
 
     draw_quad(device, ps_code);
-
     v = get_color_vec4(device, 0, 0);
     todo_wine ok(compare_vec4(&v, -12.43f, 9.833333f, 1.6f, 35.0f, 1),
             "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
     ID3D10Blob_Release(ps_code);
+
+    ps_code = compile_shader(ps_max_source, "ps_2_0");
+    hr = pD3DXGetShaderConstantTable(ID3D10Blob_GetBufferPointer(ps_code), &constants);
+    ok(hr == D3D_OK, "Failed to get constant table, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetFloat(constants, device, "$u", 0.7f);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    hr = ID3DXConstantTable_SetFloat(constants, device, "$v", 0.1f);
+    ok(hr == D3D_OK, "Failed to set constant, hr %#x.\n", hr);
+    ID3DXConstantTable_Release(constants);
+
+    draw_quad(device, ps_code);
+    v = get_color_vec4(device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.7f, 3.0f, 2.0f, -1.0f, 0),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+
+    ID3D10Blob_Release(ps_code);
+
     release_test_context(&test_context);
 }
 
