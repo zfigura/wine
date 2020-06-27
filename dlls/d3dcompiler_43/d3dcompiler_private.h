@@ -1022,6 +1022,8 @@ struct hlsl_parse_ctx
     struct wine_rb_tree functions;
     const struct hlsl_ir_function_decl *cur_function;
 
+    BOOL in_state_block;
+
     enum hlsl_matrix_majority matrix_majority;
 
     struct

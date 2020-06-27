@@ -1084,6 +1084,37 @@ static void test_function_overloads(void)
     release_test_context(&test_context);
 }
 
+static void test_variable_syntax(void)
+{
+    struct test_context test_context;
+    ID3D10Blob *ps_code = NULL;
+    struct vec4 v;
+
+    static const char ps_source[] =
+        "float u : register(c1) {};\n"
+        "float4 main() : COLOR\n"
+        "{\n"
+        "    float a {};\n"
+        "    float b {foo = bar;};\n"
+        "    float c {}, d = 1, e;\n"
+        "    struct {int a;} s {foo = bar;};\n"
+        "    return float4(0, 1, 0, 1);\n"
+        "}";
+
+    if (!init_test_context(&test_context))
+        return;
+
+    ps_code = compile_shader(ps_source, "ps_2_0");
+    draw_quad(test_context.device, ps_code);
+
+    v = get_color_vec4(test_context.device, 0, 0);
+    todo_wine ok(compare_vec4(&v, 0.0f, 1.0f, 0.0f, 1.0f, 0),
+            "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
+
+    ID3D10Blob_Release(ps_code);
+    release_test_context(&test_context);
+}
+
 static void check_constant_desc(const char *prefix, const D3DXCONSTANT_DESC *desc,
         const D3DXCONSTANT_DESC *expect, BOOL nonzero_defaultvalue)
 {
@@ -1381,6 +1412,74 @@ static void test_fail(void)
         "    a.a = 1;\n"
         "    return a.a;\n"
         "}",
+
+        "sampler s {foo = float;};\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        /* 25 */
+        "sampler s = sampler_state {foo = float;};\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "sampler s {2 = 3;};\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "sampler s {2;};\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "sampler s {foo;};\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "sampler s {foo = bar};\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        /* 30 */
+        "sampler s {}\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "float f {} = 1;\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "float f = 1 {};\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "sampler s = sampler_state;\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
+
+        "float f {} : register(c1);\n"
+        "float4 test() : SV_TARGET\n"
+        "{\n"
+        "    return float4(0, 0, 0, 0);\n"
+        "}",
     };
 
     static const char *targets[] = {"ps_2_0", "ps_3_0", "ps_4_0"};
@@ -1449,6 +1548,7 @@ START_TEST(hlsl_d3d9)
     test_const_initializer();
     test_duplicate_modifiers();
     test_function_overloads();
+    test_variable_syntax();
 
     test_constant_table();
     test_fail();

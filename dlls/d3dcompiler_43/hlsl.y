@@ -1560,7 +1560,7 @@ static struct list *add_call(const char *name, const struct parse_initializer *p
 %type <colon_attribute> colon_attribute
 %type <name> semantic
 %type <reg_reservation> register_opt
-%type <variable_def> variable_def
+%type <variable_def> variable_decl variable_def
 %type <list> variables_def
 %type <list> variables_def_optional
 %type <if_body> if_body
@@ -2139,26 +2139,49 @@ variables_def:            variable_def
                                 list_add_tail($$, &$3->entry);
                             }
 
-variable_def:             any_identifier array colon_attribute
-                            {
-                                $$ = d3dcompiler_alloc(sizeof(*$$));
-                                $$->loc = get_location(&@1);
-                                $$->name = $1;
-                                $$->array_size = $2;
-                                $$->semantic = $3.semantic;
-                                $$->reg_reservation = $3.reg_reservation;
-                            }
-                        | any_identifier array colon_attribute '=' complex_initializer
-                            {
-                                TRACE("Declaration with initializer.\n");
-                                $$ = d3dcompiler_alloc(sizeof(*$$));
-                                $$->loc = get_location(&@1);
-                                $$->name = $1;
-                                $$->array_size = $2;
-                                $$->semantic = $3.semantic;
-                                $$->reg_reservation = $3.reg_reservation;
-                                $$->initializer = $5;
-                            }
+variable_decl:
+
+      any_identifier array colon_attribute
+        {
+            if (!($$ = d3dcompiler_alloc(sizeof(*$$))))
+                YYABORT;
+            $$->loc = get_location(&@1);
+            $$->name = $1;
+            $$->array_size = $2;
+            $$->semantic = $3.semantic;
+            $$->reg_reservation = $3.reg_reservation;
+        }
+
+state:
+      any_identifier '=' expr ';'
+        {
+            d3dcompiler_free($1);
+            free_instr_list($3);
+        }
+
+state_block_start:
+      /* Empty */
+        {
+            hlsl_ctx.in_state_block = TRUE;
+        }
+
+state_block:
+      /* Empty */
+    | state_block state
+
+variable_def:
+
+      variable_decl
+    | variable_decl '=' complex_initializer
+        {
+            $$ = $1;
+            $$->initializer = $3;
+        }
+    | variable_decl '{' state_block_start state_block '}'
+        {
+            $$ = $1;
+            hlsl_ctx.in_state_block = FALSE;
+        }
 
 array:                    /* Empty */
                             {
@@ -2464,6 +2487,15 @@ primary_expr:             C_FLOAT
         {
             if (!($$ = add_call($1, &$3, get_location(&@1))))
                 YYABORT;
+        }
+
+    | NEW_IDENTIFIER
+        {
+            if (!hlsl_ctx.in_state_block)
+                hlsl_report_message(get_location(&@1), HLSL_LEVEL_ERROR, "identifier '%s' is not declared\n", $1);
+            if (!($$ = d3dcompiler_alloc(sizeof(*$$))))
+                YYABORT;
+            list_init($$);
         }
 
 postfix_expr:             primary_expr
