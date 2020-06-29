@@ -1389,13 +1389,11 @@ static const struct hlsl_ir_function_decl *find_function_call(const char *name, 
     return ctx.decl;
 }
 
-static struct list *intrinsic_max(const struct parse_initializer *params, struct source_location loc)
+static BOOL intrinsic_max(const struct parse_initializer *params, struct source_location loc)
 {
     struct hlsl_ir_node *args[3] = {params->args[0], params->args[1]};
 
-    if (!add_expr(params->instrs, HLSL_IR_BINOP_MAX, args, &loc))
-        return NULL;
-    return params->instrs;
+    return !!add_expr(params->instrs, HLSL_IR_BINOP_MAX, args, &loc);
 }
 
 static const struct intrinsic_function
@@ -1403,7 +1401,7 @@ static const struct intrinsic_function
     const char *name;
     int param_count;
     BOOL check_numeric;
-    struct list *(*handler)(const struct parse_initializer *params, struct source_location loc);
+    BOOL (*handler)(const struct parse_initializer *params, struct source_location loc);
 }
 intrinsic_functions[] =
 {
@@ -1435,6 +1433,7 @@ static struct list *add_call(const char *name, const struct parse_initializer *p
             hlsl_report_message(loc, HLSL_LEVEL_ERROR,
                     "wrong number of arguments to function '%s': expected %u, but got %u\n",
                     name, intrinsic->param_count, params->args_count);
+            d3dcompiler_free(params->args);
             return params->instrs;
         }
 
@@ -1445,18 +1444,27 @@ static struct list *add_call(const char *name, const struct parse_initializer *p
             for (i = 0; i < params->args_count; ++i)
             {
                 if (params->args[i]->data_type->type > HLSL_CLASS_LAST_NUMERIC)
+                {
                     hlsl_report_message(loc, HLSL_LEVEL_ERROR,
                             "wrong type for argument %u of '%s': expected a numeric type, but got %s\n",
                             i + 1, name, debug_hlsl_type(params->args[i]->data_type));
+                    d3dcompiler_free(params->args);
+                    return params->instrs;
+                }
             }
+        }
 
-            return intrinsic->handler(params, loc);
+        if (!intrinsic->handler(params, loc))
+        {
+            free_parse_initializer(params);
+            return NULL;
         }
     }
     else
     {
         hlsl_report_message(loc, HLSL_LEVEL_ERROR, "undefined function %s", name);
     }
+    d3dcompiler_free(params->args);
     return params->instrs;
 }
 
