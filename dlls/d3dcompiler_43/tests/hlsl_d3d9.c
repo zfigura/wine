@@ -1159,8 +1159,8 @@ static void test_constant_table(void)
     static const char *source =
         "typedef float3x3 matrix_t;\n"
         "struct matrix_record { float3x3 a; } dummy;\n"
-        "uniform float4 a;\n"
         "uniform float b;\n"
+        "uniform float4 a;\n"
         "uniform float unused;\n"
         "uniform float3x1 c;\n"
         "uniform row_major float3x1 d;\n"
@@ -1179,7 +1179,7 @@ static void test_constant_table(void)
         "uniform matrix<float,3,1> k;\n"
         "float4 main(uniform float4 h) : COLOR\n"
         "{\n"
-        "    return a + b + c._31 + d._31 + f.d._22 + g[e].x + h + i._33 + j.a._33 + k._31;\n"
+        "    return b + a + c._31 + d._31 + f.d._22 + g[e].x + h + i._33 + j.a._33 + k._31;\n"
         "}";
 
     D3DXCONSTANTTABLE_DESC table_desc;

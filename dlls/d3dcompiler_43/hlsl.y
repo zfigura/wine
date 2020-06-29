@@ -4613,6 +4613,43 @@ static void write_sm1_type(struct bytecode_buffer *buffer, struct hlsl_type *typ
 
 static const char creator_string[] = "Wine 'Bazman' HLSL shader compiler";
 
+static int sm1_extern_compare(const struct hlsl_ir_var *a, const struct hlsl_ir_var *b)
+{
+    if (a->is_param && !b->is_param)
+        return -1;
+    if (b->is_param && !a->is_param)
+        return 1;
+    return strcmp(a->name, b->name);
+}
+
+static void sm1_sort_extern(struct list *sorted, struct hlsl_ir_var *to_sort)
+{
+    struct hlsl_ir_var *var;
+
+    list_remove(&to_sort->extern_entry);
+
+    LIST_FOR_EACH_ENTRY(var, sorted, struct hlsl_ir_var, extern_entry)
+    {
+        if (sm1_extern_compare(to_sort, var) < 0)
+        {
+            list_add_before(&var->extern_entry, &to_sort->extern_entry);
+            return;
+        }
+    }
+
+    list_add_tail(sorted, &to_sort->extern_entry);
+}
+
+static void sm1_sort_externs(void)
+{
+    struct list sorted = LIST_INIT(sorted);
+    struct hlsl_ir_var *var, *next;
+
+    LIST_FOR_EACH_ENTRY_SAFE(var, next, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+        sm1_sort_extern(&sorted, var);
+    list_move_tail(&hlsl_ctx.extern_vars, &sorted);
+}
+
 static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_function_decl *entry_func)
 {
     unsigned int ctab_start, vars_start;
@@ -4624,6 +4661,8 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
         if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->reg.allocated)
             ++uniform_count;
     }
+
+    sm1_sort_externs();
 
     put_dword(buffer, 0); /* COMMENT tag + size */
     put_dword(buffer, MAKEFOURCC('C','T','A','B'));
