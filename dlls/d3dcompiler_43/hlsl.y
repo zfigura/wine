@@ -183,6 +183,15 @@ static void declare_predefined_types(struct hlsl_scope *scope)
         "samplerCUBE"
     };
 
+    static const char *const texture_names[] =
+    {
+        "texture",
+        "texture1D",
+        "texture2D",
+        "texture3D",
+        "textureCUBE",
+    };
+
     for (bt = 0; bt <= HLSL_TYPE_LAST_SCALAR; ++bt)
     {
         for (y = 1; y <= 4; ++y)
@@ -217,6 +226,10 @@ static void declare_predefined_types(struct hlsl_scope *scope)
         type = new_hlsl_type(d3dcompiler_strdup(sampler_names[bt]), HLSL_CLASS_OBJECT, HLSL_TYPE_SAMPLER, 1, 1);
         type->sampler_dim = bt;
         hlsl_ctx.builtin_types.sampler[bt] = type;
+
+        type = new_hlsl_type(d3dcompiler_strdup(texture_names[bt]), HLSL_CLASS_OBJECT, HLSL_TYPE_TEXTURE, 4, 1);
+        type->sampler_dim = bt;
+        hlsl_ctx.builtin_types.texture[bt] = type;
     }
 
     hlsl_ctx.builtin_types.Void = new_hlsl_type(d3dcompiler_strdup("void"), HLSL_CLASS_OBJECT, HLSL_TYPE_VOID, 1, 1);
@@ -2096,6 +2109,26 @@ type:
     | KW_SAMPLERCUBE
         {
             $$ = hlsl_ctx.builtin_types.sampler[HLSL_SAMPLER_DIM_3D];
+        }
+    | KW_TEXTURE
+        {
+            $$ = hlsl_ctx.builtin_types.texture[HLSL_SAMPLER_DIM_GENERIC];
+        }
+    | KW_TEXTURE1D
+        {
+            $$ = hlsl_ctx.builtin_types.texture[HLSL_SAMPLER_DIM_1D];
+        }
+    | KW_TEXTURE2D
+        {
+            $$ = hlsl_ctx.builtin_types.texture[HLSL_SAMPLER_DIM_2D];
+        }
+    | KW_TEXTURE3D
+        {
+            $$ = hlsl_ctx.builtin_types.texture[HLSL_SAMPLER_DIM_3D];
+        }
+    | KW_TEXTURECUBE
+        {
+            $$ = hlsl_ctx.builtin_types.texture[HLSL_SAMPLER_DIM_3D];
         }
     | TYPE_IDENTIFIER
         {

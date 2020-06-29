@@ -686,7 +686,8 @@ BOOL compare_hlsl_types(const struct hlsl_type *t1, const struct hlsl_type *t2)
         return FALSE;
     if (t1->base_type != t2->base_type)
         return FALSE;
-    if (t1->base_type == HLSL_TYPE_SAMPLER && t1->sampler_dim != t2->sampler_dim)
+    if ((t1->base_type == HLSL_TYPE_SAMPLER || t1->base_type == HLSL_TYPE_TEXTURE)
+            && t1->sampler_dim != t2->sampler_dim)
         return FALSE;
     if ((t1->modifiers & HLSL_MODIFIERS_MAJORITY_MASK)
             != (t2->modifiers & HLSL_MODIFIERS_MAJORITY_MASK))
@@ -1381,7 +1382,8 @@ static int compare_param_hlsl_types(const struct hlsl_type *t1, const struct hls
     }
     if (t1->base_type != t2->base_type)
         return t1->base_type - t2->base_type;
-    if (t1->base_type == HLSL_TYPE_SAMPLER && t1->sampler_dim != t2->sampler_dim)
+    if ((t1->base_type == HLSL_TYPE_SAMPLER || t1->base_type == HLSL_TYPE_TEXTURE)
+            && t1->sampler_dim != t2->sampler_dim)
         return t1->sampler_dim - t2->sampler_dim;
     if (t1->dimx != t2->dimx)
         return t1->dimx - t2->dimx;
@@ -1480,6 +1482,16 @@ const char *debug_base_type(const struct hlsl_type *type)
                 case HLSL_SAMPLER_DIM_2D:      name = "sampler2D";     break;
                 case HLSL_SAMPLER_DIM_3D:      name = "sampler3D";     break;
                 case HLSL_SAMPLER_DIM_CUBE:    name = "samplerCUBE";   break;
+            }
+            break;
+        case HLSL_TYPE_TEXTURE:
+            switch (type->sampler_dim)
+            {
+                case HLSL_SAMPLER_DIM_GENERIC: name = "texture";       break;
+                case HLSL_SAMPLER_DIM_1D:      name = "texture1D";     break;
+                case HLSL_SAMPLER_DIM_2D:      name = "texture2D";     break;
+                case HLSL_SAMPLER_DIM_3D:      name = "texture3D";     break;
+                case HLSL_SAMPLER_DIM_CUBE:    name = "textureCUBE";   break;
             }
             break;
         default:
