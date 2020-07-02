@@ -3481,6 +3481,45 @@ static BOOL lower_texture_samples(struct hlsl_ir_node *instr, void *context)
     return TRUE;
 }
 
+/* Lower samples from combined samplers to those from separate texture and
+ * sampler variables, by synthesizing a new texture variable. */
+static BOOL lower_combined_samples(struct hlsl_ir_node *instr, void *context)
+{
+    struct hlsl_ir_sample *sample;
+    struct hlsl_ir_var *var;
+    char *name;
+
+    if (instr->type != HLSL_IR_SAMPLE)
+        return FALSE;
+    sample = sample_from_node(instr);
+    if (sample->texture)
+        return FALSE;
+
+    if (!(name = d3dcompiler_alloc(9 + strlen(sample->sampler->name) + 1)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return FALSE;
+    }
+    strcpy(name, "<texture>");
+    strcat(name, sample->sampler->name);
+
+    TRACE("Lowering to combined sampler %s.\n", debugstr_a(name));
+
+    if (!(var = get_variable(hlsl_ctx.globals, name)))
+    {
+        if (!(var = new_var(name, hlsl_ctx.builtin_types.texture[sample->sampler->data_type->sampler_dim],
+                instr->loc, 0, HLSL_STORAGE_UNIFORM, NULL)))
+        {
+            hlsl_ctx.status = PARSE_ERR;
+            return FALSE;
+        }
+        list_add_after(&hlsl_ctx.globals->vars, &var->scope_entry);
+    }
+    sample->texture = var;
+
+    return TRUE;
+}
+
 static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
 {
     struct hlsl_ir_constant *arg1, *arg2 = NULL, *res;
@@ -5878,6 +5917,7 @@ static void write_sm4_rdef(struct dxbc *dxbc)
     unsigned int cbuffer_count = 0, i, j;
     struct bytecode_buffer buffer = {0};
     const struct hlsl_buffer *cbuffer;
+    struct hlsl_ir_var *var;
 
     static const uint16_t target_types[] =
     {
@@ -5890,6 +5930,21 @@ static void write_sm4_rdef(struct dxbc *dxbc)
     };
 
     sm4_sort_externs();
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        if (!strncmp(var->name, "<texture>", strlen("<texture>")))
+        {
+            char *name;
+            if (!(name = strdup(var->name + strlen("<texture>"))))
+            {
+                buffer.status = E_OUTOFMEMORY;
+                return;
+            }
+            d3dcompiler_free((char *)var->name);
+            var->name = name;
+        }
+    }
 
     LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
     {
@@ -6978,6 +7033,8 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
 
     if (major < 4)
         transform_ir(lower_texture_samples, entry_func->body, NULL);
+    else
+        transform_ir(lower_combined_samples, entry_func->body, NULL);
 
     LIST_FOR_EACH_ENTRY(var, entry_func->parameters, struct hlsl_ir_var, param_entry)
     {
