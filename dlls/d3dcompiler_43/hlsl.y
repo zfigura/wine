@@ -6719,6 +6719,26 @@ static void write_sm4_shdr(struct dxbc *dxbc, const struct hlsl_ir_function_decl
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
+        if (var->semantic || var->data_type->type != HLSL_CLASS_OBJECT)
+            continue;
+
+        if (var->data_type->base_type == HLSL_TYPE_SAMPLER)
+        {
+            struct sm4_instruction sm4_instr =
+            {
+                .opcode = SM4_OP_DCL_SAMPLER,
+
+                .dst.reg.type = SM4_RT_SAMPLER,
+                .dst.reg.idx = {var->reg.reg},
+                .has_dst = 1,
+            };
+
+            write_sm4_instruction(&buffer, &sm4_instr);
+        }
+    }
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
         const char *semantic = var->semantic, *p;
         enum sm4_register_type reg_type;
         unsigned int reg_idx, writemask;
