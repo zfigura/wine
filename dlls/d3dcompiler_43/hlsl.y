@@ -1447,6 +1447,13 @@ static BOOL intrinsic_max(const struct parse_initializer *params, struct source_
     return !!add_expr(params->instrs, HLSL_IR_BINOP_MAX, args, &loc);
 }
 
+static BOOL intrinsic_pow(const struct parse_initializer *params, struct source_location loc)
+{
+    struct hlsl_ir_node *args[3] = {params->args[0], params->args[1]};
+
+    return !!add_expr(params->instrs, HLSL_IR_BINOP_POW, args, &loc);
+}
+
 static unsigned int sampler_dim_count(enum hlsl_sampler_dim dim)
 {
     switch (dim)
@@ -1543,6 +1550,7 @@ intrinsic_functions[] =
     {"abs",     1, TRUE, intrinsic_abs},
     {"clamp",   3, TRUE, intrinsic_clamp},
     {"max",     2, TRUE, intrinsic_max},
+    {"pow",     2, TRUE, intrinsic_pow},
     {"tex2D",  -1, FALSE, intrinsic_tex2D},
     {"tex3D",  -1, FALSE, intrinsic_tex3D},
 };
