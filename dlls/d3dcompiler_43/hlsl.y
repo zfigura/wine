@@ -4999,8 +4999,17 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
         if (!var->semantic && var->reg.allocated)
         {
             put_dword(buffer, 0); /* name */
-            put_dword(buffer, D3DXRS_FLOAT4 | (var->reg.reg << 16));
-            put_dword(buffer, var->data_type->reg_size / 4);
+            if (var->data_type->type == HLSL_CLASS_OBJECT
+                    && (var->data_type->base_type == HLSL_TYPE_SAMPLER || var->data_type->base_type == HLSL_TYPE_TEXTURE))
+            {
+                put_dword(buffer, D3DXRS_SAMPLER | (var->reg.reg << 16));
+                put_dword(buffer, 1);
+            }
+            else
+            {
+                put_dword(buffer, D3DXRS_FLOAT4 | (var->reg.reg << 16));
+                put_dword(buffer, var->data_type->reg_size / 4);
+            }
             put_dword(buffer, 0); /* type */
             put_dword(buffer, 0); /* FIXME: default value */
         }
