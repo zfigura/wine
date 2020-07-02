@@ -4920,15 +4920,6 @@ static void write_sm1_type(struct bytecode_buffer *buffer, struct hlsl_type *typ
 
 static const char creator_string[] = "Wine 'Bazman' HLSL shader compiler";
 
-static int sm1_extern_compare(const struct hlsl_ir_var *a, const struct hlsl_ir_var *b)
-{
-    if (a->is_param && !b->is_param)
-        return -1;
-    if (b->is_param && !a->is_param)
-        return 1;
-    return strcmp(a->name, b->name);
-}
-
 static void sm1_sort_extern(struct list *sorted, struct hlsl_ir_var *to_sort)
 {
     struct hlsl_ir_var *var;
@@ -4937,7 +4928,7 @@ static void sm1_sort_extern(struct list *sorted, struct hlsl_ir_var *to_sort)
 
     LIST_FOR_EACH_ENTRY(var, sorted, struct hlsl_ir_var, extern_entry)
     {
-        if (sm1_extern_compare(to_sort, var) < 0)
+        if (strcmp(to_sort->name, var->name) < 0)
         {
             list_add_before(&var->extern_entry, &to_sort->extern_entry);
             return;
@@ -4961,12 +4952,29 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
 {
     unsigned int ctab_start, vars_start;
     unsigned int uniform_count = 0;
-    const struct hlsl_ir_var *var;
+    struct hlsl_ir_var *var;
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
         if (!var->semantic && var->reg.allocated)
+        {
             ++uniform_count;
+
+            if (var->is_param && (var->modifiers & HLSL_STORAGE_UNIFORM))
+            {
+                char *name;
+
+                if (!(name = d3dcompiler_alloc(strlen(var->name) + 2)))
+                {
+                    buffer->status = E_OUTOFMEMORY;
+                    return;
+                }
+                name[0] = '$';
+                strcpy(name + 1, var->name);
+                d3dcompiler_free((char *)var->name);
+                var->name = name;
+            }
+        }
     }
 
     sm1_sort_externs();
@@ -5005,25 +5013,7 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
         if (!var->semantic && var->reg.allocated)
         {
             set_dword(buffer, vars_start + (uniform_count * 5), (buffer->count - ctab_start) * sizeof(DWORD));
-
-            if (var->is_param)
-            {
-                char *name;
-
-                if (!(name = d3dcompiler_alloc(strlen(var->name) + 2)))
-                {
-                    buffer->status = E_OUTOFMEMORY;
-                    return;
-                }
-                name[0] = '$';
-                strcpy(name + 1, var->name);
-                put_string(buffer, name);
-                d3dcompiler_free(name);
-            }
-            else
-            {
-                put_string(buffer, var->name);
-            }
+            put_string(buffer, var->name);
 
             write_sm1_type(buffer, var->data_type, ctab_start);
             set_dword(buffer, vars_start + (uniform_count * 5) + 3,
