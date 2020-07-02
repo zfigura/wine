@@ -4196,7 +4196,7 @@ static struct constant_defs allocate_const_registers(struct hlsl_ir_function_dec
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
-        if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->last_read)
+        if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->last_read && var->data_type->type != HLSL_CLASS_OBJECT)
         {
             if (var->data_type->reg_size > 4)
                 var->reg = allocate_range(&ctx, 1, INT_MAX, var->data_type->reg_size);
@@ -4398,10 +4398,13 @@ static void allocate_varying_registers(void)
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
-        if (var->modifiers & HLSL_STORAGE_IN)
-            allocate_varying_register(var, &input_counter, FALSE);
-        if (var->modifiers & HLSL_STORAGE_OUT)
-            allocate_varying_register(var, &output_counter, TRUE);
+        if (var->semantic)
+        {
+            if (var->modifiers & HLSL_STORAGE_IN)
+                allocate_varying_register(var, &input_counter, FALSE);
+            if (var->modifiers & HLSL_STORAGE_OUT)
+                allocate_varying_register(var, &output_counter, TRUE);
+        }
     }
 }
 
@@ -4532,6 +4535,9 @@ static void calculate_buffer_offset(struct hlsl_ir_var *var)
 {
     unsigned int var_size = var->data_type->reg_size;
     struct hlsl_buffer *buffer = var->buffer;
+
+    if (var->data_type->type == HLSL_CLASS_OBJECT)
+        return;
 
     /* Align to the next vec4 boundary if necessary. */
     if (var->data_type->type > HLSL_CLASS_LAST_NUMERIC || (buffer->size & 3) + var_size > 4)
@@ -4866,7 +4872,7 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
-        if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->reg.allocated)
+        if (!var->semantic && var->reg.allocated)
             ++uniform_count;
     }
 
@@ -4889,7 +4895,7 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
-        if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->reg.allocated)
+        if (!var->semantic && var->reg.allocated)
         {
             put_dword(buffer, 0); /* name */
             put_dword(buffer, D3DXRS_FLOAT4 | (var->reg.reg << 16));
@@ -4903,7 +4909,7 @@ static void write_sm1_uniforms(struct bytecode_buffer *buffer, struct hlsl_ir_fu
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
-        if ((var->modifiers & HLSL_STORAGE_UNIFORM) && var->reg.allocated)
+        if (!var->semantic && var->reg.allocated)
         {
             set_dword(buffer, vars_start + (uniform_count * 5), (buffer->count - ctab_start) * sizeof(DWORD));
 
@@ -5171,10 +5177,13 @@ static void write_sm1_varying_dcls(struct bytecode_buffer *buffer)
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
-        if ((var->modifiers & HLSL_STORAGE_IN) && (storage_mask & HLSL_STORAGE_IN))
-            write_sm1_varying_dcl(buffer, var, FALSE);
-        if ((var->modifiers & HLSL_STORAGE_OUT) && (storage_mask & HLSL_STORAGE_OUT))
-            write_sm1_varying_dcl(buffer, var, TRUE);
+        if (var->semantic)
+        {
+            if ((var->modifiers & HLSL_STORAGE_IN) && (storage_mask & HLSL_STORAGE_IN))
+                write_sm1_varying_dcl(buffer, var, FALSE);
+            if ((var->modifiers & HLSL_STORAGE_OUT) && (storage_mask & HLSL_STORAGE_OUT))
+                write_sm1_varying_dcl(buffer, var, TRUE);
+        }
     }
 }
 
@@ -6784,12 +6793,15 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
 
     LIST_FOR_EACH_ENTRY(var, entry_func->parameters, struct hlsl_ir_var, param_entry)
     {
-        if (var->modifiers & HLSL_STORAGE_UNIFORM)
-            prepend_uniform_copy(entry_func->body, var);
-        if (var->modifiers & HLSL_STORAGE_IN)
-            prepend_input_var_copy(entry_func->body, var);
-        if (var->modifiers & HLSL_STORAGE_OUT)
-            append_output_var_copy(entry_func->body, var);
+        if (var->data_type->type != HLSL_CLASS_OBJECT)
+        {
+            if (var->modifiers & HLSL_STORAGE_UNIFORM)
+                prepend_uniform_copy(entry_func->body, var);
+            if (var->modifiers & HLSL_STORAGE_IN)
+                prepend_input_var_copy(entry_func->body, var);
+            if (var->modifiers & HLSL_STORAGE_OUT)
+                append_output_var_copy(entry_func->body, var);
+        }
     }
     if (entry_func->return_var)
         append_output_var_copy(entry_func->body, entry_func->return_var);
@@ -6797,7 +6809,10 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.globals->vars, struct hlsl_ir_var, scope_entry)
     {
         if (var->modifiers & HLSL_STORAGE_UNIFORM)
-            prepend_uniform_copy(entry_func->body, var);
+        {
+            if (var->data_type->type != HLSL_CLASS_OBJECT)
+                prepend_uniform_copy(entry_func->body, var);
+        }
     }
 
     transform_ir(fold_ident, entry_func->body, NULL);
