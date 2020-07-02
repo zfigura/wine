@@ -506,6 +506,8 @@ static struct hlsl_ir_var *new_var(const char *name, struct hlsl_type *type, con
     if (reg_reservation)
         var->reg_reservation = *reg_reservation;
     var->buffer = hlsl_ctx.cur_buffer;
+    if (type->type == HLSL_CLASS_OBJECT && type->sampler_dim == HLSL_SAMPLER_DIM_GENERIC)
+        var->is_generic_sampler = 1;
     return var;
 }
 
@@ -1350,6 +1352,32 @@ static struct hlsl_ir_function_decl *new_func_decl(struct hlsl_type *return_type
     return decl;
 }
 
+static struct hlsl_ir_sample *new_sample(struct hlsl_ir_var *sampler, struct hlsl_ir_var *texture,
+        struct hlsl_ir_node *coords, struct source_location loc)
+{
+    struct hlsl_ir_sample *sample;
+
+    if (!(sample = d3dcompiler_alloc(sizeof(*sample))))
+        return NULL;
+    init_node(&sample->node, HLSL_IR_SAMPLE, hlsl_ctx.builtin_types.vector[HLSL_TYPE_FLOAT][4 - 1], loc);
+    sample->sampler = sampler;
+    sample->texture = texture;
+    hlsl_src_from_node(&sample->coords, coords);
+    return sample;
+}
+
+static struct hlsl_ir_var *check_variable_literal(struct hlsl_ir_node *instr)
+{
+    struct hlsl_ir_load *load;
+
+    if (instr->type != HLSL_IR_LOAD)
+        return NULL;
+    load = load_from_node(instr);
+    if (load->src.offset.node)
+        return NULL;
+    return load->src.var;
+}
+
 struct find_function_call_ctx
 {
     const struct parse_initializer *params;
@@ -1396,6 +1424,85 @@ static BOOL intrinsic_max(const struct parse_initializer *params, struct source_
     return !!add_expr(params->instrs, HLSL_IR_BINOP_MAX, args, &loc);
 }
 
+static unsigned int sampler_dim_count(enum hlsl_sampler_dim dim)
+{
+    switch (dim)
+    {
+        case HLSL_SAMPLER_DIM_1D:
+            return 1;
+        case HLSL_SAMPLER_DIM_2D:
+            return 2;
+        case HLSL_SAMPLER_DIM_3D:
+        case HLSL_SAMPLER_DIM_CUBE:
+            return 3;
+        default:
+            assert(0);
+            return 0;
+    }
+}
+
+static BOOL intrinsic_tex(const struct parse_initializer *params, struct source_location loc,
+        const char *name, enum hlsl_sampler_dim dim)
+{
+    const struct hlsl_type *sampler_type;
+    struct hlsl_ir_sample *sample;
+    struct hlsl_ir_node *coords;
+    struct hlsl_ir_var *sampler;
+
+    if (params->args_count != 2 && params->args_count != 4)
+    {
+        hlsl_report_message(loc, HLSL_LEVEL_ERROR,
+                "wrong number of arguments to function '%s': expected 2 or 4, but got %u", name, params->args_count);
+        return TRUE;
+    }
+
+    if (params->args_count == 4)
+    {
+        FIXME("Sample with gradient.\n");
+        return FALSE;
+    }
+
+    if (!(sampler = check_variable_literal(params->args[0])))
+    {
+        hlsl_report_message(loc, HLSL_LEVEL_ERROR, "argument 0 to '%s' must be a variable literal", name);
+        return TRUE;
+    }
+
+    sampler_type = params->args[0]->data_type;
+    if (sampler_type->type != HLSL_CLASS_OBJECT || sampler_type->base_type != HLSL_TYPE_SAMPLER)
+    {
+        hlsl_report_message(loc, HLSL_LEVEL_ERROR,
+                "wrong type for argument 1 of '%s': expected \"sampler\" or %s, but got %s",
+                name, debug_hlsl_type(hlsl_ctx.builtin_types.sampler[dim]), debug_hlsl_type(sampler_type));
+    }
+    if (sampler_type->sampler_dim != dim && sampler_type->sampler_dim != HLSL_SAMPLER_DIM_GENERIC)
+    {
+        if (sampler->is_generic_sampler)
+            hlsl_report_message(loc, HLSL_LEVEL_ERROR,
+                    "conflicting usage of generic sampler %s", debugstr_a(sampler->name));
+        else
+            hlsl_report_message(loc, HLSL_LEVEL_ERROR,
+                    "wrong dimension for sampler %s", debugstr_a(sampler->name));
+    }
+
+    if (sampler_type->sampler_dim == HLSL_SAMPLER_DIM_GENERIC)
+        sampler->data_type = hlsl_ctx.builtin_types.sampler[dim];
+
+    if (!(coords = add_implicit_conversion(params->instrs, params->args[1],
+            hlsl_ctx.builtin_types.vector[HLSL_TYPE_FLOAT][sampler_dim_count(dim) - 1], &loc)))
+        coords = params->args[1];
+
+    if (!(sample = new_sample(sampler, NULL, coords, loc)))
+        return FALSE;
+    list_add_tail(params->instrs, &sample->node.entry);
+    return TRUE;
+}
+
+static BOOL intrinsic_tex2D(const struct parse_initializer *params, struct source_location loc)
+{
+    return intrinsic_tex(params, loc, "tex2D", HLSL_SAMPLER_DIM_2D);
+}
+
 static const struct intrinsic_function
 {
     const char *name;
@@ -1406,6 +1513,7 @@ static const struct intrinsic_function
 intrinsic_functions[] =
 {
     {"max",     2, TRUE, intrinsic_max},
+    {"tex2D",  -1, FALSE, intrinsic_tex2D},
 };
 
 static int __cdecl intrinsic_function_name_compare(const void *a, const void *b)
@@ -3349,6 +3457,7 @@ static BOOL dce(struct hlsl_ir_node *instr, void *context)
         case HLSL_IR_CONSTANT:
         case HLSL_IR_EXPR:
         case HLSL_IR_LOAD:
+        case HLSL_IR_SAMPLE:
         case HLSL_IR_SWIZZLE:
             if (list_empty(&instr->uses))
             {
@@ -3463,6 +3572,15 @@ static void compute_liveness_recurse(struct list *instrs, unsigned int loop_firs
             struct hlsl_ir_loop *loop = loop_from_node(instr);
             compute_liveness_recurse(&loop->body, loop_first ? loop_first : instr->index,
                     loop_last ? loop_last : loop->next_index);
+            break;
+        }
+        case HLSL_IR_SAMPLE:
+        {
+            struct hlsl_ir_sample *sample = sample_from_node(instr);
+            sample->sampler->last_read = instr->index;
+            if (sample->texture)
+                sample->texture->last_read = instr->index;
+            sample->coords.node->last_read = instr->index;
             break;
         }
         case HLSL_IR_SWIZZLE:

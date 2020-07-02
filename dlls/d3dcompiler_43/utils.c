@@ -1575,6 +1575,7 @@ const char *debug_node_type(enum hlsl_ir_node_type type)
         "HLSL_IR_LOAD",
         "HLSL_IR_LOOP",
         "HLSL_IR_JUMP",
+        "HLSL_IR_SAMPLE",
         "HLSL_IR_SWIZZLE",
     };
 
@@ -1839,6 +1840,20 @@ static void debug_dump_ir_loop(const struct hlsl_ir_loop *loop)
     wine_dbg_printf("}\n");
 }
 
+static void debug_dump_ir_sample(const struct hlsl_ir_sample *sample)
+{
+    wine_dbg_printf("sample(");
+    debug_dump_ir_var(sample->sampler);
+    wine_dbg_printf(", ");
+    if (sample->texture)
+        debug_dump_ir_var(sample->texture);
+    else
+        wine_dbg_printf("NULL");
+    wine_dbg_printf(", ");
+    debug_dump_src(&sample->coords);
+    wine_dbg_printf(")");
+}
+
 static void debug_dump_instr(const struct hlsl_ir_node *instr)
 {
     if (instr->index)
@@ -1873,6 +1888,9 @@ static void debug_dump_instr(const struct hlsl_ir_node *instr)
             break;
         case HLSL_IR_LOOP:
             debug_dump_ir_loop(loop_from_node(instr));
+            break;
+        case HLSL_IR_SAMPLE:
+            debug_dump_ir_sample(sample_from_node(instr));
             break;
         default:
             wine_dbg_printf("<No dump function for %s>", debug_node_type(instr->type));
@@ -1983,6 +2001,12 @@ static void free_ir_jump(struct hlsl_ir_jump *jump)
     d3dcompiler_free(jump);
 }
 
+static void free_ir_sample(struct hlsl_ir_sample *sample)
+{
+    hlsl_src_remove(&sample->coords);
+    d3dcompiler_free(sample);
+}
+
 void free_instr(struct hlsl_ir_node *node)
 {
     switch (node->type)
@@ -2010,6 +2034,9 @@ void free_instr(struct hlsl_ir_node *node)
             break;
         case HLSL_IR_JUMP:
             free_ir_jump(jump_from_node(node));
+            break;
+        case HLSL_IR_SAMPLE:
+            free_ir_sample(sample_from_node(node));
             break;
         default:
             FIXME("Unsupported node type %s\n", debug_node_type(node->type));

@@ -666,6 +666,7 @@ enum hlsl_ir_node_type
     HLSL_IR_LOAD,
     HLSL_IR_LOOP,
     HLSL_IR_JUMP,
+    HLSL_IR_SAMPLE,
     HLSL_IR_SWIZZLE,
 };
 
@@ -729,7 +730,9 @@ struct hlsl_ir_var
     struct reg_reservation reg_reservation;
     struct list scope_entry, param_entry, extern_entry;
     struct hlsl_buffer *buffer;
-    BOOL is_param;
+
+    unsigned int is_param : 1;
+    unsigned int is_generic_sampler : 1;
 
     unsigned int first_write, last_read;
     struct hlsl_reg reg;
@@ -857,6 +860,13 @@ struct hlsl_ir_jump
 {
     struct hlsl_ir_node node;
     enum hlsl_ir_jump_type type;
+};
+
+struct hlsl_ir_sample
+{
+    struct hlsl_ir_node node;
+    struct hlsl_ir_var *sampler, *texture;
+    struct hlsl_src coords;
 };
 
 struct hlsl_ir_swizzle
@@ -1079,6 +1089,12 @@ static inline struct hlsl_ir_assignment *assignment_from_node(const struct hlsl_
 {
     assert(node->type == HLSL_IR_ASSIGNMENT);
     return CONTAINING_RECORD(node, struct hlsl_ir_assignment, node);
+}
+
+static inline struct hlsl_ir_sample *sample_from_node(const struct hlsl_ir_node *node)
+{
+    assert(node->type == HLSL_IR_SAMPLE);
+    return CONTAINING_RECORD(node, struct hlsl_ir_sample, node);
 }
 
 static inline struct hlsl_ir_swizzle *swizzle_from_node(const struct hlsl_ir_node *node)
