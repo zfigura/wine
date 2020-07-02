@@ -1420,6 +1420,13 @@ static const struct hlsl_ir_function_decl *find_function_call(const char *name, 
     return ctx.decl;
 }
 
+static BOOL intrinsic_abs(const struct parse_initializer *params, struct source_location loc)
+{
+    struct hlsl_ir_node *args[3] = {params->args[0]};
+
+    return !!add_expr(params->instrs, HLSL_IR_UNOP_ABS, args, &loc);
+}
+
 static BOOL intrinsic_clamp(const struct parse_initializer *params, struct source_location loc)
 {
     struct hlsl_ir_node *args[3] = {params->args[0], params->args[1]};
@@ -1533,6 +1540,7 @@ static const struct intrinsic_function
 }
 intrinsic_functions[] =
 {
+    {"abs",     1, TRUE, intrinsic_abs},
     {"clamp",   3, TRUE, intrinsic_clamp},
     {"max",     2, TRUE, intrinsic_max},
     {"tex2D",  -1, FALSE, intrinsic_tex2D},
