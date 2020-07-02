@@ -1420,6 +1420,19 @@ static const struct hlsl_ir_function_decl *find_function_call(const char *name, 
     return ctx.decl;
 }
 
+static BOOL intrinsic_clamp(const struct parse_initializer *params, struct source_location loc)
+{
+    struct hlsl_ir_node *args[3] = {params->args[0], params->args[1]};
+    struct hlsl_ir_expr *max;
+
+    if (!(max = add_expr(params->instrs, HLSL_IR_BINOP_MAX, args, &loc)))
+        return FALSE;
+
+    args[0] = &max->node;
+    args[1] = params->args[2];
+    return !!add_expr(params->instrs, HLSL_IR_BINOP_MIN, args, &loc);
+}
+
 static BOOL intrinsic_max(const struct parse_initializer *params, struct source_location loc)
 {
     struct hlsl_ir_node *args[3] = {params->args[0], params->args[1]};
@@ -1520,6 +1533,7 @@ static const struct intrinsic_function
 }
 intrinsic_functions[] =
 {
+    {"clamp",   3, TRUE, intrinsic_clamp},
     {"max",     2, TRUE, intrinsic_max},
     {"tex2D",  -1, FALSE, intrinsic_tex2D},
     {"tex3D",  -1, FALSE, intrinsic_tex3D},
