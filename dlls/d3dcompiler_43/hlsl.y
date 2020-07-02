@@ -3439,6 +3439,48 @@ static BOOL lower_division(struct hlsl_ir_node *instr, void *context)
     return TRUE;
 }
 
+/* Lower samples from texture variables to those without by combining the
+ * sampler and texture into a new synthetic variable. */
+static BOOL lower_texture_samples(struct hlsl_ir_node *instr, void *context)
+{
+    struct hlsl_ir_sample *sample;
+    struct hlsl_ir_var *var;
+    char *name;
+
+    if (instr->type != HLSL_IR_SAMPLE)
+        return FALSE;
+    sample = sample_from_node(instr);
+    if (!sample->texture)
+        return FALSE;
+
+    if (!(name = d3dcompiler_alloc(strlen(sample->sampler->name) + 1 + strlen(sample->texture->name) + 1)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return FALSE;
+    }
+    strcpy(name, sample->sampler->name);
+    strcat(name, "+");
+    strcat(name, sample->texture->name);
+
+    TRACE("Lowering to combined sampler %s.\n", debugstr_a(name));
+
+    if (!(var = get_variable(hlsl_ctx.globals, name)))
+    {
+        if (!(var = new_var(name, hlsl_ctx.builtin_types.texture[sample->texture->data_type->sampler_dim],
+                instr->loc, 0, HLSL_STORAGE_UNIFORM, NULL)))
+        {
+            hlsl_ctx.status = PARSE_ERR;
+            return FALSE;
+        }
+        var->is_combined_sampler = 1;
+        list_add_tail(&hlsl_ctx.globals->vars, &var->scope_entry);
+    }
+    sample->sampler = var;
+    sample->texture = NULL;
+
+    return TRUE;
+}
+
 static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
 {
     struct hlsl_ir_constant *arg1, *arg2 = NULL, *res;
@@ -6790,6 +6832,9 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
     }
 
     list_move_head(entry_func->body, &hlsl_ctx.static_initializers);
+
+    if (major < 4)
+        transform_ir(lower_texture_samples, entry_func->body, NULL);
 
     LIST_FOR_EACH_ENTRY(var, entry_func->parameters, struct hlsl_ir_var, param_entry)
     {

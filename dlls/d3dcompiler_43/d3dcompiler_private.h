@@ -732,6 +732,7 @@ struct hlsl_ir_var
     struct hlsl_buffer *buffer;
 
     unsigned int is_param : 1;
+    unsigned int is_combined_sampler : 1;
     unsigned int is_generic_sampler : 1;
 
     unsigned int first_write, last_read;
