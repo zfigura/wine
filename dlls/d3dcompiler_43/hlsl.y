@@ -6448,7 +6448,7 @@ struct sm4_instruction
     {
         struct sm4_register reg;
         unsigned int swizzle;
-    } srcs[2];
+    } srcs[3];
     unsigned int src_count;
 
     unsigned int idx[2];
@@ -6472,6 +6472,8 @@ static unsigned int sm4_idx_count(enum sm4_register_type type)
             FIXME("Unhandled register type %#x.\n", type);
         case SM4_RT_INPUT:
         case SM4_RT_OUTPUT:
+        case SM4_RT_RESOURCE:
+        case SM4_RT_SAMPLER:
         case SM4_RT_TEMP:
             return 1;
     }
@@ -6495,6 +6497,7 @@ static unsigned int sm4_swizzle_type(enum sm4_register_type type)
         default:
             FIXME("Unhandled register type %#x.\n", type);
         case SM4_RT_CONSTBUFFER:
+        case SM4_RT_RESOURCE:
         case SM4_RT_TEMP:
         case SM4_RT_INPUT:
             return SM4_SWIZZLE_VEC4;
@@ -7049,6 +7052,38 @@ static void write_sm4_shdr(struct dxbc *dxbc, const struct hlsl_ir_function_decl
                 }
 
                 sm4_instr.srcs[0].swizzle = map_swizzle(swizzle_from_writemask(src_writemask), instr->reg.writemask);
+
+                write_sm4_instruction(&buffer, &sm4_instr);
+                break;
+            }
+
+            case HLSL_IR_SAMPLE:
+            {
+                const struct hlsl_ir_sample *sample = sample_from_node(instr);
+                const struct hlsl_ir_node *coords = sample->coords.node;
+
+                struct sm4_instruction sm4_instr =
+                {
+                    .opcode = SM4_OP_SAMPLE,
+
+                    .dst.reg.dim = SM4_DIMENSION_VEC4,
+                    .dst.reg.type = SM4_RT_TEMP,
+                    .dst.reg.idx = {instr->reg.reg},
+                    .dst.writemask = instr->reg.writemask,
+                    .has_dst = 1,
+
+                    .srcs[0].reg.dim = SM4_DIMENSION_VEC4,
+                    .srcs[0].reg.type = SM4_RT_TEMP,
+                    .srcs[0].reg.idx = {coords->reg.reg},
+                    .srcs[0].swizzle = map_swizzle(swizzle_from_writemask(coords->reg.writemask), instr->reg.writemask),
+                    .srcs[1].reg.dim = SM4_DIMENSION_VEC4,
+                    .srcs[1].reg.type = SM4_RT_RESOURCE,
+                    .srcs[1].reg.idx = {sample->texture->reg.reg},
+                    .srcs[1].swizzle = BWRITERVS_NOSWIZZLE,
+                    .srcs[2].reg.type = SM4_RT_SAMPLER,
+                    .srcs[2].reg.idx = {sample->sampler->reg.reg},
+                    .src_count = 3,
+                };
 
                 write_sm4_instruction(&buffer, &sm4_instr);
                 break;
