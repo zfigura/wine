@@ -1585,6 +1585,71 @@ static struct list *add_call(const char *name, const struct parse_initializer *p
     return params->instrs;
 }
 
+static BOOL add_method_call(struct list *instrs, struct hlsl_ir_node *object, const char *name,
+        const struct parse_initializer *params, struct source_location loc)
+{
+    const struct hlsl_type *object_type = object->data_type;
+
+    if (object_type->type != HLSL_CLASS_OBJECT || object_type->base_type != HLSL_TYPE_TEXTURE
+            || object_type->sampler_dim == HLSL_SAMPLER_DIM_GENERIC)
+    {
+        hlsl_report_message(loc, HLSL_LEVEL_ERROR,
+                "type %s does not have methods", debug_hlsl_type(object->data_type));
+        return FALSE;
+    }
+
+    if (!strcmp(name, "Sample"))
+    {
+        struct hlsl_ir_var *sampler, *texture;
+        const struct hlsl_type *sampler_type;
+        struct hlsl_ir_sample *sample;
+        struct hlsl_ir_node *coords;
+
+        if (params->args_count != 2 && params->args_count != 3)
+        {
+            hlsl_report_message(loc, HLSL_LEVEL_ERROR,
+                    "invalid number of argments for Sample(): expected 2 or 3, got %u", params->args_count);
+            return FALSE;
+        }
+        if (params->args_count == 3)
+            FIXME("Unhandled offset parameter.\n");
+
+        sampler_type = params->args[0]->data_type;
+        if (sampler_type->type != HLSL_CLASS_OBJECT || sampler_type->base_type != HLSL_TYPE_SAMPLER
+                || sampler_type->sampler_dim != HLSL_SAMPLER_DIM_GENERIC)
+            hlsl_report_message(loc, HLSL_LEVEL_ERROR,
+                    "wrong type for argument 1 of Sample(): expected sampler, but got %s",
+                    debug_hlsl_type(sampler_type));
+
+        if (!(coords = add_implicit_conversion(params->instrs, params->args[1],
+                hlsl_ctx.builtin_types.vector[HLSL_TYPE_FLOAT][sampler_dim_count(object_type->sampler_dim) - 1], &loc)))
+            coords = params->args[1];
+
+        if (!(sampler = check_variable_literal(params->args[0])))
+        {
+            hlsl_report_message(loc, HLSL_LEVEL_ERROR, "argument 0 to Sample() must be a variable literal");
+            return TRUE;
+        }
+
+        if (!(texture = check_variable_literal(object)))
+        {
+            hlsl_report_message(loc, HLSL_LEVEL_ERROR, "Sample() must be called on a variable literal");
+            return TRUE;
+        }
+
+        if (!(sample = new_sample(sampler, texture, coords, loc)))
+            return FALSE;
+        list_add_tail(instrs, &sample->node.entry);
+        return TRUE;
+    }
+    else
+    {
+        hlsl_report_message(loc, HLSL_LEVEL_ERROR, "invalid method '%s' for object of type '%s'",
+                name, debug_hlsl_type(object_type));
+        return TRUE;
+    }
+}
+
 %}
 
 %locations
@@ -2892,6 +2957,22 @@ postfix_expr:             primary_expr
             if (!(load = new_var_load(var, get_location(&@2))))
                 YYABORT;
             $$ = append_unop($4.instrs, &load->node);
+        }
+
+    | postfix_expr '.' any_identifier '(' func_arguments ')'
+        {
+            struct hlsl_ir_node *object = node_from_list($1);
+
+            list_move_tail($1, $5.instrs);
+            d3dcompiler_free($5.instrs);
+
+            if (!add_method_call($1, object, $3, &$5, get_location(&@2)))
+            {
+                d3dcompiler_free($5.args);
+                YYABORT;
+            }
+            d3dcompiler_free($5.args);
+            $$ = $1;
         }
 
 unary_expr:
