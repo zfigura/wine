@@ -4676,6 +4676,57 @@ static void allocate_buffers(struct hlsl_ir_function_decl *entry_func)
     }
 }
 
+static void allocate_samplers(void)
+{
+    uint32_t allocation_mask = (1 << 16) - 1;
+    struct hlsl_ir_var *var;
+
+    /* Allocate reserved samplers. */
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        unsigned int regnum = var->reg_reservation.regnum;
+
+        if (!var->last_read || var->data_type->type != HLSL_CLASS_OBJECT
+                || var->data_type->base_type != HLSL_TYPE_SAMPLER)
+            continue;
+
+        if (var->reg_reservation.type == 's')
+        {
+            if (regnum >= 16)
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR,
+                        "only 16 samplers are available; cannot reserve s%u", regnum);
+            else if (!bitmap_is_set(&allocation_mask, regnum))
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR,
+                        "attempt to bind multiple samplers to s%u", regnum);
+            else
+            {
+                bitmap_clear(&allocation_mask, regnum);
+                var->reg.reg = regnum;
+                var->reg.allocated = TRUE;
+                TRACE("Allocated reserved s%u to %s.\n", regnum, var->name);
+            }
+        }
+        else if (var->reg_reservation.type)
+            hlsl_report_message(var->loc, HLSL_LEVEL_ERROR,
+                    "invalid sampler reservation %c%u", var->reg_reservation.type, regnum);
+    }
+
+    /* Allocate remaining samplers. */
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        if (var->last_read && !var->reg.allocated && var->data_type->type == HLSL_CLASS_OBJECT
+                && (var->data_type->base_type == HLSL_TYPE_SAMPLER || var->is_combined_sampler))
+        {
+            if (allocation_mask)
+                var->reg.reg = bit_scan(&allocation_mask);
+            else
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR, "too many samplers declared\n");
+            var->reg.allocated = TRUE;
+            TRACE("Allocated s%u to %s.\n", var->reg.reg, var->name);
+        }
+    }
+}
+
 struct bytecode_buffer
 {
     DWORD *data;
@@ -6881,6 +6932,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
 
     max_temp = allocate_temp_registers(entry_func);
     allocate_varying_registers();
+    allocate_samplers();
 
     if (hlsl_ctx.status == PARSE_ERR)
         goto out;
