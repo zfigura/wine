@@ -5870,6 +5870,38 @@ static void write_sm4_type(struct bytecode_buffer *buffer, struct hlsl_type *typ
     }
 }
 
+static D3D_SHADER_INPUT_TYPE sm4_resource_type(const struct hlsl_type *type)
+{
+    switch (type->base_type)
+    {
+        case HLSL_TYPE_SAMPLER:
+            return D3D_SIT_SAMPLER;
+        case HLSL_TYPE_TEXTURE:
+            return D3D_SIT_TEXTURE;
+        default:
+            assert(0);
+            return 0;
+    }
+}
+
+static D3D_SRV_DIMENSION sm4_resource_dimension(const struct hlsl_type *type)
+{
+    switch (type->sampler_dim)
+    {
+        case HLSL_SAMPLER_DIM_1D:
+            return D3D_SRV_DIMENSION_TEXTURE1D;
+        case HLSL_SAMPLER_DIM_2D:
+            return D3D_SRV_DIMENSION_TEXTURE2D;
+        case HLSL_SAMPLER_DIM_3D:
+            return D3D_SRV_DIMENSION_TEXTURE3D;
+        case HLSL_SAMPLER_DIM_CUBE:
+            return D3D_SRV_DIMENSION_TEXTURECUBE;
+        default:
+            assert(0);
+            return D3D_SRV_DIMENSION_UNKNOWN;
+    }
+}
+
 static int sm4_compare_externs(const struct hlsl_ir_var *a, const struct hlsl_ir_var *b)
 {
     if (a->data_type->base_type != b->data_type->base_type)
@@ -5913,8 +5945,8 @@ static void sm4_sort_externs(void)
 static void write_sm4_rdef(struct dxbc *dxbc)
 {
     const unsigned int var_size = (hlsl_ctx.major_version >= 5 ? 10 : 6);
+    unsigned int cbuffer_count = 0, resource_count = 0, i, j;
     unsigned int resource_start, cbuffer_start;
-    unsigned int cbuffer_count = 0, i, j;
     struct bytecode_buffer buffer = {0};
     const struct hlsl_buffer *cbuffer;
     struct hlsl_ir_var *var;
@@ -5946,15 +5978,24 @@ static void write_sm4_rdef(struct dxbc *dxbc)
         }
     }
 
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        if (var->reg.allocated && var->data_type->type == HLSL_CLASS_OBJECT)
+            ++resource_count;
+    }
+
     LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
     {
         if (cbuffer->reg.allocated)
+        {
             ++cbuffer_count;
+            ++resource_count;
+        }
     }
 
     put_dword(&buffer, cbuffer_count);
     put_dword(&buffer, 0); /* cbuffer offset */
-    put_dword(&buffer, cbuffer_count); /* bound resource count */
+    put_dword(&buffer, resource_count);
     put_dword(&buffer, 0); /* bound resource offset */
     put_dword(&buffer, (target_types[hlsl_ctx.shader_type] << 16)
             | (hlsl_ctx.major_version << 8) | hlsl_ctx.minor_version);
@@ -5976,6 +6017,37 @@ static void write_sm4_rdef(struct dxbc *dxbc)
     /* Bound resources. */
 
     resource_start = buffer.count;
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        DWORD flags = 0;
+
+        if (!var->reg.allocated || var->data_type->type != HLSL_CLASS_OBJECT)
+            continue;
+
+        if (var->reg_reservation.type)
+            flags |= D3D_SIF_USERPACKED;
+
+        put_dword(&buffer, 0); /* name */
+        put_dword(&buffer, sm4_resource_type(var->data_type));
+        if (var->data_type->base_type == HLSL_TYPE_TEXTURE)
+        {
+            put_dword(&buffer, D3D_RETURN_TYPE_FLOAT); /* FIXME */
+            put_dword(&buffer, sm4_resource_dimension(var->data_type));
+            put_dword(&buffer, ~0u); /* FIXME */
+            flags |= D3D_SIF_TEXTURE_COMPONENTS; /* FIXME */
+        }
+        else
+        {
+            put_dword(&buffer, 0); /* return type */
+            put_dword(&buffer, 0); /* dimension */
+            put_dword(&buffer, 0); /* multisample count */
+        }
+        put_dword(&buffer, var->reg.reg); /* bind point */
+        put_dword(&buffer, 1); /* bind count */
+        put_dword(&buffer, flags); /* flags */
+    }
+
     LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
     {
         DWORD flags = 0;
@@ -5997,6 +6069,16 @@ static void write_sm4_rdef(struct dxbc *dxbc)
     }
 
     i = 0;
+
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        if (!var->reg.allocated || var->data_type->type != HLSL_CLASS_OBJECT)
+            continue;
+
+        set_dword(&buffer, resource_start + i++ * 8, buffer.count * sizeof(DWORD));
+        put_string(&buffer, var->name);
+    }
+
     LIST_FOR_EACH_ENTRY(cbuffer, &hlsl_ctx.buffers, struct hlsl_buffer, entry)
     {
         if (!cbuffer->reg.allocated)
@@ -6005,6 +6087,8 @@ static void write_sm4_rdef(struct dxbc *dxbc)
         set_dword(&buffer, resource_start + i++ * 8, buffer.count * sizeof(DWORD));
         put_string(&buffer, cbuffer->name);
     }
+
+    assert(i == resource_count);
 
     /* Buffers. */
 
