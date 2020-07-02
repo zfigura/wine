@@ -1506,6 +1506,11 @@ static BOOL intrinsic_tex2D(const struct parse_initializer *params, struct sourc
     return intrinsic_tex(params, loc, "tex2D", HLSL_SAMPLER_DIM_2D);
 }
 
+static BOOL intrinsic_tex3D(const struct parse_initializer *params, struct source_location loc)
+{
+    return intrinsic_tex(params, loc, "tex3D", HLSL_SAMPLER_DIM_3D);
+}
+
 static const struct intrinsic_function
 {
     const char *name;
@@ -1517,6 +1522,7 @@ intrinsic_functions[] =
 {
     {"max",     2, TRUE, intrinsic_max},
     {"tex2D",  -1, FALSE, intrinsic_tex2D},
+    {"tex3D",  -1, FALSE, intrinsic_tex3D},
 };
 
 static int __cdecl intrinsic_function_name_compare(const void *a, const void *b)
