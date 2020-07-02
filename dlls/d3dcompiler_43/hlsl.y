@@ -4727,6 +4727,57 @@ static void allocate_samplers(void)
     }
 }
 
+static void allocate_textures(void)
+{
+    uint32_t allocation_mask = (1 << 16) - 1;
+    struct hlsl_ir_var *var;
+
+    /* Allocate reserved textures. */
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        unsigned int regnum = var->reg_reservation.regnum;
+
+        if (!var->last_read || var->data_type->type != HLSL_CLASS_OBJECT
+                || var->data_type->base_type != HLSL_TYPE_TEXTURE)
+            continue;
+
+        if (var->reg_reservation.type == 't')
+        {
+            if (regnum >= 16)
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR,
+                        "only 16 textures are available; cannot reserve s%u", regnum);
+            else if (!bitmap_is_set(&allocation_mask, regnum))
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR,
+                        "attempt to bind multiple textures to s%u", regnum);
+            else
+            {
+                bitmap_clear(&allocation_mask, regnum);
+                var->reg.reg = regnum;
+                var->reg.allocated = TRUE;
+                TRACE("Allocated reserved t%u to %s.\n", regnum, var->name);
+            }
+        }
+        else if (var->reg_reservation.type)
+            hlsl_report_message(var->loc, HLSL_LEVEL_ERROR,
+                    "invalid texture reservation %c%u", var->reg_reservation.type, regnum);
+    }
+
+    /* Allocate remaining textures. */
+    LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
+    {
+        if (var->last_read && !var->reg.allocated && var->data_type->type == HLSL_CLASS_OBJECT
+                && var->data_type->base_type == HLSL_TYPE_TEXTURE)
+        {
+            if (allocation_mask)
+                var->reg.reg = bit_scan(&allocation_mask);
+            else
+                hlsl_report_message(var->loc, HLSL_LEVEL_ERROR, "too many textures declared\n");
+            var->reg.allocated = TRUE;
+            TRACE("Allocated t%u to %s.\n", var->reg.reg, var->name);
+        }
+    }
+}
+
 struct bytecode_buffer
 {
     DWORD *data;
@@ -6948,6 +6999,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
     else
     {
         allocate_buffers(entry_func);
+        allocate_textures();
         hr = write_sm4_shader(entry_func, shader_blob, max_temp);
     }
 
