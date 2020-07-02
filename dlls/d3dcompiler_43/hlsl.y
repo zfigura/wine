@@ -5870,7 +5870,7 @@ static void write_sm4_type(struct bytecode_buffer *buffer, struct hlsl_type *typ
     }
 }
 
-static D3D_SHADER_INPUT_TYPE sm4_resource_type(const struct hlsl_type *type)
+static D3D_SHADER_INPUT_TYPE sm4_rdef_resource_type(const struct hlsl_type *type)
 {
     switch (type->base_type)
     {
@@ -6029,7 +6029,7 @@ static void write_sm4_rdef(struct dxbc *dxbc)
             flags |= D3D_SIF_USERPACKED;
 
         put_dword(&buffer, 0); /* name */
-        put_dword(&buffer, sm4_resource_type(var->data_type));
+        put_dword(&buffer, sm4_rdef_resource_type(var->data_type));
         if (var->data_type->base_type == HLSL_TYPE_TEXTURE)
         {
             put_dword(&buffer, D3D_RETURN_TYPE_FLOAT); /* FIXME */
@@ -6383,6 +6383,38 @@ enum sm4_interpolation
     SM4_INTERPOLATION_LINEAR_NOPERSPECTIVE_SAMPLE = 7,
 };
 
+enum sm4_resource_type
+{
+    SM4_RESOURCE_BUFFER             = 0x1,
+    SM4_RESOURCE_TEXTURE_1D         = 0x2,
+    SM4_RESOURCE_TEXTURE_2D         = 0x3,
+    SM4_RESOURCE_TEXTURE_2DMS       = 0x4,
+    SM4_RESOURCE_TEXTURE_3D         = 0x5,
+    SM4_RESOURCE_TEXTURE_CUBE       = 0x6,
+    SM4_RESOURCE_TEXTURE_1DARRAY    = 0x7,
+    SM4_RESOURCE_TEXTURE_2DARRAY    = 0x8,
+    SM4_RESOURCE_TEXTURE_2DMSARRAY  = 0x9,
+    SM4_RESOURCE_TEXTURE_CUBEARRAY  = 0xa,
+};
+
+static enum sm4_resource_type sm4_resource_type(const struct hlsl_type *type)
+{
+    switch (type->sampler_dim)
+    {
+        case HLSL_SAMPLER_DIM_1D:
+            return SM4_RESOURCE_TEXTURE_1D;
+        case HLSL_SAMPLER_DIM_2D:
+            return SM4_RESOURCE_TEXTURE_2D;
+        case HLSL_SAMPLER_DIM_3D:
+            return SM4_RESOURCE_TEXTURE_3D;
+        case HLSL_SAMPLER_DIM_CUBE:
+            return SM4_RESOURCE_TEXTURE_CUBE;
+        default:
+            assert(0);
+            return 0;
+    }
+}
+
 enum sm4_dimension
 {
     SM4_DIMENSION_NONE = 0,
@@ -6732,6 +6764,24 @@ static void write_sm4_shdr(struct dxbc *dxbc, const struct hlsl_ir_function_decl
                 .dst.reg.idx = {var->reg.reg},
                 .has_dst = 1,
             };
+
+            write_sm4_instruction(&buffer, &sm4_instr);
+        }
+        else if (var->data_type->base_type == HLSL_TYPE_TEXTURE)
+        {
+            struct sm4_instruction sm4_instr =
+            {
+                .opcode = SM4_OP_DCL_RESOURCE,
+
+                .dst.reg.type = SM4_RT_RESOURCE,
+                .dst.reg.idx = {var->reg.reg},
+                .has_dst = 1,
+
+                .idx = {0x5555},    /* FIXME */
+                .idx_count = 1,
+            };
+
+            sm4_instr.opcode |= sm4_resource_type(var->data_type) << SM4_RESOURCE_TYPE_SHIFT;
 
             write_sm4_instruction(&buffer, &sm4_instr);
         }
