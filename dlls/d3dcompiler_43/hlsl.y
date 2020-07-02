@@ -6889,7 +6889,9 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
 
     LIST_FOR_EACH_ENTRY(var, entry_func->parameters, struct hlsl_ir_var, param_entry)
     {
-        if (var->data_type->type != HLSL_CLASS_OBJECT)
+        if (var->data_type->type == HLSL_CLASS_OBJECT)
+            list_add_tail(&hlsl_ctx.extern_vars, &var->extern_entry);
+        else
         {
             if (var->modifiers & HLSL_STORAGE_UNIFORM)
                 prepend_uniform_copy(entry_func->body, var);
@@ -6906,7 +6908,9 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
     {
         if (var->modifiers & HLSL_STORAGE_UNIFORM)
         {
-            if (var->data_type->type != HLSL_CLASS_OBJECT)
+            if (var->data_type->type == HLSL_CLASS_OBJECT)
+                list_add_tail(&hlsl_ctx.extern_vars, &var->extern_entry);
+            else
                 prepend_uniform_copy(entry_func->body, var);
         }
     }
