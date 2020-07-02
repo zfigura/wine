@@ -1259,9 +1259,12 @@ static struct list *add_binary_expr(struct list *list1, struct list *list2,
         enum hlsl_ir_expr_op op, struct source_location loc)
 {
     struct hlsl_ir_node *args[3] = {node_from_list(list1), node_from_list(list2)};
+
     list_move_tail(list1, list2);
     d3dcompiler_free(list2);
-    add_expr(list1, op, args, &loc);
+
+    if (args[0] && args[1])
+        add_expr(list1, op, args, &loc);
     return list1;
 }
 
