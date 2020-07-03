@@ -6873,7 +6873,7 @@ static void write_sm4_shdr(struct dxbc *dxbc, const struct hlsl_ir_function_decl
 
     LIST_FOR_EACH_ENTRY(var, &hlsl_ctx.extern_vars, struct hlsl_ir_var, extern_entry)
     {
-        if (var->semantic || var->data_type->type != HLSL_CLASS_OBJECT)
+        if (!var->reg.allocated || var->semantic || var->data_type->type != HLSL_CLASS_OBJECT)
             continue;
 
         if (var->data_type->base_type == HLSL_TYPE_SAMPLER)
