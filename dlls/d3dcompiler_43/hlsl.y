@@ -3477,6 +3477,39 @@ static BOOL lower_division(struct hlsl_ir_node *instr, void *context)
     return TRUE;
 }
 
+/* Lower POW(a,b) to EXP2(MUL(b, LOG2(a))). */
+static BOOL lower_pow(struct hlsl_ir_node *instr, void *context)
+{
+    struct hlsl_ir_node *log, *mul;
+    struct hlsl_ir_expr *expr;
+
+    if (instr->type != HLSL_IR_EXPR)
+        return FALSE;
+    expr = expr_from_node(instr);
+    if (expr->op != HLSL_IR_BINOP_POW)
+        return FALSE;
+
+    if (!(log = new_unary_expr(HLSL_IR_UNOP_LOG2, expr->operands[0].node, instr->loc)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return FALSE;
+    }
+    list_add_before(&expr->node.entry, &log->entry);
+
+    if (!(mul = new_binary_expr(HLSL_IR_BINOP_MUL, expr->operands[1].node, log)))
+    {
+        hlsl_ctx.status = PARSE_ERR;
+        return FALSE;
+    }
+    list_add_before(&expr->node.entry, &mul->entry);
+
+    expr->op = HLSL_IR_UNOP_EXP2;
+    hlsl_src_remove(&expr->operands[1]);
+    hlsl_src_remove(&expr->operands[0]);
+    hlsl_src_from_node(&expr->operands[0], mul);
+    return TRUE;
+}
+
 /* Lower samples from texture variables to those without by combining the
  * sampler and texture into a new synthetic variable. */
 static BOOL lower_texture_samples(struct hlsl_ir_node *instr, void *context)
@@ -7297,6 +7330,8 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
 
     if (major < 4)
         transform_ir(lower_division, entry_func->body, NULL);
+    else
+        transform_ir(lower_pow, entry_func->body, NULL);
 
     do
         compute_liveness(entry_func);
