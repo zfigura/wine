@@ -3305,19 +3305,6 @@ static struct source_location get_location(const struct YYLTYPE *l)
     return loc;
 }
 
-static void dump_function_decl(struct wine_rb_entry *entry, void *context)
-{
-    struct hlsl_ir_function_decl *func = WINE_RB_ENTRY_VALUE(entry, struct hlsl_ir_function_decl, entry);
-    if (func->body)
-        debug_dump_ir_function_decl(func);
-}
-
-static void dump_function(struct wine_rb_entry *entry, void *context)
-{
-    struct hlsl_ir_function *func = WINE_RB_ENTRY_VALUE(entry, struct hlsl_ir_function, entry);
-    wine_rb_for_each_entry(&func->overloads, dump_function_decl, NULL);
-}
-
 static BOOL transform_ir(BOOL (*func)(struct hlsl_ir_node *, void *), struct list *instrs, void *context)
 {
     struct hlsl_ir_node *instr, *next;
@@ -7455,10 +7442,7 @@ HRESULT parse_hlsl(enum shader_type type, DWORD major, DWORD minor, UINT sflags,
     compute_liveness(entry_func);
 
     if (TRACE_ON(hlsl_parser))
-    {
-        TRACE("IR dump.\n");
-        wine_rb_for_each_entry(&hlsl_ctx.functions, dump_function, NULL);
-    }
+        debug_dump_ir_function_decl(entry_func);
 
     max_temp = allocate_temp_registers(entry_func);
     allocate_varying_registers();
