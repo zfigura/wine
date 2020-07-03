@@ -3975,7 +3975,7 @@ static void prepend_input_copy(struct list *instrs, struct hlsl_ir_var *var,
     }
     list_add_head(instrs, &load->node.entry);
 
-    if (!(offset = new_uint_constant(field_offset * 4, var->loc)))
+    if (!(offset = new_uint_constant(field_offset, var->loc)))
     {
         hlsl_ctx.status = PARSE_ERR;
         return;
@@ -4038,7 +4038,7 @@ static void append_output_copy(struct list *instrs, struct hlsl_ir_var *var,
     list_add_before(&var->scope_entry, &varying->scope_entry);
     list_add_tail(&hlsl_ctx.extern_vars, &varying->extern_entry);
 
-    if (!(offset = new_uint_constant(field_offset * 4, var->loc)))
+    if (!(offset = new_uint_constant(field_offset, var->loc)))
     {
         hlsl_ctx.status = PARSE_ERR;
         return;
