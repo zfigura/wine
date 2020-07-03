@@ -3643,6 +3643,50 @@ static BOOL fold_constants(struct hlsl_ir_node *instr, void *context)
                                 res->value.f[i] = arg1->value.u[i];
                             break;
 
+                        case HLSL_TYPE_INT:
+                            for (i = 0; i < dimx; ++i)
+                                res->value.f[i] = arg1->value.i[i];
+                            break;
+
+                        default:
+                            FIXME("Cast from %s to %s.\n", debug_hlsl_type(arg1->node.data_type),
+                                    debug_hlsl_type(instr->data_type));
+                            d3dcompiler_free(res);
+                            return FALSE;
+                    }
+                    break;
+
+                default:
+                    FIXME("Fold float expr %#x.\n", expr->op);
+                    d3dcompiler_free(res);
+                    return FALSE;
+            }
+            break;
+        }
+
+        case HLSL_TYPE_INT:
+        {
+            unsigned int i;
+
+            switch (expr->op)
+            {
+                case HLSL_IR_UNOP_CAST:
+                    if (instr->data_type->dimx != arg1->node.data_type->dimx
+                            || instr->data_type->dimy != arg1->node.data_type->dimy)
+                    {
+                        FIXME("Cast from %s to %s.\n", debug_hlsl_type(arg1->node.data_type),
+                                debug_hlsl_type(instr->data_type));
+                        d3dcompiler_free(res);
+                        return FALSE;
+                    }
+
+                    switch (arg1->node.data_type->base_type)
+                    {
+                        case HLSL_TYPE_BOOL:
+                            for (i = 0; i < dimx; ++i)
+                                res->value.i[i] = arg1->value.b[i];
+                            break;
+
                         default:
                             FIXME("Cast from %s to %s.\n", debug_hlsl_type(arg1->node.data_type),
                                     debug_hlsl_type(instr->data_type));
