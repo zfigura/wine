@@ -4670,6 +4670,11 @@ static unsigned int combine_swizzles(unsigned int first, unsigned int second, un
     return ret;
 }
 
+static unsigned int broadcast_swizzle(unsigned int swizzle)
+{
+    return swizzle | (swizzle << 2) | (swizzle << 4) | (swizzle << 6);
+}
+
 static struct hlsl_reg hlsl_reg_from_deref(const struct hlsl_deref *deref, const struct hlsl_type *type)
 {
     struct hlsl_ir_node *offset_node = deref->offset.node;
@@ -6632,6 +6637,8 @@ static unsigned int sm4_swizzle_type(enum sm4_register_type type)
 #define SM4_ADDRESSING_SHIFT1       25
 #define SM4_REGISTER_MODIFIER       (0x1u << 31)
 
+#define SM4_INSTRUCTION_FLAG_SATURATE   0x4
+
 #define SM4_INSTRUCTION_LENGTH_SHIFT    24
 #define SM5_INSTRUCTION_PRECISE_SHIFT   19
 #define SM4_INSTRUCTION_FLAGS_SHIFT     11
@@ -7089,8 +7096,60 @@ static void write_sm4_shdr(struct dxbc *dxbc, const struct hlsl_ir_function_decl
 
                 switch (expr->op)
                 {
+                    case HLSL_IR_UNOP_ABS:
+                        write_sm4_unary_op(&buffer, SM4_OP_MOV, &instr->reg, &arg1->reg, SM4_SRC_MODIFIER_ABS);
+                        break;
+
+                    case HLSL_IR_UNOP_CAST:
+                    {
+                        const struct hlsl_type *src_type = arg1->data_type, *dst_type = instr->data_type;
+
+                        TRACE("Cast from %s to %s.\n", debug_hlsl_type(src_type), debug_hlsl_type(dst_type));
+
+                        if (src_type->base_type == dst_type->base_type && src_type->dimx == 1)
+                        {
+                            /* Broadcast. */
+                            struct sm4_instruction sm4_instr =
+                            {
+                                .opcode = SM4_OP_MOV,
+
+                                .dst.reg.dim = SM4_DIMENSION_VEC4,
+                                .dst.reg.type = SM4_RT_TEMP,
+                                .dst.reg.idx = {instr->reg.reg},
+                                .dst.writemask = instr->reg.writemask,
+                                .has_dst = 1,
+
+                                .srcs[0].reg.dim = SM4_DIMENSION_VEC4,
+                                .srcs[0].reg.type = SM4_RT_TEMP,
+                                .srcs[0].reg.idx = {arg1->reg.reg},
+                                .srcs[0].swizzle = broadcast_swizzle(swizzle_from_writemask(arg1->reg.writemask)),
+                                .src_count = 1,
+                            };
+
+                            write_sm4_instruction(&buffer, &sm4_instr);
+                        }
+                        else
+                        {
+                            FIXME("Unhandled cast from %s to %s.\n", debug_hlsl_type(src_type), debug_hlsl_type(dst_type));
+                        }
+
+                        break;
+                    }
+
+                    case HLSL_IR_UNOP_EXP2:
+                        write_sm4_unary_op(&buffer, SM4_OP_EXP, &instr->reg, &arg1->reg, 0);
+                        break;
+
+                    case HLSL_IR_UNOP_LOG2:
+                        write_sm4_unary_op(&buffer, SM4_OP_LOG, &instr->reg, &arg1->reg, 0);
+                        break;
+
                     case HLSL_IR_UNOP_NEG:
                         write_sm4_unary_op(&buffer, SM4_OP_MOV, &instr->reg, &arg1->reg, SM4_SRC_MODIFIER_NEG);
+                        break;
+
+                    case HLSL_IR_UNOP_SAT:
+                        write_sm4_unary_op(&buffer, SM4_OP_MOV | (SM4_INSTRUCTION_FLAG_SATURATE << SM4_INSTRUCTION_FLAGS_SHIFT), &instr->reg, &arg1->reg, 0);
                         break;
 
                     case HLSL_IR_BINOP_ADD:
@@ -7099,6 +7158,14 @@ static void write_sm4_shdr(struct dxbc *dxbc, const struct hlsl_ir_function_decl
 
                     case HLSL_IR_BINOP_DIV:
                         write_sm4_binary_op(&buffer, SM4_OP_DIV, &instr->reg, &arg1->reg, &arg2->reg, 0);
+                        break;
+
+                    case HLSL_IR_BINOP_MAX:
+                        write_sm4_binary_op(&buffer, SM4_OP_MAX, &instr->reg, &arg1->reg, &arg2->reg, 0);
+                        break;
+
+                    case HLSL_IR_BINOP_MIN:
+                        write_sm4_binary_op(&buffer, SM4_OP_MIN, &instr->reg, &arg1->reg, &arg2->reg, 0);
                         break;
 
                     case HLSL_IR_BINOP_MUL:
