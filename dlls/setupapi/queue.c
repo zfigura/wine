@@ -284,6 +284,18 @@ UINT CALLBACK QUEUE_callback_WtoA( void *context, UINT notification,
     return ret;
 }
 
+#ifdef __i386__
+#define PLATFORM_EXT L"x86"
+#elif defined(__x86_64__)
+#define PLATFORM_EXT L"amd64"
+#elif defined(__arm__)
+#define PLATFORM_EXT L"arm"
+#elif defined(__aarch64__)
+#define PLATFORM_EXT L"arm64"
+#else  /* FIXME: other platforms */
+#error Unsupported CPU
+#endif
+
 static void get_source_info( HINF hinf, const WCHAR *src_file, SP_FILE_COPY_PARAMS_W *params,
                              WCHAR *src_root, WCHAR *src_path)
 {
@@ -292,11 +304,13 @@ static void get_source_info( HINF hinf, const WCHAR *src_file, SP_FILE_COPY_PARA
     DWORD len;
 
     /* find the SourceDisksFiles entry */
-    if (!SetupFindFirstLineW( hinf, L"SourceDisksFiles", src_file, &file_ctx )) return;
+    if (!SetupFindFirstLineW( hinf, L"SourceDisksFiles." PLATFORM_EXT, src_file, &file_ctx ) &&
+        !SetupFindFirstLineW( hinf, L"SourceDisksFiles", src_file, &file_ctx )) return;
     if (!SetupGetIntField( &file_ctx, 1, &diskid )) return;
 
     /* now find the diskid in the SourceDisksNames section */
-    if (!SetupFindFirstLineW( hinf, L"SourceDisksNames", NULL, &disk_ctx )) return;
+    if (!SetupFindFirstLineW( hinf, L"SourceDisksNames." PLATFORM_EXT, NULL, &disk_ctx ) &&
+        !SetupFindFirstLineW( hinf, L"SourceDisksNames", NULL, &disk_ctx )) return;
     for (;;)
     {
         if (SetupGetIntField( &disk_ctx, 0, &id ) && (id == diskid)) break;

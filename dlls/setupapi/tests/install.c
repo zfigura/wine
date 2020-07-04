@@ -2129,6 +2129,83 @@ static void test_register_dlls(void)
     ok(ret, "Failed to delete test DLL, error %u.\n", GetLastError());
 }
 
+#ifdef __i386__
+#define MYEXT "x86"
+#define WOWEXT "AMD64"
+#define WRONGEXT "ARM"
+#elif defined(__x86_64__)
+#define MYEXT "AMD64"
+#define WOWEXT "x86"
+#define WRONGEXT "ARM64"
+#elif defined(__arm__)
+#define MYEXT "ARM"
+#define WOWEXT "ARM64"
+#define WRONGEXT "x86"
+#elif defined(__aarch64__)
+#define MYEXT "ARM64"
+#define WOWEXT "ARM"
+#define WRONGEXT "AMD64"
+#else
+#define MYEXT
+#define WOWEXT
+#define WRONGEXT
+#endif
+
+static void test_machine_ext(void)
+{
+    static const char inf_data[] = "[Version]\n"
+            "Signature=\"$Chicago$\"\n"
+            "[install_section]\n"
+            "CopyFiles=files_section\n"
+            "[files_section]\n"
+            "one.txt\n"
+            "[SourceDisksNames." MYEXT "]\n"
+            "1=heis\n"
+            "[SourceDisksFiles." MYEXT "]\n"
+            "one.txt=1\n"
+            "[DestinationDirs]\n"
+            "DefaultDestDir=40000,dst\n";
+
+    void *context = SetupInitDefaultQueueCallbackEx(NULL, INVALID_HANDLE_VALUE, 0, 0, 0);
+    char path[MAX_PATH + 9];
+    HSPFILEQ queue;
+    HINF hinf;
+    BOOL ret;
+
+    ret = CreateDirectoryA("src", NULL);
+    ok(ret, "Failed to create test directory, error %u.\n", GetLastError());
+    create_file("src/one.txt");
+    create_inf_file(inffile, inf_data);
+
+    sprintf(path, "%s\\%s", CURR_DIR, inffile);
+    hinf = SetupOpenInfFileA(path, NULL, INF_STYLE_WIN4, NULL);
+    ok(hinf != INVALID_HANDLE_VALUE, "Failed to open INF file, error %#x.\n", GetLastError());
+
+    ret = SetupSetDirectoryIdA(hinf, 40000, CURR_DIR);
+    ok(ret, "Failed to set directory ID, error %u.\n", GetLastError());
+
+    queue = SetupOpenFileQueue();
+    ok(queue != INVALID_HANDLE_VALUE, "Failed to open queue, error %#x.\n", GetLastError());
+
+    ret = SetupInstallFilesFromInfSectionA(hinf, NULL, queue, "install_section", "src", 0);
+    ok(ret, "Failed to install files, error %#x.\n", GetLastError());
+
+    ret = SetupCommitFileQueueA(NULL, queue, SetupDefaultQueueCallbackA, context);
+    ok(ret, "Failed to commit queue, error %#x.\n", GetLastError());
+
+    ok(delete_file("dst/one.txt"), "Destination file should exist.\n");
+
+    SetupTermDefaultQueueCallback(context);
+    ret = SetupCloseFileQueue(queue);
+    ok(ret, "Failed to close queue, error %#x.\n", GetLastError());
+
+    SetupCloseInfFile(hinf);
+    delete_file("dst/");
+    delete_file("src/one.txt");
+    delete_file("src/test.inf");
+    delete_file("src/");
+}
+
 START_TEST(install)
 {
     char temp_path[MAX_PATH], prev_path[MAX_PATH];
@@ -2159,6 +2236,7 @@ START_TEST(install)
     test_install_file();
     test_start_copy();
     test_register_dlls();
+    test_machine_ext();
 
     UnhookWindowsHookEx(hhook);
 
