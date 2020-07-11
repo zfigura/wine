@@ -975,7 +975,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH DefineDosDeviceW( DWORD flags, const WCHAR *device
     InitializeObjectAttributes( &attr, &nt_name, OBJ_CASE_INSENSITIVE | OBJ_PERMANENT, 0, NULL );
     if (flags & DDD_REMOVE_DEFINITION)
     {
-        /* nonzero access flag is necessary to open the symlink */
+        /* nonzero access mask is necessary to open the symlink */
         if (!set_ntstatus( NtOpenSymbolicLinkObject( &handle, DELETE, &attr ) ))
             return FALSE;
 
