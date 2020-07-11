@@ -1081,7 +1081,7 @@ static void test_symboliclink(void)
     NTSTATUS status;
     UNICODE_STRING str, target;
     OBJECT_ATTRIBUTES attr;
-    HANDLE dir, link, h;
+    HANDLE dir, link, h, h2;
     IO_STATUS_BLOCK iosb;
 
     /* No name and/or no attributes */
@@ -1160,6 +1160,16 @@ static void test_symboliclink(void)
     ok( status == STATUS_OBJECT_PATH_NOT_FOUND, "got %#x\n", status );
     status = pNtOpenSymbolicLinkObject( &h, SYMBOLIC_LINK_QUERY, &attr );
     ok( status == STATUS_OBJECT_PATH_NOT_FOUND, "got %#x\n", status );
+
+    RtlInitUnicodeString( &str, L"\\BaseNamedObjects\\om.c-test" );
+    status = pNtCreateSymbolicLinkObject( &h, 0, &attr, &target );
+    ok( status == STATUS_SUCCESS, "got %#x\n", status );
+    status = pNtOpenSymbolicLinkObject( &h2, 0, &attr );
+    todo_wine ok( status == STATUS_ACCESS_DENIED, "got %#x\n", status );
+    if (!status) NtClose( h2 );
+    NtClose( h );
+    status = pNtOpenSymbolicLinkObject( &h2, 0, &attr );
+    ok( status == STATUS_OBJECT_NAME_NOT_FOUND, "got %#x\n", status );
 
     /* Compound test */
     dir = get_base_dir();
