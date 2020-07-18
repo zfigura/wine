@@ -606,6 +606,18 @@ static void test_object_info(void)
     CloseHandle(file);
 }
 
+static void test_fail_create(void)
+{
+    HANDLE file;
+
+    SetLastError(0xdeadbeef);
+    file = CreateFileA("\\\\.\\WineTestDriver\\nocreate", 0, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(file == INVALID_HANDLE_VALUE, "expected failure\n");
+    todo_wine ok(GetLastError() == ERROR_ACCESS_DENIED, "got error %u\n", GetLastError());
+
+    CloseHandle(file);
+}
+
 static void test_driver3(void)
 {
     char filename[MAX_PATH];
@@ -758,6 +770,7 @@ START_TEST(ntoskrnl)
     test_file_handles();
     test_return_status();
     test_object_info();
+    test_fail_create();
 
     /* We need a separate ioctl to call IoDetachDevice(); calling it in the
      * driver unload routine causes a live-lock. */

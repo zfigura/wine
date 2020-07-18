@@ -2299,6 +2299,12 @@ static NTSTATUS test_completion_ioctl(DEVICE_OBJECT *device, IRP *irp)
     }
 }
 
+static BOOL compare_file_name(const struct file_context *context, const WCHAR *expect)
+{
+    return context->namelen == wcslen(expect) * sizeof(WCHAR)
+            && !kmemcmp(context->name, expect, context->namelen);
+}
+
 static NTSTATUS WINAPI driver_Create(DEVICE_OBJECT *device, IRP *irp)
 {
     IO_STACK_LOCATION *irpsp = IoGetCurrentIrpStackLocation( irp );
@@ -2314,6 +2320,15 @@ static NTSTATUS WINAPI driver_Create(DEVICE_OBJECT *device, IRP *irp)
     context->id = ++create_count;
     context->namelen = min(irpsp->FileObject->FileName.Length, sizeof(context->name));
     memcpy(context->name, irpsp->FileObject->FileName.Buffer, context->namelen);
+
+    if (compare_file_name(context, L"\\nocreate"))
+    {
+        ExFreePool(context);
+        irp->IoStatus.Status = STATUS_ACCESS_DENIED;
+        IoCompleteRequest(irp, IO_NO_INCREMENT);
+        return STATUS_ACCESS_DENIED;
+    }
+
     irpsp->FileObject->FsContext = context;
 
     last_created_file = irpsp->FileObject;
@@ -2393,12 +2408,6 @@ static NTSTATUS WINAPI driver_FlushBuffers(DEVICE_OBJECT *device, IRP *irp)
        "IRP thread is not the current thread\n");
     IoMarkIrpPending(irp);
     return STATUS_PENDING;
-}
-
-static BOOL compare_file_name(const struct file_context *context, const WCHAR *expect)
-{
-    return context->namelen == wcslen(expect) * sizeof(WCHAR)
-            && !kmemcmp(context->name, expect, context->namelen);
 }
 
 static NTSTATUS WINAPI driver_QueryInformation(DEVICE_OBJECT *device, IRP *irp)
