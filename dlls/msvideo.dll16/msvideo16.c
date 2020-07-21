@@ -874,7 +874,7 @@ DWORD WINAPI VideoCapDriverDescAndVer16(WORD nr, LPSTR buf1, WORD buf1len,
     DWORD	verhandle;
     DWORD	infosize;
     UINT	subblocklen;
-    char	*s, buf[2048], fn[260];
+    char buf[2048], fn[260];
     LPBYTE	infobuf;
     LPVOID	subblock;
     DWORD	i, cnt = 0, lRet;
@@ -901,19 +901,6 @@ DWORD WINAPI VideoCapDriverDescAndVer16(WORD nr, LPSTR buf1, WORD buf1len,
 	    break;
 	}
 	RegCloseKey( hKey );
-    }
-
-    /* search system.ini if not found in the registry */
-    if (!found && GetPrivateProfileStringA("drivers32", NULL, NULL, buf, sizeof(buf), "system.ini"))
-    {
-	for (s = buf; *s; s += strlen(s) + 1)
-	{
-	    if (_strnicmp(s, "vid", 3)) continue;
-	    if (nr--) continue;
-	    if (GetPrivateProfileStringA("drivers32", s, NULL, fn, sizeof(fn), "system.ini"))
-		found = TRUE;
-	    break;
-	}
     }
 
     if (!found)
