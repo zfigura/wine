@@ -570,6 +570,7 @@ HKLM,%CurrentVersionNT%\Hotfix\Q246009,"Installed",,"1"
 HKLM,%CurrentVersionNT%\Image File Execution Options,,16
 HKLM,%CurrentVersionNT%\IniFileMapping\system.ini,"drivers32",,"SYS:Microsoft\Windows NT\CurrentVersion\Drivers32"
 HKLM,%CurrentVersionNT%\IniFileMapping\system.ini,"mci",,"SYS:Microsoft\Windows NT\CurrentVersion\MCI"
+HKLM,%CurrentVersionNT%\IniFileMapping\system.ini,"mci32",,"SYS:Microsoft\Windows NT\CurrentVersion\MCI32"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"desktop",,"USR:Control Panel\Desktop"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"devices",,"USR:Software\Microsoft\Windows NT\CurrentVersion\Devices"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"extensions",,"USR:Software\Microsoft\Windows NT\CurrentVersion\Extensions"
