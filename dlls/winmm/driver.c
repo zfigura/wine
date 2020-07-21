@@ -246,8 +246,6 @@ BOOL	DRIVER_GetLibName(LPCWSTR keyName, LPCWSTR sectName, LPWSTR buf, int sz)
 {
     HKEY	hKey, hSecKey;
     DWORD	bufLen, lRet;
-    static const WCHAR wszSystemIni[] = {'S','Y','S','T','E','M','.','I','N','I',0};
-    WCHAR       wsznull = '\0';
 
     TRACE("registry: %s, %s, %p, %d\n", debugstr_w(keyName), debugstr_w(sectName), buf, sz);
 
@@ -261,12 +259,7 @@ BOOL	DRIVER_GetLibName(LPCWSTR keyName, LPCWSTR sectName, LPWSTR buf, int sz)
 	}
         RegCloseKey( hKey );
     }
-    if (lRet == ERROR_SUCCESS) return TRUE;
-
-    /* default to system.ini if we can't find it in the registry,
-     * to support native installations where system.ini is still used */
-    TRACE("system.ini: %s, %s, %p, %d\n", debugstr_w(keyName), debugstr_w(sectName), buf, sz);
-    return GetPrivateProfileStringW(sectName, keyName, &wsznull, buf, sz / sizeof(WCHAR), wszSystemIni);
+    return !lRet;
 }
 
 /**************************************************************************
