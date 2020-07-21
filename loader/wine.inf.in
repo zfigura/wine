@@ -29,7 +29,6 @@ signature="$CHICAGO$"
 [DefaultInstall]
 RegisterDlls=RegisterDllsSection
 WineFakeDlls=FakeDllsWin32,FakeDlls
-UpdateInis=SystemIni
 CopyFiles=InfFiles,NlsFiles,SortFiles
 AddReg=\
     Classes,\
@@ -53,7 +52,6 @@ AddReg=\
 [DefaultInstall.NT]
 RegisterDlls=RegisterDllsSection
 WineFakeDlls=FakeDllsWin32,FakeDlls
-UpdateInis=SystemIni
 CopyFiles=InfFiles,NlsFiles,SortFiles
 AddReg=\
     Classes,\
@@ -79,7 +77,6 @@ AddReg=\
 RegisterDlls=RegisterDllsSection
 WineFakeDlls=FakeDllsWin64,FakeDlls
 WinePreInstall=Wow64
-UpdateInis=SystemIni
 CopyFiles=InfFiles,NlsFiles,SortFiles
 AddReg=\
     Classes,\
@@ -106,7 +103,6 @@ AddReg=\
 RegisterDlls=RegisterDllsSection
 WineFakeDlls=FakeDllsWin64,FakeDlls
 WinePreInstall=Wow64
-UpdateInis=SystemIni
 CopyFiles=InfFiles,NlsFiles,SortFiles
 AddReg=\
     Classes,\
@@ -573,6 +569,7 @@ HKLM,%CurrentVersionNT%\Gre_Initialize,,16
 HKLM,%CurrentVersionNT%\Hotfix\Q246009,"Installed",,"1"
 HKLM,%CurrentVersionNT%\Image File Execution Options,,16
 HKLM,%CurrentVersionNT%\IniFileMapping\system.ini,"drivers32",,"SYS:Microsoft\Windows NT\CurrentVersion\Drivers32"
+HKLM,%CurrentVersionNT%\IniFileMapping\system.ini,"mci",,"SYS:Microsoft\Windows NT\CurrentVersion\MCI"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"desktop",,"USR:Control Panel\Desktop"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"devices",,"USR:Software\Microsoft\Windows NT\CurrentVersion\Devices"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"extensions",,"USR:Software\Microsoft\Windows NT\CurrentVersion\Extensions"
@@ -581,6 +578,13 @@ HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"sounds",,"USR:Control Panel\Soun
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini\windows,,,"USR:Software\Microsoft\Windows NT\CurrentVersion\Windows"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini\windows,"CursorBlinkRate",,"USR:Control Panel\Desktop"
 HKLM,%CurrentVersionNT%\LanguagePack,,16
+HKLM,%CurrentVersionNT%\MCI,"avivideo",,"mciavi32.dll"
+HKLM,%CurrentVersionNT%\MCI,"cdaudio",,"mcicda.dll"
+HKLM,%CurrentVersionNT%\MCI,"mpegvideo",,"mciqtz32.dll"
+HKLM,%CurrentVersionNT%\MCI,"mpegvideo2",,"mciqtz32.dll"
+HKLM,%CurrentVersionNT%\MCI,"sequencer",,"mciseq.dll"
+HKLM,%CurrentVersionNT%\MCI,"vcr",,"mcivisca.drv"
+HKLM,%CurrentVersionNT%\MCI,"waveaudio",,"mciwave.dll"
 HKLM,%CurrentVersionNT%\NetworkCards,,16
 HKLM,%CurrentVersionNT%\OpenGLDrivers,,16
 HKLM,%CurrentVersionNT%\Perflib,,16
@@ -2731,16 +2735,6 @@ HKLM,%CurrentVersion%\Telephony\Country List\998,"SameAreaRule",,"G"
 16427,System\OLE DB,msdaps.dll
 16427,System\ADO,msado15.dll
 11,,*
-
-[SystemIni]
-system.ini, mci,,"MPEGVideo=mciqtz32.dll"
-system.ini, mci,,"MPEGVideo2=mciqtz32.dll"
-system.ini, mci,,"avivideo=mciavi32.dll"
-system.ini, mci,,"cdaudio=mcicda.dll"
-system.ini, mci,,"sequencer=mciseq.dll"
-system.ini, mci,,"vcr=mcivisca.drv"
-system.ini, mci,,"; videodisc=mcipionr.drv"
-system.ini, mci,,"waveaudio=mciwave.dll"
 
 [Timezones]
 ; The timezone information (TZI field) comes from the Olson timezone database

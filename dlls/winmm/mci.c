@@ -67,7 +67,6 @@ static const WCHAR wszNull     [] = {0};
 static const WCHAR wszAll      [] = {'A','L','L',0};
 static const WCHAR wszMci      [] = {'M','C','I',0};
 static const WCHAR wszOpen     [] = {'o','p','e','n',0};
-static const WCHAR wszSystemIni[] = {'s','y','s','t','e','m','.','i','n','i',0};
 
 static WINE_MCIDRIVER *MciDrivers;
 
@@ -1907,7 +1906,7 @@ static DWORD MCI_WriteString(LPWSTR lpDstStr, DWORD dstSize, LPCWSTR lpSrcStr)
 static	DWORD MCI_SysInfo(UINT uDevID, DWORD dwFlags, LPMCI_SYSINFO_PARMSW lpParms)
 {
     DWORD		ret = MCIERR_INVALID_DEVICE_ID, cnt = 0;
-    WCHAR		buf[2048], *s, *p;
+    WCHAR		buf[2048], *s;
     LPWINE_MCIDRIVER	wmd;
     HKEY		hKey;
 
@@ -1940,8 +1939,6 @@ static	DWORD MCI_SysInfo(UINT uDevID, DWORD dwFlags, LPMCI_SYSINFO_PARMSW lpParm
 		    RegQueryInfoKeyW( hKey, 0, 0, 0, &cnt, 0, 0, 0, 0, 0, 0, 0);
 		    RegCloseKey( hKey );
 		}
-		if (GetPrivateProfileStringW(wszMci, 0, wszNull, buf, ARRAY_SIZE(buf), wszSystemIni))
-		    for (s = buf; *s; s += lstrlenW(s) + 1) cnt++;
 	    }
 	} else {
 	    if (dwFlags & MCI_SYSINFO_OPEN) {
@@ -2016,17 +2013,6 @@ static	DWORD MCI_SysInfo(UINT uDevID, DWORD dwFlags, LPMCI_SYSINFO_PARMSW lpParm
                         s = buf;
 		}
 	        RegCloseKey( hKey );
-	    }
-	    if (!s) {
-		if (GetPrivateProfileStringW(wszMci, 0, wszNull, buf, ARRAY_SIZE(buf), wszSystemIni)) {
-		    for (p = buf; *p; p += lstrlenW(p) + 1, cnt++) {
-                        TRACE("%d: %s\n", cnt, debugstr_w(p));
-			if (cnt == lpParms->dwNumber - 1) {
-			    s = p;
-			    break;
-			}
-		    }
-		}
 	    }
 	    ret = s ? MCI_WriteString(lpParms->lpstrReturn, lpParms->dwRetSize, s) : MCIERR_OUTOFRANGE;
 	} else {
