@@ -308,25 +308,6 @@ BOOL VFWAPI ICInfo(DWORD type, DWORD handler, ICINFO *info)
         RegCloseKey(key);
     }
 
-    if (GetPrivateProfileSectionA("drivers32", buf, sizeof(buf), "system.ini"))
-    {
-        char *s;
-        for (s = buf; *s; s += strlen(s) + 1)
-        {
-            if (s[4] != '.' || s[9] != '=') continue;
-            ret_type = mmioStringToFOURCCA(s, 0);
-            ret_handler = mmioStringToFOURCCA(s + 5, 0);
-            if (type && compare_fourcc(type, ret_type)) continue;
-            if (compare_fourcc(handler, ret_handler) && handler != count++) continue;
-
-            info->fccType = ret_type;
-            info->fccHandler = ret_handler;
-            MultiByteToWideChar(CP_ACP, 0, s + 10, -1, info->szDriver, ARRAY_SIZE(info->szDriver));
-            TRACE("Returning codec %s, driver %s.\n", debugstr_an(s, 9), debugstr_a(s + 10));
-            return TRUE;
-        }
-    }
-
     LIST_FOR_EACH_ENTRY(driver, &reg_driver_list, struct reg_driver, entry)
     {
         if (type && compare_fourcc(type, driver->fccType)) continue;

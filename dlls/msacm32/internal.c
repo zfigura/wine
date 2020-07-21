@@ -352,15 +352,13 @@ void MSACM_RegisterAllDrivers(void)
 {
     static const WCHAR msacm32[] = {'m','s','a','c','m','3','2','.','d','l','l','\0'};
     static const WCHAR msacmW[] = {'M','S','A','C','M','.'};
-    static const WCHAR drv32[] = {'d','r','i','v','e','r','s','3','2','\0'};
-    static const WCHAR sys[] = {'s','y','s','t','e','m','.','i','n','i','\0'};
     static const WCHAR drvkey[] = {'S','o','f','t','w','a','r','e','\\',
 				   'M','i','c','r','o','s','o','f','t','\\',
 				   'W','i','n','d','o','w','s',' ','N','T','\\',
 				   'C','u','r','r','e','n','t','V','e','r','s','i','o','n','\\',
 				   'D','r','i','v','e','r','s','3','2','\0'};
     DWORD i, cnt, bufLen, lRet, type;
-    WCHAR buf[2048], valname[64], *name, *s;
+    WCHAR buf[2048], valname[64], *name;
     FILETIME lastWrite;
     HKEY hKey;
 
@@ -392,17 +390,6 @@ void MSACM_RegisterAllDrivers(void)
     	RegCloseKey( hKey );
     }
 
-    if (GetPrivateProfileSectionW(drv32, buf, ARRAY_SIZE(buf), sys))
-    {
-	for(s = buf; *s;  s += lstrlenW(s) + 1)
-	{
-	    if (wcsnicmp(s, msacmW, ARRAY_SIZE(msacmW))) continue;
-	    if (!(name = wcschr(s, '='))) continue;
-	    *name = 0;
-	    MSACM_RegisterDriver(s, name + 1, 0);
-	    *name = '=';
-	}
-    }
     MSACM_ReorderDriversByPriority();
     MSACM_RegisterDriver(msacm32, msacm32, 0);
 }

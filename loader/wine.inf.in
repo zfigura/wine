@@ -556,7 +556,14 @@ HKLM,%CurrentVersionNT%,"RegisteredOrganization",2,""
 HKLM,%CurrentVersionNT%,"RegisteredOwner",2,""
 HKLM,%CurrentVersionNT%,"SystemRoot",,"%10%"
 HKLM,%CurrentVersionNT%\Console,,16
-HKLM,%CurrentVersionNT%\Drivers32,,16
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.imaadpcm",,"imaadp32.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.l3acm",,"l3codeca.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.msadpcm",,"msadp32.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.msg711",,"msg711.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"msacm.msgsm610",,"msgsm32.acm"
+HKLM,%CurrentVersionNT%\Drivers32,"vidc.cvid",,"iccvid.dll"
+HKLM,%CurrentVersionNT%\Drivers32,"vidc.mrle",,"msrle32.dll"
+HKLM,%CurrentVersionNT%\Drivers32,"vidc.msvc",,"msvidc32.dll"
 HKLM,%CurrentVersionNT%\FontDpi,,16
 HKLM,%CurrentVersionNT%\FontLink,,16
 HKLM,%CurrentVersionNT%\FontMapper,,16
@@ -565,6 +572,7 @@ HKLM,%CurrentVersionNT%\FontSubstitutes,,16
 HKLM,%CurrentVersionNT%\Gre_Initialize,,16
 HKLM,%CurrentVersionNT%\Hotfix\Q246009,"Installed",,"1"
 HKLM,%CurrentVersionNT%\Image File Execution Options,,16
+HKLM,%CurrentVersionNT%\IniFileMapping\system.ini,"drivers32",,"SYS:Microsoft\Windows NT\CurrentVersion\Drivers32"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"desktop",,"USR:Control Panel\Desktop"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"devices",,"USR:Software\Microsoft\Windows NT\CurrentVersion\Devices"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"extensions",,"USR:Software\Microsoft\Windows NT\CurrentVersion\Extensions"
@@ -2733,18 +2741,6 @@ system.ini, mci,,"sequencer=mciseq.dll"
 system.ini, mci,,"vcr=mcivisca.drv"
 system.ini, mci,,"; videodisc=mcipionr.drv"
 system.ini, mci,,"waveaudio=mciwave.dll"
-
-system.ini, drivers32,,"msacm.imaadpcm=imaadp32.acm"
-system.ini, drivers32,,"msacm.msadpcm=msadp32.acm"
-system.ini, drivers32,,"msacm.msg711=msg711.acm"
-system.ini, drivers32,,"msacm.l3acm=l3codeca.acm"
-system.ini, drivers32,,"msacm.msgsm610=msgsm32.acm"
-system.ini, drivers32,,"vidc.mrle=msrle32.dll"
-system.ini, drivers32,,"vidc.msvc=msvidc32.dll"
-system.ini, drivers32,,"vidc.cvid=iccvid.dll"
-system.ini, drivers32,,"; vidc.IV50=ir50_32.dll"
-system.ini, drivers32,,"; vidc.IV31=ir32_32.dll"
-system.ini, drivers32,,"; vidc.IV32=ir32_32.dll"
 
 [Timezones]
 ; The timezone information (TZI field) comes from the Olson timezone database
