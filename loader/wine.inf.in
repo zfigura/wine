@@ -579,13 +579,6 @@ HKLM,%CurrentVersionNT%\IniFileMapping\win.ini,"sounds",,"USR:Control Panel\Soun
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini\windows,,,"USR:Software\Microsoft\Windows NT\CurrentVersion\Windows"
 HKLM,%CurrentVersionNT%\IniFileMapping\win.ini\windows,"CursorBlinkRate",,"USR:Control Panel\Desktop"
 HKLM,%CurrentVersionNT%\LanguagePack,,16
-HKLM,%CurrentVersionNT%\MCI,"avivideo",,"mciavi32.dll"
-HKLM,%CurrentVersionNT%\MCI,"cdaudio",,"mcicda.dll"
-HKLM,%CurrentVersionNT%\MCI,"mpegvideo",,"mciqtz32.dll"
-HKLM,%CurrentVersionNT%\MCI,"mpegvideo2",,"mciqtz32.dll"
-HKLM,%CurrentVersionNT%\MCI,"sequencer",,"mciseq.dll"
-HKLM,%CurrentVersionNT%\MCI,"vcr",,"mcivisca.drv"
-HKLM,%CurrentVersionNT%\MCI,"waveaudio",,"mciwave.dll"
 HKLM,%CurrentVersionNT%\NetworkCards,,16
 HKLM,%CurrentVersionNT%\OpenGLDrivers,,16
 HKLM,%CurrentVersionNT%\Perflib,,16
