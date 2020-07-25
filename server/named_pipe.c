@@ -145,7 +145,8 @@ static int pipe_end_write( struct fd *fd, struct async *async_data, file_pos_t p
 static int pipe_end_flush( struct fd *fd, struct async *async );
 static void pipe_end_get_volume_info( struct fd *fd, unsigned int info_class );
 static void pipe_end_reselect_async( struct fd *fd, struct async_queue *queue );
-static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class );
+static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class,
+                                    void *buffer, unsigned int buffer_size, unsigned int *ret_size );
 
 /* server end functions */
 static void pipe_server_dump( struct object *obj, int verbose );
@@ -561,7 +562,8 @@ static int pipe_end_flush( struct fd *fd, struct async *async )
     return 1;
 }
 
-static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class )
+static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class,
+                                    void *buffer, unsigned int buffer_size, unsigned int *ret_size )
 {
     struct pipe_end *pipe_end = get_fd_user( fd );
     struct named_pipe *pipe = pipe_end->pipe;
@@ -570,11 +572,11 @@ static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned
     {
     case FileNameInformation:
         {
-            FILE_NAME_INFORMATION *name_info;
-            data_size_t name_len, reply_size;
+            FILE_NAME_INFORMATION *name_info = buffer;
+            data_size_t name_len, size;
             const WCHAR *name;
 
-            if (get_reply_max_size() < sizeof(*name_info))
+            if (buffer_size < sizeof(*name_info))
             {
                 set_error( STATUS_INFO_LENGTH_MISMATCH );
                 return;
@@ -587,23 +589,23 @@ static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned
                 return;
             }
 
-            reply_size = offsetof( FILE_NAME_INFORMATION, FileName[name_len/sizeof(WCHAR) + 1] );
-            if (reply_size > get_reply_max_size())
+            size = offsetof( FILE_NAME_INFORMATION, FileName[name_len/sizeof(WCHAR) + 1] );
+            if (size > buffer_size)
             {
-                reply_size = get_reply_max_size();
+                size = buffer_size;
                 set_error( STATUS_BUFFER_OVERFLOW );
             }
 
-            if (!(name_info = set_reply_data_size( reply_size ))) return;
             name_info->FileNameLength = name_len + sizeof(WCHAR);
             name_info->FileName[0] = '\\';
-            reply_size -= offsetof( FILE_NAME_INFORMATION, FileName[1] );
-            if (reply_size) memcpy( &name_info->FileName[1], name, reply_size );
+            *ret_size = size;
+            size -= offsetof( FILE_NAME_INFORMATION, FileName[1] );
+            if (size) memcpy( &name_info->FileName[1], name, size );
             break;
         }
     case FilePipeInformation:
     {
-            FILE_PIPE_INFORMATION *pipe_info;
+            FILE_PIPE_INFORMATION *pipe_info = buffer;
 
             if (!(get_handle_access( current->process, handle) & FILE_READ_ATTRIBUTES))
             {
@@ -611,7 +613,7 @@ static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned
                 return;
             }
 
-            if (get_reply_max_size() < sizeof(*pipe_info))
+            if (buffer_size < sizeof(*pipe_info))
             {
                 set_error( STATUS_INFO_LENGTH_MISMATCH );
                 return;
@@ -623,16 +625,16 @@ static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned
                 return;
             }
 
-            if (!(pipe_info = set_reply_data_size( sizeof(*pipe_info) ))) return;
             pipe_info->ReadMode       = (pipe_end->flags & NAMED_PIPE_MESSAGE_STREAM_READ)
                 ? FILE_PIPE_MESSAGE_MODE : FILE_PIPE_BYTE_STREAM_MODE;
             pipe_info->CompletionMode = (pipe_end->flags & NAMED_PIPE_NONBLOCKING_MODE)
                 ? FILE_PIPE_COMPLETE_OPERATION : FILE_PIPE_QUEUE_OPERATION;
+            *ret_size = sizeof(*pipe_info);
             break;
         }
     case FilePipeLocalInformation:
         {
-            FILE_PIPE_LOCAL_INFORMATION *pipe_info;
+            FILE_PIPE_LOCAL_INFORMATION *pipe_info = buffer;
 
             if (!(get_handle_access( current->process, handle) & FILE_READ_ATTRIBUTES))
             {
@@ -640,7 +642,7 @@ static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned
                 return;
             }
 
-            if (get_reply_max_size() < sizeof(*pipe_info))
+            if (buffer_size < sizeof(*pipe_info))
             {
                 set_error( STATUS_INFO_LENGTH_MISMATCH );
                 return;
@@ -652,7 +654,6 @@ static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned
                 return;
             }
 
-            if (!(pipe_info = set_reply_data_size( sizeof(*pipe_info) ))) return;
             pipe_info->NamedPipeType = pipe->message_mode;
             switch (pipe->sharing)
             {
@@ -675,10 +676,11 @@ static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned
             pipe_info->NamedPipeState      = pipe_end->state;
             pipe_info->NamedPipeEnd        = pipe_end->obj.ops == &pipe_server_ops
                 ? FILE_PIPE_SERVER_END : FILE_PIPE_CLIENT_END;
+            *ret_size = sizeof(*pipe_info);
             break;
         }
     default:
-        default_fd_get_file_info( fd, handle, info_class );
+        default_fd_get_file_info( fd, handle, info_class, buffer, buffer_size, ret_size );
     }
 }
 

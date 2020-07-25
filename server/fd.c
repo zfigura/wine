@@ -2268,54 +2268,56 @@ int no_fd_flush( struct fd *fd, struct async *async )
 }
 
 /* default get_file_info() routine */
-void no_fd_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class )
+void no_fd_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class,
+                          void *buffer, unsigned int buffer_size, unsigned int *ret_size )
 {
     set_error( STATUS_OBJECT_TYPE_MISMATCH );
 }
 
 /* default get_file_info() routine */
-void default_fd_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class )
+void default_fd_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class,
+                               void *buffer, unsigned int buffer_size, unsigned int *ret_size )
 {
     switch (info_class)
     {
     case FileAccessInformation:
         {
-            FILE_ACCESS_INFORMATION info;
-            if (get_reply_max_size() < sizeof(info))
+            FILE_ACCESS_INFORMATION *info = buffer;
+            if (buffer_size < sizeof(*info))
             {
                 set_error( STATUS_INFO_LENGTH_MISMATCH );
                 return;
             }
-            info.AccessFlags = get_handle_access( current->process, handle );
-            set_reply_data( &info, sizeof(info) );
+            info->AccessFlags = get_handle_access( current->process, handle );
+            *ret_size = sizeof(*info);
             break;
         }
     case FileModeInformation:
         {
-            FILE_MODE_INFORMATION info;
-            if (get_reply_max_size() < sizeof(info))
+            FILE_MODE_INFORMATION *info = buffer;
+            if (buffer_size < sizeof(*info))
             {
                 set_error( STATUS_INFO_LENGTH_MISMATCH );
                 return;
             }
-            info.Mode = fd->options & ( FILE_WRITE_THROUGH
-                                      | FILE_SEQUENTIAL_ONLY
-                                      | FILE_NO_INTERMEDIATE_BUFFERING
-                                      | FILE_SYNCHRONOUS_IO_ALERT
-                                      | FILE_SYNCHRONOUS_IO_NONALERT );
-            set_reply_data( &info, sizeof(info) );
+            info->Mode = fd->options & ( FILE_WRITE_THROUGH
+                                       | FILE_SEQUENTIAL_ONLY
+                                       | FILE_NO_INTERMEDIATE_BUFFERING
+                                       | FILE_SYNCHRONOUS_IO_ALERT
+                                       | FILE_SYNCHRONOUS_IO_NONALERT );
+            *ret_size = sizeof(*info);
             break;
         }
     case FileIoCompletionNotificationInformation:
         {
-            FILE_IO_COMPLETION_NOTIFICATION_INFORMATION info;
-            if (get_reply_max_size() < sizeof(info))
+            FILE_IO_COMPLETION_NOTIFICATION_INFORMATION *info = buffer;
+            if (buffer_size < sizeof(*info))
             {
                 set_error( STATUS_INFO_LENGTH_MISMATCH );
                 return;
             }
-            info.Flags = fd->comp_flags;
-            set_reply_data( &info, sizeof(info) );
+            info->Flags = fd->comp_flags;
+            *ret_size = sizeof(*info);
             break;
         }
     default:
@@ -2607,12 +2609,19 @@ DECL_HANDLER(flush)
 DECL_HANDLER(get_file_info)
 {
     struct fd *fd = get_handle_fd_obj( current->process, req->handle, 0 );
+    unsigned int size = 0;
+    void *buffer;
 
-    if (fd)
+    if (!fd) return;
+
+    if (!(buffer = set_reply_data_size( get_reply_max_size() )))
     {
-        fd->fd_ops->get_file_info( fd, req->handle, req->info_class );
         release_object( fd );
+        return;
     }
+    fd->fd_ops->get_file_info( fd, req->handle, req->info_class, buffer, get_reply_max_size(), &size );
+    set_reply_data_ptr( buffer, size );
+    release_object( fd );
 }
 
 /* query volume info */
