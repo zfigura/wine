@@ -404,7 +404,7 @@ void init_directories(void)
     struct directory *dir_driver, *dir_device, *dir_global, *dir_kernel;
     struct object *link_dosdev, *link_global, *link_nul, *link_pipe, *link_mailslot;
     struct object *link_conin, *link_conout, *link_con;
-    struct object *named_pipe_device, *mailslot_device, *null_device, *user_data_mapping, *console_device;
+    struct object *mailslot_device, *null_device, *user_data_mapping, *console_device;
     struct keyed_event *keyed_event;
     unsigned int i;
 

@@ -42,6 +42,8 @@
 #include "security.h"
 #include "process.h"
 
+struct object *named_pipe_device;
+
 struct named_pipe;
 
 struct pipe_message
@@ -146,7 +148,8 @@ static int pipe_end_flush( struct fd *fd, struct async *async );
 static void pipe_end_get_volume_info( struct fd *fd, unsigned int info_class );
 static void pipe_end_reselect_async( struct fd *fd, struct async_queue *queue );
 static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class,
-                                    void *buffer, unsigned int buffer_size, unsigned int *ret_size );
+                                    void *buffer, unsigned int buffer_size, unsigned int *ret_size,
+                                    struct object **parent );
 
 /* server end functions */
 static void pipe_server_dump( struct object *obj, int verbose );
@@ -563,10 +566,13 @@ static int pipe_end_flush( struct fd *fd, struct async *async )
 }
 
 static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned int info_class,
-                                    void *buffer, unsigned int buffer_size, unsigned int *ret_size )
+                                    void *buffer, unsigned int buffer_size, unsigned int *ret_size,
+                                    struct object **parent )
 {
     struct pipe_end *pipe_end = get_fd_user( fd );
     struct named_pipe *pipe = pipe_end->pipe;
+
+    if (parent) *parent = named_pipe_device;
 
     switch (info_class)
     {
@@ -680,7 +686,7 @@ static void pipe_end_get_file_info( struct fd *fd, obj_handle_t handle, unsigned
             break;
         }
     default:
-        default_fd_get_file_info( fd, handle, info_class, buffer, buffer_size, ret_size );
+        default_fd_get_file_info( fd, handle, info_class, buffer, buffer_size, ret_size, parent );
     }
 }
 

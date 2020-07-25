@@ -1455,7 +1455,7 @@ static void test_query_object(void)
                                1, 1000, 1000, 1000, NULL );
     ok( handle != INVALID_HANDLE_VALUE, "CreateNamedPipe failed err %u\n", GetLastError() );
 
-    test_object_name( handle, L"\\Device\\NamedPipe\\test_pipe", TRUE );
+    test_object_name( handle, L"\\Device\\NamedPipe\\test_pipe", FALSE );
     test_object_type( handle, L"File" );
     test_file_info( handle );
 

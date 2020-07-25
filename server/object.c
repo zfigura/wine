@@ -160,21 +160,65 @@ const WCHAR *get_object_name( struct object *obj, data_size_t *len )
 /* get the full path name of an existing object */
 WCHAR *get_object_full_name( struct object *obj, data_size_t *ret_len )
 {
+    FILE_NAME_INFORMATION *fd_info = NULL;
     static const WCHAR backslash = '\\';
     struct object *ptr = obj;
     data_size_t len = 0;
+    struct fd *fd;
     char *ret;
 
+    if ((fd = get_obj_fd( obj )))
+    {
+        FILE_NAME_INFORMATION info;
+        unsigned int info_size;
+
+        get_fd_info( fd, 0, FileNameInformation, &info, sizeof(info), &info_size, &obj );
+
+        switch (get_error())
+        {
+        case STATUS_SUCCESS:
+        case STATUS_BUFFER_OVERFLOW:
+            len += info.FileNameLength;
+            info_size = offsetof( FILE_NAME_INFORMATION, FileName ) + info.FileNameLength;
+            if (!(fd_info = mem_alloc( info_size ))) return NULL;
+            get_fd_info( fd, 0, FileNameInformation, fd_info, info_size, &info_size, NULL );
+            break;
+
+        case STATUS_INVALID_DEVICE_REQUEST:
+        case STATUS_INVALID_PARAMETER:
+        case STATUS_NOT_IMPLEMENTED:
+            break;
+
+        default:
+            release_object( fd );
+            return NULL;
+        }
+        release_object( fd );
+    }
+    clear_error();
+
+    ptr = obj;
     while (ptr && ptr->name)
     {
         struct object_name *name = ptr->name;
         len += name->len + sizeof(WCHAR);
         ptr = name->parent;
     }
-    if (!len) return NULL;
-    if (!(ret = malloc( len ))) return NULL;
+    if (!len || !(ret = malloc( len )))
+    {
+        free( fd_info );
+        return NULL;
+    }
 
     *ret_len = len;
+
+    if (fd_info)
+    {
+        memcpy( ret + len - fd_info->FileNameLength, fd_info->FileName, fd_info->FileNameLength );
+        len -= fd_info->FileNameLength;
+    }
+    free( fd_info );
+
     while (obj && obj->name)
     {
         struct object_name *name = obj->name;
